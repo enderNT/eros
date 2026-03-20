@@ -1,0 +1,1 @@
+"""Clinica assistant application package."""
