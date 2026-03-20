@@ -1,0 +1,107 @@
+name: clinica-assistant
+services:
+  - name: api
+    environment_slug: python
+    github:
+      repo: enderNT/eros
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    build_command: pip install -e .
+    run_command: uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8080
+    http_port: 8080
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: APP_ENV
+        scope: RUN_TIME
+        value: production
+      - key: APP_HOST
+        scope: RUN_TIME
+        value: 0.0.0.0
+      - key: APP_PORT
+        scope: RUN_TIME
+        value: "8080"
+      - key: LOG_LEVEL
+        scope: RUN_TIME
+        value: INFO
+      - key: CLINIC_CONFIG_PATH
+        scope: RUN_TIME
+        value: config/clinic.json
+      - key: LLM_PROVIDER
+        scope: RUN_TIME
+        value: openai_compatible
+      - key: LLM_BASE_URL
+        scope: RUN_TIME
+        value: ""
+      - key: LLM_MODEL
+        scope: RUN_TIME
+        value: gpt-5
+      - key: MEMORY_BACKEND
+        scope: RUN_TIME
+        value: in_memory
+      - key: QDRANT_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: QDRANT_SIMULATE
+        scope: RUN_TIME
+        value: "true"
+      - key: QDRANT_BASE_URL
+        scope: RUN_TIME
+        value: ""
+      - key: QDRANT_COLLECTION_NAME
+        scope: RUN_TIME
+        value: clinic_knowledge
+      - key: QDRANT_TIMEOUT_SECONDS
+        scope: RUN_TIME
+        value: "10"
+      - key: QDRANT_TOP_K
+        scope: RUN_TIME
+        value: "5"
+      - key: QDRANT_VECTOR_SIZE
+        scope: RUN_TIME
+        value: "8"
+      - key: CHATWOOT_REPLY_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: LLM_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: MEM0_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: MEM0_ORG_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: MEM0_PROJECT_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: CHATWOOT_API_BASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: CHATWOOT_API_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: OPENAI_MODEL
+        scope: RUN_TIME
+        value: gpt-5
+      - key: OPENAI_EMBEDDING_MODEL
+        scope: RUN_TIME
+        value: text-embedding-3-small
