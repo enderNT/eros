@@ -43,13 +43,15 @@ class QdrantRetrievalService:
     async def build_context(self, query: str, contact_id: str, clinic_context: str, memories: list[str]) -> str:
         results = await self.search(query=query, contact_id=contact_id)
         chunks = [
-            "Contexto base de la clinica:",
+            "Base de conocimiento de Clinica Eros Neuronal:",
             clinic_context,
             "",
-            "Memoria conversacional:",
+            "Memoria conversacional relevante:",
             "\n".join(f"- {item}" for item in memories) if memories else "- Sin memorias",
             "",
-            "Recuperacion vectorial Qdrant:",
+            f"Consulta RAG ejecutada en Qdrant para: {query}",
+            "",
+            "Fragmentos recuperados desde Qdrant:",
         ]
         if results:
             for result in results:

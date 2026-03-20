@@ -1,38 +1,49 @@
 {
-  "clinic_name": "Clinica Demo",
+  "clinic_name": "Clinica Eros Neuronal",
   "timezone": "America/Mexico_City",
   "services": [
     {
-      "name": "Medicina general",
-      "duration_minutes": 30,
-      "price": "450 MXN"
+      "name": "Psicoterapia individual",
+      "duration_minutes": 50,
+      "price": "900 MXN"
     },
     {
-      "name": "Pediatria",
-      "duration_minutes": 45,
-      "price": "600 MXN"
+      "name": "Consulta psiquiatrica inicial",
+      "duration_minutes": 60,
+      "price": "1400 MXN"
+    },
+    {
+      "name": "Seguimiento psiquiatrico",
+      "duration_minutes": 40,
+      "price": "1100 MXN"
+    },
+    {
+      "name": "Terapia de pareja",
+      "duration_minutes": 60,
+      "price": "1200 MXN"
     }
   ],
   "doctors": [
     {
       "name": "Dra. Elena Ruiz",
-      "specialty": "Medicina general",
-      "availability_notes": "Lunes a viernes de 09:00 a 14:00"
+      "specialty": "Psicoterapia individual y terapia de pareja",
+      "availability_notes": "Lunes a viernes de 10:00 a 18:00"
     },
     {
       "name": "Dr. Mario Solis",
-      "specialty": "Pediatria",
-      "availability_notes": "Martes, jueves y sabado de 10:00 a 16:00"
+      "specialty": "Psiquiatria",
+      "availability_notes": "Martes, jueves y sabado de 11:00 a 17:00"
     }
   ],
   "hours": {
-    "monday_to_friday": "09:00-18:00",
-    "saturday": "10:00-14:00",
+    "monday_to_friday": "10:00-19:00",
+    "saturday": "10:00-15:00",
     "sunday": "Cerrado"
   },
   "policies": {
-    "appointments": "Las citas nuevas requieren nombre completo, especialidad o motivo de consulta, y preferencia de fecha y hora.",
+    "appointments": "Las citas pueden solicitarse por chat o agendarse directamente en Calendly. Para prepararlas se pide nombre completo, motivo de consulta y preferencia de fecha y hora.",
     "payments": "Se aceptan tarjetas, transferencia y efectivo.",
-    "emergency": "Para urgencias se debe canalizar a telefono o servicio de emergencia, no resolver por chat."
+    "emergency": "Si hay riesgo inminente, ideas suicidas activas o una urgencia psiquiatrica, se debe canalizar de inmediato a emergencias o lineas de apoyo, no resolver por chat.",
+    "approach": "La clinica se enfoca en salud mental con acompanamiento profesional, evaluacion psiquiatrica y procesos terapeuticos."
   }
 }

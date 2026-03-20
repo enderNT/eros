@@ -3,7 +3,12 @@ import httpx
 from openai import BadRequestError
 
 from app.models.schemas import RoutingPacket
-from app.services.llm import ClinicLLMService, OpenAICompatibleProvider, build_llm_provider
+from app.services.llm import (
+    CALENDLY_APPOINTMENT_URL,
+    ClinicLLMService,
+    OpenAICompatibleProvider,
+    build_llm_provider,
+)
 from app.settings import Settings
 
 
@@ -158,6 +163,26 @@ async def test_clinic_llm_service_uses_provider_contract_for_text():
     assert temperature is None
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
+    assert "Eros Bot" in messages[0]["content"]
+    assert "Clinica Eros Neuronal" in messages[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_clinic_llm_service_appointment_fallback_includes_calendly_link():
+    provider = FakeProvider(error=RuntimeError("provider unavailable"))
+    service = ClinicLLMService(provider)
+
+    appointment, reply = await service.extract_appointment_intent(
+        user_message="Quiero agendar una cita para ansiedad",
+        memories=["Prefiere mensajes breves"],
+        clinic_context="Contexto clinico",
+        contact_name="Ana",
+        current_slots={"patient_name": "Ana"},
+        pending_question=None,
+    )
+
+    assert appointment.patient_name == "Ana"
+    assert CALENDLY_APPOINTMENT_URL in reply
 
 
 @pytest.mark.asyncio

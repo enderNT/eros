@@ -43,11 +43,11 @@ class FakeLLMService:
 
     async def build_conversation_reply(self, user_message, memories):
         del memories
-        return f"Respuesta para: {user_message}"
+        return f"Soy Eros Bot. Respuesta para: {user_message}"
 
     async def build_rag_reply(self, user_message, memories, clinic_context):
         del memories, clinic_context
-        return f"RAG para: {user_message}"
+        return f"RAG Eros Bot para: {user_message}"
 
     async def extract_appointment_intent(
         self, user_message, memories, clinic_context, contact_name, current_slots=None, pending_question=None
@@ -56,14 +56,14 @@ class FakeLLMService:
         current_slots = current_slots or {}
         payload = AppointmentIntentPayload(
             patient_name=current_slots.get("patient_name", "Juan Perez"),
-            reason=current_slots.get("reason", "medicina general"),
+            reason=current_slots.get("reason", "psicoterapia"),
             preferred_date="manana" if "manana" in user_message.lower() else current_slots.get("preferred_date"),
             preferred_time="10 am" if "10" in user_message else current_slots.get("preferred_time"),
             missing_fields=[] if ("manana" in user_message.lower() and "10" in user_message) else ["preferred_time"],
             should_handoff=True,
             confidence=0.9,
         )
-        return payload, f"Solicitud lista: {user_message}"
+        return payload, f"Solicitud lista: {user_message} https://calendly.com/gayagocr/new-meeting"
 
     async def build_state_summary(self, current_summary, user_message, assistant_message, active_goal, stage):
         self.summary_calls += 1
@@ -124,7 +124,7 @@ def test_workflow_routes_to_conversation():
     result = asyncio.run(workflow.run(build_webhook("Necesito informacion general sobre la clinica")))
 
     assert result["next_node"] == "conversation"
-    assert result["response_text"] == "Respuesta para: Necesito informacion general sobre la clinica"
+    assert result["response_text"] == "Soy Eros Bot. Respuesta para: Necesito informacion general sobre la clinica"
     assert result["handoff_required"] is False
     assert qdrant.calls == 0
     assert memory.saved
@@ -137,7 +137,7 @@ def test_workflow_routes_to_rag():
     result = asyncio.run(workflow.run(build_webhook("Cuales son sus horarios?")))
 
     assert result["next_node"] == "rag"
-    assert result["response_text"] == "RAG para: Cuales son sus horarios?"
+    assert result["response_text"] == "RAG Eros Bot para: Cuales son sus horarios?"
     assert result["handoff_required"] is False
     assert qdrant.calls == 1
     assert memory.saved
@@ -155,6 +155,7 @@ def test_workflow_keeps_appointment_state_across_turns():
     assert second["next_node"] == "appointment"
     assert second["stage"] == "ready_for_handoff"
     assert second["appointment_slots"]["preferred_time"] == "10 am"
+    assert "https://calendly.com/gayagocr/new-meeting" in second["response_text"]
     assert qdrant.calls == 0
     assert memory.saved
     assert llm.summary_calls >= 1

@@ -13,6 +13,8 @@ from app.settings import Settings
 
 logger = logging.getLogger(__name__)
 
+CALENDLY_APPOINTMENT_URL = "https://calendly.com/gayagocr/new-meeting"
+
 
 class LLMMessage(TypedDict):
     role: Literal["system", "user", "assistant"]
@@ -146,13 +148,17 @@ class ClinicLLMService:
 
     async def build_conversation_reply(self, user_message: str, memories: list[str]) -> str:
         system_prompt = (
-            "Eres un asistente de una clinica. Responde de forma breve, clara y natural. "
-            "Ayuda con la conversacion general y solo canaliza con recepcion si falta un dato."
+            "Eres Eros Bot, el asistente virtual de Clinica Eros Neuronal, una clinica de salud mental. "
+            "Responde en espanol con tono humano, breve, claro y sereno. "
+            "Cuando el usuario saluda, pregunta quien eres o es el primer intercambio, presentate como "
+            "'Eros Bot, asistente de Clinica Eros Neuronal'. "
+            "Ayuda con conversacion general, orientacion inicial y dudas basicas de la clinica. "
+            "No inventes servicios ni diagnósticos; si falta informacion concreta, dilo y canaliza con recepcion."
         )
         user_prompt = (
             f"Memorias relevantes: {memories}\n"
             f"Pregunta del usuario: {user_message}\n"
-            "Responde en espanol de forma breve y amigable."
+            "Responde en espanol de forma breve, amable y profesional."
         )
         try:
             substep("conversation_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
@@ -166,20 +172,25 @@ class ClinicLLMService:
             logger.warning("LLM conversation failed, using deterministic fallback: %s", exc)
             substep("conversation_fallback", "WARN", "mensaje deterministico")
             return (
-                "Puedo ayudarte con informacion general de la clinica y con solicitudes de cita. "
-                "Si tu pregunta depende de un dato no disponible, la canalizo con recepcion."
+                "Hola, soy Eros Bot, asistente de Clinica Eros Neuronal. "
+                "Puedo ayudarte con informacion general de la clinica, orientacion inicial y solicitudes de cita. "
+                "Si tu pregunta requiere un dato no disponible, la canalizo con recepcion."
             )
 
     async def build_rag_reply(self, user_message: str, memories: list[str], clinic_context: str) -> str:
         system_prompt = (
-            "Eres un asistente clinico en modo RAG. Usa solo el contexto entregado y no inventes informacion. "
-            "Si falta informacion, dilo claramente y escala con recepcion."
+            "Eres Eros Bot, asistente de Clinica Eros Neuronal, una clinica de salud mental. "
+            "Estas respondiendo en modo RAG. Debes usar solo el contexto recuperado y la memoria compartida; "
+            "no inventes informacion, horarios, precios, especialistas ni politicas. "
+            "Si el contexto no alcanza, dilo con claridad y ofrece canalizar con recepcion. "
+            "Da respuestas precisas, utiles y alineadas con una clinica de salud mental."
         )
         user_prompt = (
-            f"Contexto recuperado:\n{clinic_context}\n"
+            f"Contexto recuperado por RAG:\n{clinic_context}\n"
             f"Memoria conversacional: {memories}\n"
             f"Pregunta: {user_message}\n"
-            "Responde breve y accionable en espanol."
+            "Responde en espanol. Si el contexto recuperado contiene la respuesta, usalo de forma directa y concreta. "
+            "Si no, explica brevemente que falta informacion y ofrece apoyo adicional."
         )
         try:
             substep("rag_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
@@ -193,7 +204,7 @@ class ClinicLLMService:
             logger.warning("LLM rag failed, using deterministic fallback: %s", exc)
             substep("rag_fallback", "WARN", "RAG degradado a respuesta segura")
             return (
-                "Puedo responder con la informacion disponible de la clinica. "
+                "Soy Eros Bot y solo puedo responder con la informacion recuperada de Clinica Eros Neuronal. "
                 "Si necesitas un dato que no aparece en el contexto actual, lo canalizo con recepcion."
             )
 
@@ -289,8 +300,11 @@ class ClinicLLMService:
         pending_question: str | None = None,
     ) -> tuple[AppointmentIntentPayload, str]:
         system_prompt = (
-            "Extrae intencion de cita. Devuelve JSON estricto con llaves: "
-            "patient_name, reason, preferred_date, preferred_time, missing_fields, should_handoff, confidence."
+            "Eres el analizador de citas de Clinica Eros Neuronal, clinica de salud mental. "
+            "Tu tarea es extraer datos para agendar una cita. "
+            "Devuelve JSON estricto con llaves: patient_name, reason, preferred_date, preferred_time, "
+            "missing_fields, should_handoff, confidence. "
+            "Usa current_slots para conservar datos previos y solo marca en missing_fields los campos realmente ausentes."
         )
         user_prompt = (
             f"Nombre de contacto: {contact_name}\n"
@@ -299,7 +313,8 @@ class ClinicLLMService:
             f"Pendiente: {pending_question or 'n/a'}\n"
             f"Contexto clinico:\n{clinic_context}\n"
             f"Mensaje: {user_message}\n"
-            "Si faltan datos, listalos en missing_fields."
+            "Si faltan datos, listalos en missing_fields. "
+            "Interpreta motivos acordes a salud mental, por ejemplo psicoterapia, psiquiatria, seguimiento o evaluacion."
         )
         try:
             substep("appointment_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
@@ -319,7 +334,12 @@ class ClinicLLMService:
                 contact_name,
                 current_slots=current_slots or {},
             )
-        reply = self._build_appointment_reply(appointment)
+        reply = await self._build_appointment_reply(
+            appointment=appointment,
+            user_message=user_message,
+            memories=memories,
+            contact_name=contact_name,
+        )
         return appointment, reply
 
     def _fallback_appointment(
@@ -328,7 +348,15 @@ class ClinicLLMService:
         current_slots = current_slots or {}
         lowered = user_message.lower()
         reason = None
-        for specialty in ("pediatria", "medicina general", "dermatologia", "ginecologia", "cardiologia"):
+        for specialty in (
+            "psicoterapia",
+            "psiquiatria",
+            "terapia",
+            "ansiedad",
+            "depresion",
+            "seguimiento",
+            "evaluacion",
+        ):
             if specialty in lowered:
                 reason = specialty
                 break
@@ -363,7 +391,46 @@ class ClinicLLMService:
             confidence=0.65,
         )
 
-    def _build_appointment_reply(self, appointment: AppointmentIntentPayload) -> str:
+    async def _build_appointment_reply(
+        self,
+        appointment: AppointmentIntentPayload,
+        user_message: str,
+        memories: list[str],
+        contact_name: str,
+    ) -> str:
+        system_prompt = (
+            "Eres Eros Bot, asistente de Clinica Eros Neuronal, clinica de salud mental. "
+            "Redacta respuestas para ayudar a agendar citas. "
+            "Debes sonar claro, amable y profesional. "
+            f"Incluye siempre este enlace exacto para agendar: {CALENDLY_APPOINTMENT_URL} "
+            "No prometas disponibilidad distinta a la que el usuario confirme despues en Calendly o con recepcion."
+        )
+        user_prompt = (
+            f"Nombre del contacto: {contact_name}\n"
+            f"Memorias relevantes: {memories}\n"
+            f"Mensaje del usuario: {user_message}\n"
+            f"Payload de cita: {appointment.model_dump()}\n"
+            "Si faltan datos, pide solo los faltantes de forma breve y luego comparte el enlace. "
+            "Si ya hay datos suficientes, confirma que puede agendar directamente en el enlace. "
+            "Responde solo en espanol."
+        )
+        try:
+            substep("appointment_reply_prompt_compose", "OK", f"missing_fields={len(appointment.missing_fields)}")
+            reply = await self._provider.chat_text(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ]
+            )
+            if CALENDLY_APPOINTMENT_URL not in reply:
+                reply = f"{reply.rstrip()} Agenda aqui: {CALENDLY_APPOINTMENT_URL}".strip()
+            return reply
+        except Exception as exc:
+            logger.warning("LLM appointment reply failed, using deterministic fallback: %s", exc)
+            substep("appointment_reply_fallback", "WARN", "respuesta de cita deterministica")
+            return self._build_appointment_reply_fallback(appointment)
+
+    def _build_appointment_reply_fallback(self, appointment: AppointmentIntentPayload) -> str:
         if appointment.missing_fields:
             field_names = {
                 "patient_name": "nombre del paciente",
@@ -373,13 +440,13 @@ class ClinicLLMService:
             }
             missing = ", ".join(field_names.get(field, field) for field in appointment.missing_fields)
             return (
-                "Puedo dejar lista tu solicitud de cita. "
+                "Soy Eros Bot y puedo ayudarte a dejar lista tu cita en Clinica Eros Neuronal. "
                 f"Para continuar necesito: {missing}. "
-                "En cuanto los compartas, genero el hand-off para recepcion."
+                f"Si prefieres avanzar directo, puedes agendar aqui: {CALENDLY_APPOINTMENT_URL}"
             )
         return (
-            "Ya tengo lo necesario para preparar tu solicitud de cita. "
-            "La pasare a recepcion con el motivo y la preferencia de fecha/hora para confirmacion."
+            "Ya tengo los datos necesarios para tu cita en Clinica Eros Neuronal. "
+            f"Puedes agendar directamente aqui: {CALENDLY_APPOINTMENT_URL}"
         )
 
     def _fallback_state_route(
