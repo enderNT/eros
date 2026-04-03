@@ -56,6 +56,7 @@ class ClinicWorkflow:
         clinic_config_loader: ClinicConfigLoader,
         qdrant_service: QdrantRetrievalService,
         settings: Settings,
+        checkpointer: object | None = None,
     ) -> None:
         self._router_service = router_service
         self._llm_service = llm_service
@@ -63,6 +64,7 @@ class ClinicWorkflow:
         self._clinic_config_loader = clinic_config_loader
         self._qdrant_service = qdrant_service
         self._settings = settings
+        self._checkpointer = checkpointer or MemorySaver()
         self._graph = self._build_graph()
 
     def _build_graph(self):
@@ -91,7 +93,7 @@ class ClinicWorkflow:
         graph.add_edge("appointment", "finalize_turn")
         graph.add_edge("finalize_turn", "store_memory")
         graph.add_edge("store_memory", END)
-        return graph.compile(checkpointer=MemorySaver())
+        return graph.compile(checkpointer=self._checkpointer)
 
     async def run(self, webhook: ChatwootWebhook) -> GraphState:
         initial_state: GraphState = {
