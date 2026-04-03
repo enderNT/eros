@@ -14,6 +14,7 @@ from app.services.llm import ClinicLLMService, build_llm_provider
 from app.services.memory import build_memory_runtime
 from app.services.router import StateRoutingService
 from app.services.qdrant import QdrantRetrievalService
+from app.services.tracing import build_trace_runtime
 from app.settings import get_settings
 from app.webhooks.routes import build_webhook_router
 
@@ -35,16 +36,22 @@ def create_app() -> FastAPI:
         router_service = StateRoutingService(settings, llm_service)
         qdrant_service = QdrantRetrievalService(settings)
         async with build_memory_runtime(settings, llm_service) as memory_runtime:
-            workflow = ClinicWorkflow(
-                router_service,
-                llm_service,
-                memory_runtime,
-                clinic_config_loader,
-                qdrant_service,
-                settings,
-            )
-            app.state.agent_service = ClinicAgentService(workflow, ChatwootClient(settings))
-            yield
+            async with build_trace_runtime(settings) as trace_runtime:
+                workflow = ClinicWorkflow(
+                    router_service,
+                    llm_service,
+                    memory_runtime,
+                    clinic_config_loader,
+                    qdrant_service,
+                    settings,
+                )
+                app.state.agent_service = ClinicAgentService(
+                    workflow,
+                    ChatwootClient(settings),
+                    trace_runtime,
+                    settings,
+                )
+                yield
 
     app = FastAPI(title="Clinica Assistant", version="0.1.0", lifespan=lifespan)
     app.include_router(build_webhook_router())

@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     memory_postgres_index_dims: int = 1536
     memory_postgres_setup_on_start: bool = True
 
+    trace_backend: Literal["noop", "in_memory", "postgres"] = "in_memory"
+    trace_postgres_dsn: str | None = None
+    trace_postgres_setup_on_start: bool = True
+    trace_batch_size: int = 25
+    trace_flush_interval_seconds: float = 1.0
+    trace_projectors_enabled: bool = True
+    trace_app_key: str = "clinica-assistant"
+
     qdrant_enabled: bool = False
     qdrant_simulate: bool = True
     qdrant_base_url: str | None = None

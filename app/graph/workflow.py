@@ -15,6 +15,7 @@ from app.services.llm import ClinicLLMService
 from app.services.qdrant import QdrantRetrievalService
 from app.services.router import StateRoutingService
 from app.settings import Settings
+from app.tracing import get_trace_context
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,14 @@ class ClinicWorkflow:
                 short_term=short_term,
             )
             substep("memory_lookup", "OK", f"memories={len(context.recalled_memories)}")
+            _capture_trace_fragment(
+                "memory_lookup",
+                {
+                    "recalled_memories": self._router_service.summarize_memories(context.recalled_memories),
+                    "turn_count": context.turn_count,
+                },
+                label="memory-runtime",
+            )
             step("2.1 build_context", "OK")
             return {
                 "turn_count": context.turn_count,
@@ -156,6 +165,18 @@ class ClinicWorkflow:
                 "OK",
                 f"next={decision.next_node} intent={decision.intent} confidence={decision.confidence:.2f}",
             )
+            _capture_trace_fragment(
+                "routing_decision",
+                {
+                    "next_node": decision.next_node,
+                    "intent": decision.intent,
+                    "confidence": decision.confidence,
+                    "needs_retrieval": decision.needs_retrieval,
+                    "reason": decision.reason,
+                    "state_update": decision.state_update,
+                },
+                label="state-router",
+            )
             return merged_state
         except Exception as exc:
             mark_error("2.2 state_router", exc)
@@ -183,6 +204,11 @@ class ClinicWorkflow:
                 memories=state.get("recalled_memories", []),
             )
             step("3.a.1 conversation_node", "OK", f"chars={len(response_text)}")
+            _capture_trace_fragment(
+                "llm_reply",
+                {"node": "conversation", "response_text": response_text},
+                label="conversation",
+            )
             return {
                 "response_text": response_text,
                 "last_assistant_message": response_text,
@@ -206,12 +232,22 @@ class ClinicWorkflow:
                 memories=state.get("recalled_memories", []),
             )
             substep("qdrant_lookup", "OK", "contexto vectorial preparado")
+            _capture_trace_fragment(
+                "retrieval_context",
+                {"node": "rag", "context_preview": _shorten(rag_context, 240)},
+                label="qdrant",
+            )
             response_text = await self._llm_service.build_rag_reply(
                 user_message=state["last_user_message"],
                 memories=state.get("recalled_memories", []),
                 clinic_context=rag_context,
             )
             step("3.b.1 rag_node", "OK", f"chars={len(response_text)}")
+            _capture_trace_fragment(
+                "llm_reply",
+                {"node": "rag", "response_text": response_text},
+                label="rag",
+            )
             return {
                 "last_tool_result": _shorten(rag_context, 240),
                 "response_text": response_text,
@@ -253,6 +289,15 @@ class ClinicWorkflow:
                 f"missing_fields={len(missing_fields)} handoff={appointment.should_handoff}",
             )
             step("3.c.1 appointment_node", "OK", f"chars={len(response_text)}")
+            _capture_trace_fragment(
+                "appointment_extraction",
+                {
+                    "payload": appointment.model_dump(),
+                    "response_text": response_text,
+                    "missing_fields": missing_fields,
+                },
+                label="appointment",
+            )
             return {
                 "response_text": response_text,
                 "last_assistant_message": response_text,
@@ -281,6 +326,15 @@ class ClinicWorkflow:
             )
             cleaned_state["turn_count"] = int(cleaned_state.get("turn_count", 0))
             step("3.9 finalize_turn", "OK", "estado limpio")
+            _capture_trace_fragment(
+                "turn_finalize",
+                {
+                    "next_node": cleaned_state.get("next_node"),
+                    "summary_refresh_requested": cleaned_state.get("summary_refresh_requested", False),
+                    "turn_count": cleaned_state.get("turn_count", 0),
+                },
+                label="finalize-turn",
+            )
             return cleaned_state
         except Exception as exc:
             mark_error("3.9 finalize_turn", exc)
@@ -322,6 +376,14 @@ class ClinicWorkflow:
             step("3.10 store_memory", "OK", f"persistidas {len(commit_result.stored_records)} memorias utiles")
         else:
             substep("3.10 store_memory", "OK", "sin hechos duraderos para guardar")
+        _capture_trace_fragment(
+            "memory_commit",
+            {
+                "stored_records": len(commit_result.stored_records),
+                "summary_refreshed": bool(updates.get("summary")),
+            },
+            label="memory-runtime",
+        )
         return updates
 
     def _apply_state_update(self, state: GraphState, patch: dict[str, Any]) -> GraphState:
@@ -419,3 +481,10 @@ def _build_domain_state(state: GraphState) -> dict[str, Any]:
         "response_text": state.get("response_text", ""),
         "refresh_summary": state.get("summary_refresh_requested", False),
     }
+
+
+def _capture_trace_fragment(kind: str, payload: dict[str, Any], *, label: str = "") -> None:
+    trace_context = get_trace_context()
+    if trace_context is None:
+        return
+    trace_context.capture_fragment(kind, payload, label=label)
