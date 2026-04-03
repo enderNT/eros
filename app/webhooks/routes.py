@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.models.schemas import ChatwootWebhook
 from app.observability.flow_logger import new_flow_id, step, substep
@@ -12,11 +12,17 @@ from app.services.agent import ClinicAgentService
 logger = logging.getLogger(__name__)
 
 
-def build_webhook_router(agent_service: ClinicAgentService) -> APIRouter:
+def build_webhook_router(agent_service: ClinicAgentService | None = None) -> APIRouter:
     router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
     @router.post("/chatwoot", status_code=status.HTTP_202_ACCEPTED)
-    async def chatwoot_webhook(payload: ChatwootWebhook) -> dict[str, str]:
+    async def chatwoot_webhook(payload: ChatwootWebhook, request: Request) -> dict[str, str]:
+        resolved_agent_service = agent_service or getattr(request.app.state, "agent_service", None)
+        if resolved_agent_service is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Agent service is not initialized.",
+            )
         flow_id = new_flow_id()
         step(
             "1. webhook_received",
@@ -39,7 +45,7 @@ def build_webhook_router(agent_service: ClinicAgentService) -> APIRouter:
             )
         substep("webhook_payload_validated", "OK", "contenido detectado")
         substep("webhook_background_dispatch", "RUN", "enviando al flujo asyncrono")
-        asyncio.create_task(_safe_process(agent_service, payload, flow_id))
+        asyncio.create_task(_safe_process(resolved_agent_service, payload, flow_id))
         substep("webhook_background_dispatch", "OK", "task creada")
         return {"status": "accepted", "conversation_id": payload.conversation_id}
 

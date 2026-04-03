@@ -9,7 +9,9 @@ from app.webhooks.routes import build_webhook_router
 def build_test_client(monkeypatch) -> TestClient:
     get_settings.cache_clear()
     monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("MEMORY_BACKEND", "in_memory")
     client = TestClient(create_app())
+    client.__enter__()
     get_settings.cache_clear()
     return client
 
@@ -68,4 +70,4 @@ def test_chatwoot_webhook_ignores_outgoing_messages(monkeypatch):
 
     assert response.status_code == 202
     assert response.json() == {"status": "ignored", "conversation_id": "321"}
-    assert scheduled == []
+    assert all(getattr(coro, "cr_code", None).co_name != "_safe_process" for coro in scheduled)

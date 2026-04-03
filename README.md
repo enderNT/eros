@@ -1,13 +1,13 @@
 # Clinica Assistant
 
-Backend en Python para una clinica que recibe mensajes por webhook de Chatwoot, usa un proveedor `LLM` configurable para generacion y clasificacion de estado, orquesta con `LangGraph`, mantiene continuidad conversacional corta con estado de hilo y memoria duradera con `mem0`, y prepara recuperacion RAG con `Qdrant`.
+Backend en Python para una clinica que recibe mensajes por webhook de Chatwoot, usa un proveedor `LLM` configurable para generacion y clasificacion de estado, orquesta con `LangGraph`, mantiene continuidad conversacional corta con estado de hilo y memoria duradera mediante un runtime reusable sobre stores de LangGraph, y prepara recuperacion RAG con `Qdrant`.
 
 ## Componentes
 
 - `FastAPI` para el webhook `POST`.
 - `LangGraph` para el flujo conversacional con estado corto por `conversation_id`.
 - Un proveedor `LLM` configurable como backend remoto de generacion, resumen y clasificacion de estado.
-- `mem0` para memoria duradera filtrada.
+- Un runtime reusable de memoria conversacional con adapters in-memory y `LangGraph` Postgres store.
 - `Qdrant` como vector store para el nodo RAG, con modo de simulacion habilitado por defecto.
 - Configuracion local estatica para servicios, horarios, doctores y politicas, cargada solo cuando la rama de RAG o cita la necesita.
 
@@ -64,7 +64,7 @@ Opcionalmente define `NGROK_AUTHTOKEN` y `NGROK_DOMAIN` en `.env` si quieres aut
 
 1. Chatwoot envia un `POST` al webhook.
 2. La API responde inmediatamente con un acuse.
-3. En segundo plano se recuperan pocas memorias relevantes de `mem0` y el estado corto del hilo viaja en `LangGraph`.
+3. En segundo plano se recuperan pocas memorias relevantes del runtime de memoria y el estado corto del hilo viaja en `LangGraph`.
 4. Un router de estado aplica guards deterministas y, si hace falta, un clasificador LLM para decidir entre conversacion general, RAG o cita.
 5. Solo si la rama es `rag` o `appointment`, se carga `config/clinic.json` para construir el contexto clinico completo.
 6. La respuesta se envia por la API de Chatwoot si esta habilitada; si no, queda registrada en logs.

@@ -35,10 +35,10 @@ class Settings(BaseSettings):
 
     clinic_config_path: Path = Field(default=Path("config/clinic.json"))
 
-    memory_backend: Literal["in_memory", "mem0_local", "mem0_platform"] = "in_memory"
-    mem0_api_key: str | None = None
-    mem0_org_id: str | None = None
-    mem0_project_id: str | None = None
+    memory_backend: Literal["in_memory", "langgraph_postgres"] = "in_memory"
+    memory_postgres_dsn: str | None = None
+    memory_postgres_index_dims: int = 1536
+    memory_postgres_setup_on_start: bool = True
 
     qdrant_enabled: bool = False
     qdrant_simulate: bool = True

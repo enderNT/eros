@@ -1,7 +1,9 @@
 import asyncio
 
 from app.graph.workflow import ClinicWorkflow
+from app.memory_runtime import ConversationMemoryRuntime, LLMConversationSummaryService
 from app.models.schemas import AppointmentIntentPayload, ChatwootWebhook, StateRoutingDecision
+from app.services.barbershop_memory import BarbershopMemoryPolicy
 from app.services.clinic_config import ClinicConfigLoader
 from app.services.router import StateRoutingService
 from app.settings import Settings
@@ -74,12 +76,17 @@ class FakeMemoryStore:
     def __init__(self):
         self.saved = []
 
-    async def search(self, contact_id, query, limit=5):
-        del contact_id, query, limit
-        return ["Recuerdo util", "Prefiere horario vespertino"]
+    async def search(self, actor_id, query, limit=5):
+        del actor_id, query, limit
+        from app.memory_runtime.types import LongTermMemoryRecord
 
-    async def save_memories(self, contact_id, memories):
-        self.saved.append((contact_id, [memory.model_dump() for memory in memories]))
+        return [
+            LongTermMemoryRecord(kind="episode", text="Recuerdo util"),
+            LongTermMemoryRecord(kind="profile", text="Prefiere horario vespertino"),
+        ]
+
+    async def save(self, actor_id, records):
+        self.saved.append((actor_id, [record.model_dump() for record in records]))
 
 
 class FakeQdrantService:
@@ -104,16 +111,22 @@ def build_webhook(message: str, conversation_id: int = 123) -> ChatwootWebhook:
 
 def build_workflow():
     llm = FakeLLMService()
-    router = StateRoutingService(Settings(llm_api_key=None, openai_api_key=None), llm)
+    settings = Settings(llm_api_key=None, openai_api_key=None, memory_backend="in_memory")
+    router = StateRoutingService(settings, llm)
     memory = FakeMemoryStore()
+    memory_runtime = ConversationMemoryRuntime(
+        store=memory,
+        summary_service=LLMConversationSummaryService(llm),
+        policy=BarbershopMemoryPolicy(),
+    )
     qdrant = FakeQdrantService()
     workflow = ClinicWorkflow(
         router,
         llm,
-        memory,
+        memory_runtime,
         ClinicConfigLoader(config_path="config/clinic.json"),  # type: ignore[arg-type]
         qdrant,
-        Settings(),
+        settings,
     )
     return workflow, memory, qdrant, llm
 

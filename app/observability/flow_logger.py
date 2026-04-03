@@ -29,7 +29,7 @@ _STEP_LABELS = {
     "semantic_routing_and_graph": "Procesando flujo principal",
     "build_context": "Preparando contexto",
     "clinic_config": "Cargando configuracion de la clinica",
-    "mem0_lookup": "Buscando memoria previa",
+    "memory_lookup": "Buscando memoria previa",
     "qdrant_lookup": "Consultando contexto RAG",
     "intent_router_openai": "Decidiendo intencion",
     "router_prompt_compose": "Preparando texto para clasificar",
