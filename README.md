@@ -8,6 +8,7 @@ Backend en Python para una clinica que recibe mensajes por webhook de Chatwoot, 
 - `LangGraph` para el flujo conversacional con estado corto por `conversation_id`.
 - Un proveedor `LLM` configurable como backend remoto de generacion, resumen y clasificacion de estado.
 - Un runtime reusable de memoria conversacional con adapters in-memory y `LangGraph` Postgres store.
+- Un tracer reusable de turnos con captura estructurada, batch async y proyeccion lista para DSPy.
 - `Qdrant` como vector store para el nodo RAG, con modo de simulacion habilitado por defecto.
 - Configuracion local estatica para servicios, horarios, doctores y politicas, cargada solo cuando la rama de RAG o cita la necesita.
 
@@ -59,6 +60,17 @@ make webhook-url
 Opcionalmente define `NGROK_AUTHTOKEN` y `NGROK_DOMAIN` en `.env` si quieres autenticar el agente o fijar una URL.
 
 8. Si vas a usar Qdrant real, configurar `QDRANT_ENABLED=true`, `QDRANT_SIMULATE=false` y apuntar `QDRANT_BASE_URL` al cluster o instancia local. Si no, el flujo RAG usa simulacion controlada y sigue funcionando.
+
+9. Si vas a usar persistencia real para memoria o tracing, configura sus DSN:
+
+```bash
+export MEMORY_BACKEND="langgraph_postgres"
+export MEMORY_POSTGRES_DSN="postgresql://user:pass@localhost:5432/clinica"
+export TRACE_BACKEND="postgres"
+export TRACE_POSTGRES_DSN="postgresql://user:pass@localhost:5432/clinica"
+```
+
+Tambien puedes dejar `TRACE_BACKEND=in_memory` para desarrollo local o `TRACE_BACKEND=noop` si quieres desactivar la captura.
 
 ## Flujo
 
