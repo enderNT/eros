@@ -35,7 +35,8 @@ def create_app() -> FastAPI:
         clinic_config_loader = ClinicConfigLoader(settings.clinic_config_path)
         llm_provider = build_llm_provider(settings)
         llm_service = ClinicLLMService(llm_provider)
-        router_service = StateRoutingService(settings, llm_service, dspy_runtime=build_dspy_runtime(settings))
+        dspy_runtime = build_dspy_runtime(settings)
+        router_service = StateRoutingService(settings, llm_service, dspy_runtime=dspy_runtime)
         qdrant_service = QdrantRetrievalService(settings)
         async with build_graph_checkpointer(settings) as checkpointer:
             async with build_memory_runtime(settings, llm_service) as memory_runtime:
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
                         clinic_config_loader,
                         qdrant_service,
                         settings,
+                        dspy_runtime=dspy_runtime,
                         checkpointer=checkpointer,
                     )
                     app.state.agent_service = ClinicAgentService(

@@ -8,11 +8,11 @@ from app.services.barbershop_memory import BarbershopMemoryPolicy
 from app.services.clinic_config import ClinicConfigLoader
 from app.services.router import StateRoutingService
 from app.services.tracing import (
-    AppointmentExtractionProjector,
+    AppointmentReplyProjector,
     ConversationReplyProjector,
     RagReplyProjector,
     RoutingDecisionProjector,
-    StateSummaryProjector,
+    build_trace_runtime,
 )
 from app.settings import Settings
 from app.tracing import (
@@ -53,9 +53,21 @@ class FakeLLMService:
         del memories, context
         return f"Respuesta: {user_message}"
 
+    async def generate_conversation_reply(self, user_message, memories, context=None):
+        del memories, context
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text=f"Respuesta: {user_message}", reply_mode="llm")
+
     async def build_rag_reply(self, user_message, memories, clinic_context, context=None):
         del memories, clinic_context, context
         return f"RAG: {user_message}"
+
+    async def generate_rag_reply(self, user_message, memories, clinic_context, context=None):
+        del memories, clinic_context, context
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text=f"RAG: {user_message}", reply_mode="llm")
 
     async def extract_appointment_intent(
         self,
@@ -69,6 +81,25 @@ class FakeLLMService:
     ):
         del user_message, memories, clinic_context, contact_name, current_slots, pending_question, context
         return AppointmentIntentPayload(), "ok"
+
+    async def extract_appointment_payload(
+        self,
+        user_message,
+        memories,
+        clinic_context,
+        contact_name,
+        current_slots=None,
+        pending_question=None,
+        context=None,
+    ):
+        del user_message, memories, clinic_context, contact_name, current_slots, pending_question, context
+        return AppointmentIntentPayload()
+
+    async def generate_appointment_reply(self, appointment, user_message, memories, contact_name, context=None):
+        del appointment, user_message, memories, contact_name, context
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text="ok", reply_mode="llm")
 
     async def build_state_summary(self, current_summary, user_message, assistant_message, active_goal, stage):
         return f"{current_summary}|{user_message}|{assistant_message}|{active_goal}|{stage}".strip("|")
@@ -263,9 +294,9 @@ async def test_postgres_trace_repository_skips_fragments_for_deduped_records():
             del params
             normalized = " ".join(sql.split())
             executed_sql.append(normalized)
-            if "SELECT trace_id FROM trace_turns WHERE dedupe_key" in normalized:
+            if 'SELECT trace_id FROM "tracing"."trace_turns" WHERE dedupe_key' in normalized:
                 self._fetchone_value = ("trace-existing",)
-            elif "SELECT trace_id FROM trace_turns WHERE trace_id = ANY" in normalized:
+            elif 'SELECT trace_id FROM "tracing"."trace_turns" WHERE trace_id = ANY' in normalized:
                 self._fetchall_value = []
             else:
                 self._fetchone_value = None
@@ -293,8 +324,43 @@ async def test_postgres_trace_repository_skips_fragments_for_deduped_records():
 
     await repository.save_batch([record], [])
 
-    assert any("SELECT trace_id FROM trace_turns WHERE dedupe_key" in sql for sql in executed_sql)
-    assert not any("INSERT INTO trace_fragments" in sql for sql in executed_sql)
+    assert any('SELECT trace_id FROM "tracing"."trace_turns" WHERE dedupe_key' in sql for sql in executed_sql)
+    assert not any('INSERT INTO "tracing"."trace_fragments"' in sql for sql in executed_sql)
+
+
+async def test_postgres_trace_repository_setup_uses_schema_and_example_index():
+    executed_sql: list[str] = []
+
+    class FakeCursor:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, sql, params=None):
+            del params
+            executed_sql.append(" ".join(str(sql).split()))
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        async def commit(self):
+            return None
+
+    repository = PostgresTraceRepository("postgres://unused", schema="analytics")
+
+    @asynccontextmanager
+    async def fake_connection():
+        yield FakeConnection()
+
+    repository._connection = fake_connection  # type: ignore[method-assign]
+
+    await repository.setup()
+
+    assert any('CREATE SCHEMA IF NOT EXISTS "analytics"' in sql for sql in executed_sql)
+    assert any('"analytics"."trace_examples"(task_name, projector_version, created_at DESC)' in sql for sql in executed_sql)
 
 
 async def test_trace_repository_respects_dedupe_and_projector_version_upserts():
@@ -347,15 +413,14 @@ async def test_trace_repository_respects_dedupe_and_projector_version_upserts():
     assert repository.examples[("trace-dedupe", "state_router", "v2")].target_payload["next_node"] == "rag"
 
 
-async def test_trace_projectors_emit_multitask_examples_when_fragments_exist():
+async def test_trace_projectors_emit_reply_examples_when_fragments_exist():
     repository = InMemoryTraceRepository()
     sink = await AsyncBatchTraceSink(
         repository,
         projectors=[
-            AppointmentExtractionProjector(),
             ConversationReplyProjector(),
             RagReplyProjector(),
-            StateSummaryProjector(),
+            AppointmentReplyProjector(),
         ],
         batch_size=1,
         flush_interval_seconds=10,
@@ -376,72 +441,80 @@ async def test_trace_projectors_emit_multitask_examples_when_fragments_exist():
     )
     context.capture_input({"message": "Necesito horarios", "contact_name": "Juan"})
     context.capture_fragment(
-        "appointment_extraction",
+        "appointment_reply_input",
         {
             "user_message": "Quiero una cita",
-            "memories": ["Prefiere la tarde"],
-            "current_slots": {"reason": "psicoterapia"},
+            "contact_name": "Juan",
+            "summary": "Resumen breve",
+            "active_goal": "appointment",
+            "stage": "collecting_slots",
             "pending_question": "Necesito la hora preferida.",
-            "reply_context": {"turn_count": 2},
-            "clinic_context_preview": "Clinica: Eros",
-            "payload": {"reason": "psicoterapia", "missing_fields": ["preferred_time"]},
-            "response_text": "Te ayudo a completar tu cita",
-            "missing_fields": ["preferred_time"],
+            "last_assistant_message": "Claro",
+            "recent_turns": [{"user": "Hola", "assistant": "Claro"}],
+            "memories": ["Prefiere la tarde"],
+            "appointment_state": {"reason": "psicoterapia", "missing_fields": ["preferred_time"]},
+            "booking_url": "https://calendly.com/gayagocr/new-meeting",
         },
         order=1,
         label="appointment",
     )
     context.capture_fragment(
-        "llm_reply",
-        {
-            "node": "conversation",
-            "response_text": "Seguimos con tu consulta",
-            "memories": ["Prefiere la tarde"],
-            "reply_context": {"turn_count": 2},
-        },
+        "appointment_reply_output",
+        {"response_text": "Te ayudo a completar tu cita", "reply_mode": "llm"},
         order=2,
+        label="appointment",
+    )
+    context.capture_fragment(
+        "conversation_reply_input",
+        {
+            "user_message": "Necesito horarios",
+            "summary": "Resumen",
+            "active_goal": "conversation",
+            "stage": "open",
+            "pending_question": "",
+            "last_assistant_message": "Hola",
+            "recent_turns": [{"user": "Hola", "assistant": "Hola"}],
+            "memories": ["Prefiere la tarde"],
+        },
+        order=3,
         label="conversation",
     )
     context.capture_fragment(
-        "retrieval_context",
-        {"context_preview": "Horarios de la clinica"},
-        order=3,
-        label="qdrant",
+        "conversation_reply_output",
+        {"response_text": "Seguimos con tu consulta", "reply_mode": "fallback"},
+        order=4,
+        label="conversation",
     )
     context.capture_fragment(
-        "llm_reply",
+        "rag_reply_input",
         {
-            "node": "rag",
-            "response_text": "Nuestros horarios son...",
+            "user_message": "Necesito horarios",
+            "summary": "Resumen",
+            "active_goal": "information",
+            "stage": "lookup",
+            "pending_question": "",
+            "last_assistant_message": "Hola",
+            "recent_turns": [{"user": "Hola", "assistant": "Hola"}],
             "memories": ["Prefiere la tarde"],
-            "reply_context": {"turn_count": 3},
-            "rag_context_preview": "Horarios de la clinica",
+            "retrieved_context": "Horarios de la clinica",
         },
-        order=4,
+        order=5,
         label="rag",
     )
     context.capture_fragment(
-        "state_summary",
-        {
-            "current_summary": "Resumen anterior",
-            "user_message": "Necesito horarios",
-            "assistant_message": "Nuestros horarios son...",
-            "active_goal": "information",
-            "stage": "lookup",
-            "updated_summary": "Resumen actualizado",
-        },
-        order=5,
-        label="summary-service",
+        "rag_reply_output",
+        {"response_text": "Nuestros horarios son...", "reply_mode": "llm"},
+        order=6,
+        label="rag",
     )
     context.capture_output({"response_text": "Nuestros horarios son..."})
 
     await sink.enqueue(context.finalize("success"))
     await sink.close()
 
-    assert repository.examples[("trace-multitask", "appointment_extraction", "v1")].target_payload["reason"] == "psicoterapia"
-    assert repository.examples[("trace-multitask", "conversation_reply", "v1")].target_payload["response_text"] == "Seguimos con tu consulta"
-    assert repository.examples[("trace-multitask", "rag_reply", "v1")].input_payload["clinic_context"] == "Horarios de la clinica"
-    assert repository.examples[("trace-multitask", "state_summary", "v1")].target_payload["updated_summary"] == "Resumen actualizado"
+    assert repository.examples[("trace-multitask", "appointment_reply", "v1")].input_payload["appointment_state"]["reason"] == "psicoterapia"
+    assert repository.examples[("trace-multitask", "conversation_reply", "v2")].metadata_payload["reply_mode"] == "fallback"
+    assert repository.examples[("trace-multitask", "rag_reply", "v2")].input_payload["retrieved_context"] == "Horarios de la clinica"
 
 
 async def test_trace_sink_applies_field_policy_before_persist_and_before_project():
@@ -518,5 +591,18 @@ def test_workflow_emits_trace_fragments_when_context_is_bound():
     assert "routing_input" in fragment_kinds
     assert "routing_decision" in fragment_kinds
     assert "retrieval_context" in fragment_kinds
-    assert "llm_reply" in fragment_kinds
-    assert "memory_commit" in fragment_kinds
+    assert "rag_reply_input" in fragment_kinds
+    assert "rag_reply_output" in fragment_kinds
+
+
+async def test_build_trace_runtime_registers_only_reply_projectors():
+    settings = Settings(trace_backend="in_memory", trace_projectors_enabled=True)
+
+    async with build_trace_runtime(settings) as runtime:
+        projectors = runtime.sink._projectors
+
+    assert [projector.name for projector in projectors] == [
+        "conversation_reply",
+        "rag_reply",
+        "appointment_reply",
+    ]

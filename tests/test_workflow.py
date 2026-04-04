@@ -49,9 +49,22 @@ class FakeLLMService:
         self.conversation_contexts.append(context)
         return f"Soy Eros Bot. Respuesta para: {user_message}"
 
+    async def generate_conversation_reply(self, user_message, memories, context=None):
+        from app.services.llm import GeneratedReply
+
+        del memories
+        self.conversation_contexts.append(context)
+        return GeneratedReply(response_text=f"Soy Eros Bot. Respuesta para: {user_message}", reply_mode="llm")
+
     async def build_rag_reply(self, user_message, memories, clinic_context, context=None):
         del memories, clinic_context, context
         return f"RAG Eros Bot para: {user_message}"
+
+    async def generate_rag_reply(self, user_message, memories, clinic_context, context=None):
+        del memories, clinic_context, context
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text=f"RAG Eros Bot para: {user_message}", reply_mode="llm")
 
     async def extract_appointment_intent(
         self,
@@ -75,6 +88,36 @@ class FakeLLMService:
             confidence=0.9,
         )
         return payload, f"Solicitud lista: {user_message} https://calendly.com/gayagocr/new-meeting"
+
+    async def extract_appointment_payload(
+        self,
+        user_message,
+        memories,
+        clinic_context,
+        contact_name,
+        current_slots=None,
+        pending_question=None,
+        context=None,
+    ):
+        payload, _ = await self.extract_appointment_intent(
+            user_message,
+            memories,
+            clinic_context,
+            contact_name,
+            current_slots=current_slots,
+            pending_question=pending_question,
+            context=context,
+        )
+        return payload
+
+    async def generate_appointment_reply(self, appointment, user_message, memories, contact_name, context=None):
+        del appointment, memories, contact_name, context
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(
+            response_text=f"Solicitud lista: {user_message} https://calendly.com/gayagocr/new-meeting",
+            reply_mode="llm",
+        )
 
     async def build_state_summary(self, current_summary, user_message, assistant_message, active_goal, stage):
         self.summary_calls += 1
@@ -108,6 +151,32 @@ class FakeQdrantService:
         return "Contexto RAG simulado"
 
 
+class FakeDSPyRuntime:
+    def __init__(self):
+        self.calls = []
+
+    async def generate_conversation_reply(self, payload, llm_service, *, context=None):
+        del llm_service, context
+        self.calls.append(("conversation", payload))
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text=f"DSPy conversation: {payload['user_message']}", reply_mode="llm")
+
+    async def generate_rag_reply(self, payload, llm_service, *, context=None):
+        del llm_service, context
+        self.calls.append(("rag", payload))
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text=f"DSPy rag: {payload['retrieved_context']}", reply_mode="llm")
+
+    async def generate_appointment_reply(self, payload, llm_service, *, appointment, context=None):
+        del llm_service, appointment, context
+        self.calls.append(("appointment", payload))
+        from app.services.llm import GeneratedReply
+
+        return GeneratedReply(response_text=f"DSPy appointment: {payload['booking_url']}", reply_mode="llm")
+
+
 def build_webhook(message: str, conversation_id: int = 123) -> ChatwootWebhook:
     return ChatwootWebhook(
         content=message,
@@ -118,7 +187,7 @@ def build_webhook(message: str, conversation_id: int = 123) -> ChatwootWebhook:
     )
 
 
-def build_workflow():
+def build_workflow(dspy_runtime=None):
     llm = FakeLLMService()
     settings = Settings(llm_api_key=None, openai_api_key=None, memory_backend="in_memory")
     router = StateRoutingService(settings, llm)
@@ -136,6 +205,7 @@ def build_workflow():
         ClinicConfigLoader(config_path="config/clinic.json"),  # type: ignore[arg-type]
         qdrant,
         settings,
+        dspy_runtime=dspy_runtime,
     )
     return workflow, memory, qdrant, llm
 
@@ -195,3 +265,19 @@ def test_workflow_passes_recent_context_to_conversation_reply():
     assert second_context.last_assistant_message == "Soy Eros Bot. Respuesta para: Hola"
     assert second_context.recent_turns[-1]["user"] == "Hola"
     assert second_context.recent_turns[-1]["assistant"] == "Soy Eros Bot. Respuesta para: Hola"
+
+
+def test_workflow_uses_dspy_runtime_for_reply_generation():
+    dspy_runtime = FakeDSPyRuntime()
+    workflow, _, qdrant, llm = build_workflow(dspy_runtime=dspy_runtime)
+
+    conversation_result = asyncio.run(workflow.run(build_webhook("Hola DSPy", conversation_id=1111)))
+    rag_result = asyncio.run(workflow.run(build_webhook("Cuales son sus horarios?", conversation_id=1112)))
+    appointment_result = asyncio.run(workflow.run(build_webhook("Quiero una cita", conversation_id=1113)))
+
+    assert conversation_result["response_text"] == "DSPy conversation: Hola DSPy"
+    assert rag_result["response_text"] == "DSPy rag: Contexto RAG simulado"
+    assert appointment_result["response_text"].startswith("DSPy appointment: https://calendly.com/gayagocr/new-meeting")
+    assert [call[0] for call in dspy_runtime.calls] == ["conversation", "rag", "appointment"]
+    assert qdrant.calls == 1
+    assert llm.conversation_contexts == []

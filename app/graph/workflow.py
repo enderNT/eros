@@ -7,11 +7,12 @@ from typing import Any, TypedDict
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from app.dspy.runtime import DSPyRuntime
 from app.memory_runtime import ConversationMemoryRuntime, ShortTermState, TurnMemoryInput
 from app.models.schemas import ChatwootWebhook
 from app.observability.flow_logger import mark_error, step, substep
 from app.services.clinic_config import ClinicConfigLoader
-from app.services.llm import ClinicLLMService, ReplyContext
+from app.services.llm import CALENDLY_APPOINTMENT_URL, ClinicLLMService, ReplyContext
 from app.services.qdrant import QdrantRetrievalService
 from app.services.router import StateRoutingService
 from app.settings import Settings
@@ -57,6 +58,7 @@ class ClinicWorkflow:
         clinic_config_loader: ClinicConfigLoader,
         qdrant_service: QdrantRetrievalService,
         settings: Settings,
+        dspy_runtime: DSPyRuntime | None = None,
         checkpointer: object | None = None,
     ) -> None:
         self._router_service = router_service
@@ -65,6 +67,7 @@ class ClinicWorkflow:
         self._clinic_config_loader = clinic_config_loader
         self._qdrant_service = qdrant_service
         self._settings = settings
+        self._dspy_runtime = dspy_runtime
         self._checkpointer = checkpointer or MemorySaver()
         self._graph = self._build_graph()
 
@@ -203,19 +206,24 @@ class ClinicWorkflow:
         try:
             step("3.a.1 conversation_node", "RUN", "generando respuesta")
             reply_context = _build_reply_context(state)
-            response_text = await self._llm_service.build_conversation_reply(
-                user_message=state["last_user_message"],
-                memories=state.get("recalled_memories", []),
+            _capture_trace_fragment(
+                "conversation_reply_input",
+                _build_conversation_reply_trace_payload(state),
+                label="conversation",
+            )
+            generated_reply = await _generate_conversation_reply(
+                self._llm_service,
+                dspy_runtime=self._dspy_runtime,
+                payload=_build_conversation_reply_trace_payload(state),
                 context=reply_context,
             )
+            response_text = generated_reply["response_text"]
             step("3.a.1 conversation_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
-                "llm_reply",
+                "conversation_reply_output",
                 {
-                    "node": "conversation",
                     "response_text": response_text,
-                    "memories": list(state.get("recalled_memories", [])),
-                    "reply_context": _reply_context_payload(reply_context),
+                    "reply_mode": generated_reply["reply_mode"],
                 },
                 label="conversation",
             )
@@ -248,21 +256,24 @@ class ClinicWorkflow:
                 {"node": "rag", "context_preview": _shorten(rag_context, 240)},
                 label="qdrant",
             )
-            response_text = await self._llm_service.build_rag_reply(
-                user_message=state["last_user_message"],
-                memories=state.get("recalled_memories", []),
-                clinic_context=rag_context,
+            _capture_trace_fragment(
+                "rag_reply_input",
+                _build_rag_reply_trace_payload(state, retrieved_context=rag_context),
+                label="rag",
+            )
+            generated_reply = await _generate_rag_reply(
+                self._llm_service,
+                dspy_runtime=self._dspy_runtime,
+                payload=_build_rag_reply_trace_payload(state, retrieved_context=rag_context),
                 context=reply_context,
             )
+            response_text = generated_reply["response_text"]
             step("3.b.1 rag_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
-                "llm_reply",
+                "rag_reply_output",
                 {
-                    "node": "rag",
                     "response_text": response_text,
-                    "memories": list(state.get("recalled_memories", [])),
-                    "reply_context": _reply_context_payload(reply_context),
-                    "rag_context_preview": _shorten(rag_context, 240),
+                    "reply_mode": generated_reply["reply_mode"],
                 },
                 label="rag",
             )
@@ -283,7 +294,8 @@ class ClinicWorkflow:
             clinic_context = self._clinic_config_loader.load().to_context_text()
             reply_context = _build_reply_context(state)
             substep("clinic_config", "OK", "config estatica cargada")
-            appointment, response_text = await self._llm_service.extract_appointment_intent(
+            appointment = await _extract_appointment_payload(
+                self._llm_service,
                 user_message=state["last_user_message"],
                 memories=state.get("recalled_memories", []),
                 clinic_context=clinic_context,
@@ -292,6 +304,20 @@ class ClinicWorkflow:
                 pending_question=state.get("pending_question"),
                 context=reply_context,
             )
+            appointment_reply_payload = _build_appointment_reply_trace_payload(
+                state,
+                appointment=appointment.model_dump(),
+                booking_url=CALENDLY_APPOINTMENT_URL,
+            )
+            _capture_trace_fragment("appointment_reply_input", appointment_reply_payload, label="appointment")
+            generated_reply = await _generate_appointment_reply(
+                self._llm_service,
+                dspy_runtime=self._dspy_runtime,
+                payload=appointment_reply_payload,
+                appointment=appointment,
+                context=reply_context,
+            )
+            response_text = generated_reply["response_text"]
             appointment_slots = _merge_slots(state.get("appointment_slots", {}), appointment.model_dump())
             missing_fields = list(appointment.missing_fields)
             pending_question = _build_pending_question(missing_fields) if missing_fields else ""
@@ -310,17 +336,10 @@ class ClinicWorkflow:
             )
             step("3.c.1 appointment_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
-                "appointment_extraction",
+                "appointment_reply_output",
                 {
-                    "user_message": state["last_user_message"],
-                    "memories": list(state.get("recalled_memories", [])),
-                    "current_slots": deepcopy(state.get("appointment_slots", {})),
-                    "pending_question": state.get("pending_question", ""),
-                    "reply_context": _reply_context_payload(reply_context),
-                    "clinic_context_preview": _shorten(clinic_context, 240),
-                    "payload": appointment.model_dump(),
                     "response_text": response_text,
-                    "missing_fields": missing_fields,
+                    "reply_mode": generated_reply["reply_mode"],
                 },
                 label="appointment",
             )
@@ -530,6 +549,50 @@ def _build_reply_context(state: GraphState) -> ReplyContext:
     )
 
 
+def _build_base_reply_trace_payload(state: GraphState) -> dict[str, Any]:
+    return {
+        "user_message": state.get("last_user_message", ""),
+        "summary": state.get("summary", ""),
+        "active_goal": state.get("active_goal", ""),
+        "stage": state.get("stage", ""),
+        "pending_question": state.get("pending_question", ""),
+        "last_assistant_message": state.get("last_assistant_message", ""),
+        "recent_turns": deepcopy(state.get("recent_turns", [])),
+        "memories": list(state.get("recalled_memories", [])),
+    }
+
+
+def _build_conversation_reply_trace_payload(state: GraphState) -> dict[str, Any]:
+    return _build_base_reply_trace_payload(state)
+
+
+def _build_rag_reply_trace_payload(state: GraphState, *, retrieved_context: str) -> dict[str, Any]:
+    payload = _build_base_reply_trace_payload(state)
+    payload["retrieved_context"] = retrieved_context
+    return payload
+
+
+def _build_appointment_reply_trace_payload(
+    state: GraphState,
+    *,
+    appointment: dict[str, Any],
+    booking_url: str,
+) -> dict[str, Any]:
+    payload = _build_base_reply_trace_payload(state)
+    payload["contact_name"] = state.get("contact_name", "")
+    payload["appointment_state"] = {
+        "patient_name": appointment.get("patient_name"),
+        "reason": appointment.get("reason"),
+        "preferred_date": appointment.get("preferred_date"),
+        "preferred_time": appointment.get("preferred_time"),
+        "missing_fields": list(appointment.get("missing_fields") or []),
+        "should_handoff": bool(appointment.get("should_handoff", False)),
+        "confidence": appointment.get("confidence", 0.0),
+    }
+    payload["booking_url"] = booking_url
+    return payload
+
+
 def _append_recent_turn(
     recent_turns: list[dict[str, str]],
     *,
@@ -561,16 +624,69 @@ def _capture_trace_fragment(kind: str, payload: dict[str, Any], *, label: str = 
     trace_context.capture_fragment(kind, payload, label=label)
 
 
-def _reply_context_payload(context: ReplyContext) -> dict[str, Any]:
-    return {
-        "turn_count": context.turn_count,
-        "summary": context.summary,
-        "active_goal": context.active_goal,
-        "stage": context.stage,
-        "pending_action": context.pending_action,
-        "pending_question": context.pending_question,
-        "last_assistant_message": context.last_assistant_message,
-        "last_tool_result": context.last_tool_result,
-        "appointment_slots": deepcopy(context.appointment_slots),
-        "recent_turns": deepcopy(context.recent_turns),
-    }
+async def _generate_conversation_reply(llm_service: Any, **kwargs: Any) -> dict[str, str]:
+    dspy_runtime = kwargs.pop("dspy_runtime", None)
+    payload = kwargs.pop("payload", None)
+    context = kwargs.get("context")
+    if dspy_runtime is not None and payload is not None and hasattr(dspy_runtime, "generate_conversation_reply"):
+        reply = await dspy_runtime.generate_conversation_reply(payload, llm_service, context=context)
+        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+    if payload is not None:
+        kwargs["user_message"] = payload["user_message"]
+        kwargs["memories"] = payload["memories"]
+    if hasattr(llm_service, "generate_conversation_reply"):
+        reply = await llm_service.generate_conversation_reply(**kwargs)
+        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+    response_text = await llm_service.build_conversation_reply(**kwargs)
+    return {"response_text": response_text, "reply_mode": "llm"}
+
+
+async def _generate_rag_reply(llm_service: Any, **kwargs: Any) -> dict[str, str]:
+    dspy_runtime = kwargs.pop("dspy_runtime", None)
+    payload = kwargs.pop("payload", None)
+    context = kwargs.get("context")
+    if dspy_runtime is not None and payload is not None and hasattr(dspy_runtime, "generate_rag_reply"):
+        reply = await dspy_runtime.generate_rag_reply(payload, llm_service, context=context)
+        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+    if payload is not None:
+        kwargs["user_message"] = payload["user_message"]
+        kwargs["memories"] = payload["memories"]
+        kwargs["clinic_context"] = payload["retrieved_context"]
+    if hasattr(llm_service, "generate_rag_reply"):
+        reply = await llm_service.generate_rag_reply(**kwargs)
+        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+    response_text = await llm_service.build_rag_reply(**kwargs)
+    return {"response_text": response_text, "reply_mode": "llm"}
+
+
+async def _extract_appointment_payload(llm_service: Any, **kwargs: Any) -> Any:
+    if hasattr(llm_service, "extract_appointment_payload"):
+        return await llm_service.extract_appointment_payload(**kwargs)
+    appointment, _ = await llm_service.extract_appointment_intent(**kwargs)
+    return appointment
+
+
+async def _generate_appointment_reply(llm_service: Any, **kwargs: Any) -> dict[str, str]:
+    dspy_runtime = kwargs.pop("dspy_runtime", None)
+    payload = kwargs.pop("payload", None)
+    appointment = kwargs.get("appointment")
+    context = kwargs.get("context")
+    if dspy_runtime is not None and payload is not None and appointment is not None and hasattr(
+        dspy_runtime, "generate_appointment_reply"
+    ):
+        reply = await dspy_runtime.generate_appointment_reply(
+            payload,
+            llm_service,
+            appointment=appointment,
+            context=context,
+        )
+        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+    if payload is not None:
+        kwargs["user_message"] = payload["user_message"]
+        kwargs["memories"] = payload["memories"]
+        kwargs["contact_name"] = payload["contact_name"]
+    if hasattr(llm_service, "generate_appointment_reply"):
+        reply = await llm_service.generate_appointment_reply(**kwargs)
+        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+    response_text = await llm_service.build_appointment_reply(**kwargs)
+    return {"response_text": response_text, "reply_mode": "llm"}

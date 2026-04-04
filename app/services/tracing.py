@@ -172,33 +172,26 @@ class AppointmentExtractionProjector:
 
 class ConversationReplyProjector:
     name = "conversation_reply"
-    version = "v1"
+    version = "v2"
 
     def project(self, trace_record) -> list[ProjectedExample]:
         if trace_record.outcome != "success":
             return []
-        fragment = next(
-            (
-                item
-                for item in trace_record.fragments
-                if item.kind == "llm_reply" and (item.label == "conversation" or item.payload.get("node") == "conversation")
-            ),
-            None,
-        )
-        if fragment is None:
+        input_fragment = next((item for item in trace_record.fragments if item.kind == "conversation_reply_input"), None)
+        output_fragment = next((item for item in trace_record.fragments if item.kind == "conversation_reply_output"), None)
+        if input_fragment is None or output_fragment is None:
             return []
         return [
             ProjectedExample(
                 trace_id=trace_record.envelope.trace_id,
                 task_name="conversation_reply",
                 projector_version=self.version,
-                input_payload={
-                    "user_message": trace_record.input_payload.get("message", ""),
-                    "memories": fragment.payload.get("memories", []),
-                    "reply_context": fragment.payload.get("reply_context", {}),
+                input_payload=dict(input_fragment.payload),
+                target_payload={"response_text": output_fragment.payload.get("response_text", "")},
+                metadata_payload={
+                    "reply_mode": output_fragment.payload.get("reply_mode", "llm"),
+                    "node": "conversation",
                 },
-                target_payload={"response_text": fragment.payload.get("response_text", "")},
-                metadata_payload={"node": "conversation"},
                 eligibility_reason="conversation-reply-present",
             )
         ]
@@ -206,39 +199,51 @@ class ConversationReplyProjector:
 
 class RagReplyProjector:
     name = "rag_reply"
-    version = "v1"
+    version = "v2"
 
     def project(self, trace_record) -> list[ProjectedExample]:
         if trace_record.outcome != "success":
             return []
-        fragment = next(
-            (
-                item
-                for item in trace_record.fragments
-                if item.kind == "llm_reply" and (item.label == "rag" or item.payload.get("node") == "rag")
-            ),
-            None,
-        )
-        if fragment is None:
+        input_fragment = next((item for item in trace_record.fragments if item.kind == "rag_reply_input"), None)
+        output_fragment = next((item for item in trace_record.fragments if item.kind == "rag_reply_output"), None)
+        if input_fragment is None or output_fragment is None:
             return []
-        retrieval_fragment = next((item for item in trace_record.fragments if item.kind == "retrieval_context"), None)
         return [
             ProjectedExample(
                 trace_id=trace_record.envelope.trace_id,
                 task_name="rag_reply",
                 projector_version=self.version,
-                input_payload={
-                    "user_message": trace_record.input_payload.get("message", ""),
-                    "memories": fragment.payload.get("memories", []),
-                    "clinic_context": fragment.payload.get("rag_context_preview")
-                    or (retrieval_fragment.payload.get("context_preview", "") if retrieval_fragment else ""),
-                    "reply_context": fragment.payload.get("reply_context", {}),
-                },
-                target_payload={"response_text": fragment.payload.get("response_text", "")},
-                metadata_payload={
-                    "retrieval_preview": retrieval_fragment.payload.get("context_preview", "") if retrieval_fragment else "",
-                },
+                input_payload=dict(input_fragment.payload),
+                target_payload={"response_text": output_fragment.payload.get("response_text", "")},
+                metadata_payload={"reply_mode": output_fragment.payload.get("reply_mode", "llm"), "node": "rag"},
                 eligibility_reason="rag-reply-present",
+            )
+        ]
+
+
+class AppointmentReplyProjector:
+    name = "appointment_reply"
+    version = "v1"
+
+    def project(self, trace_record) -> list[ProjectedExample]:
+        if trace_record.outcome != "success":
+            return []
+        input_fragment = next((item for item in trace_record.fragments if item.kind == "appointment_reply_input"), None)
+        output_fragment = next((item for item in trace_record.fragments if item.kind == "appointment_reply_output"), None)
+        if input_fragment is None or output_fragment is None:
+            return []
+        return [
+            ProjectedExample(
+                trace_id=trace_record.envelope.trace_id,
+                task_name="appointment_reply",
+                projector_version=self.version,
+                input_payload=dict(input_fragment.payload),
+                target_payload={"response_text": output_fragment.payload.get("response_text", "")},
+                metadata_payload={
+                    "reply_mode": output_fragment.payload.get("reply_mode", "llm"),
+                    "node": "appointment",
+                },
+                eligibility_reason="appointment-reply-present",
             )
         ]
 
@@ -301,11 +306,9 @@ async def build_trace_runtime(settings) -> AsyncIterator[TraceRuntime]:
     normalizer = ClinicTraceNormalizer()
     projectors: list[TraceProjector] = (
         [
-            RoutingDecisionProjector(),
-            AppointmentExtractionProjector(),
             ConversationReplyProjector(),
             RagReplyProjector(),
-            StateSummaryProjector(),
+            AppointmentReplyProjector(),
         ]
         if settings.trace_projectors_enabled
         else []
@@ -314,7 +317,7 @@ async def build_trace_runtime(settings) -> AsyncIterator[TraceRuntime]:
     if settings.trace_backend == "postgres":
         if not settings.trace_postgres_dsn:
             raise RuntimeError("`trace_postgres_dsn` is required when `trace_backend=postgres`.")
-        repository = PostgresTraceRepository(settings.trace_postgres_dsn)
+        repository = PostgresTraceRepository(settings.trace_postgres_dsn, schema=settings.trace_postgres_schema)
         if settings.trace_postgres_setup_on_start:
             await repository.setup()
         sink = await AsyncBatchTraceSink(

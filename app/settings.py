@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     dspy_lm_base_url: str | None = None
     dspy_lm_api_key: str | None = None
     dspy_dataset_backend: Literal["postgres"] = "postgres"
+    dspy_artifacts_dir: Path = Field(default=Path("artifacts/dspy"))
+    dspy_conversation_reply_artifact: Path | None = None
+    dspy_rag_reply_artifact: Path | None = None
+    dspy_appointment_reply_artifact: Path | None = None
 
     openai_api_key: str | None = None
     openai_base_url: str | None = None
@@ -49,6 +53,7 @@ class Settings(BaseSettings):
 
     trace_backend: Literal["noop", "in_memory", "postgres"] = "in_memory"
     trace_postgres_dsn: str | None = None
+    trace_postgres_schema: str = "tracing"
     trace_postgres_setup_on_start: bool = True
     trace_batch_size: int = 25
     trace_flush_interval_seconds: float = 1.0
@@ -106,6 +111,17 @@ class Settings(BaseSettings):
     @property
     def resolved_dspy_api_key(self) -> str | None:
         return self.dspy_lm_api_key or self.resolved_llm_api_key
+
+    def resolve_dspy_artifact_path(self, task_name: str) -> Path:
+        overrides = {
+            "conversation_reply": self.dspy_conversation_reply_artifact,
+            "rag_reply": self.dspy_rag_reply_artifact,
+            "appointment_reply": self.dspy_appointment_reply_artifact,
+        }
+        configured = overrides.get(task_name)
+        if configured is not None:
+            return configured
+        return self.dspy_artifacts_dir / f"{task_name}.json"
 
 
 @lru_cache

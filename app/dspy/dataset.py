@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 import json
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -22,8 +23,9 @@ class DSPyDatasetExample(BaseModel):
 
 
 class PostgresDSPyDatasetStore:
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, schema: str = "tracing") -> None:
         self._dsn = dsn
+        self._schema = _validate_schema_name(schema)
 
     async def fetch_examples(
         self,
@@ -33,7 +35,10 @@ class PostgresDSPyDatasetStore:
     ) -> list[DSPyDatasetExample]:
         from psycopg import AsyncConnection
 
-        query = """
+        trace_examples = self._qualified_table("trace_examples")
+        trace_turns = self._qualified_table("trace_turns")
+        trace_fragments = self._qualified_table("trace_fragments")
+        query = f"""
             SELECT
                 e.trace_id,
                 e.task_name,
@@ -53,9 +58,9 @@ class PostgresDSPyDatasetStore:
                     ) FILTER (WHERE f.trace_id IS NOT NULL),
                     '[]'::jsonb
                 ) AS fragments
-            FROM trace_examples e
-            INNER JOIN trace_turns t ON t.trace_id = e.trace_id
-            LEFT JOIN trace_fragments f ON f.trace_id = e.trace_id
+            FROM {trace_examples} e
+            INNER JOIN {trace_turns} t ON t.trace_id = e.trace_id
+            LEFT JOIN {trace_fragments} f ON f.trace_id = e.trace_id
             WHERE t.outcome = 'success'
         """
         params: list[Any] = []
@@ -120,3 +125,13 @@ class PostgresDSPyDatasetStore:
             metadata_payload=dict(metadata_payload or {}),
             fragment_payloads=dict(fragment_payloads),
         )
+
+    def _qualified_table(self, table_name: str) -> str:
+        return f'"{self._schema}"."{table_name}"'
+
+
+def _validate_schema_name(schema: str) -> str:
+    value = schema.strip()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise ValueError(f"Invalid PostgreSQL schema name: {schema!r}")
+    return value

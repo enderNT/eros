@@ -36,6 +36,12 @@ class ReplyContext:
     recent_turns: list[dict[str, str]] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class GeneratedReply:
+    response_text: str
+    reply_mode: Literal["llm", "fallback"]
+
+
 class LLMProvider(Protocol):
     @property
     def provider_name(self) -> str: ...
@@ -161,12 +167,12 @@ class ClinicLLMService:
     def __init__(self, provider: LLMProvider) -> None:
         self._provider = provider
 
-    async def build_conversation_reply(
+    async def generate_conversation_reply(
         self,
         user_message: str,
         memories: list[str],
         context: ReplyContext | None = None,
-    ) -> str:
+    ) -> GeneratedReply:
         context = context or ReplyContext()
         system_prompt = (
             "Eres Eros Bot, el asistente virtual de Clinica Eros Neuronal, una clinica de salud mental. "
@@ -187,24 +193,38 @@ class ClinicLLMService:
         )
         try:
             substep("conversation_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
-            return await self._provider.chat_text(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ]
+            return GeneratedReply(
+                response_text=await self._provider.chat_text(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ]
+                ),
+                reply_mode="llm",
             )
         except Exception as exc:
             logger.warning("LLM conversation failed, using deterministic fallback: %s", exc)
             substep("conversation_fallback", "WARN", "mensaje deterministico")
-            return self._build_conversation_fallback(context)
+            return GeneratedReply(
+                response_text=self._build_conversation_fallback(context),
+                reply_mode="fallback",
+            )
 
-    async def build_rag_reply(
+    async def build_conversation_reply(
+        self,
+        user_message: str,
+        memories: list[str],
+        context: ReplyContext | None = None,
+    ) -> str:
+        return (await self.generate_conversation_reply(user_message=user_message, memories=memories, context=context)).response_text
+
+    async def generate_rag_reply(
         self,
         user_message: str,
         memories: list[str],
         clinic_context: str,
         context: ReplyContext | None = None,
-    ) -> str:
+    ) -> GeneratedReply:
         context = context or ReplyContext()
         system_prompt = (
             "Eres Eros Bot, asistente de Clinica Eros Neuronal, una clinica de salud mental. "
@@ -224,19 +244,41 @@ class ClinicLLMService:
         )
         try:
             substep("rag_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
-            return await self._provider.chat_text(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ]
+            return GeneratedReply(
+                response_text=await self._provider.chat_text(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ]
+                ),
+                reply_mode="llm",
             )
         except Exception as exc:
             logger.warning("LLM rag failed, using deterministic fallback: %s", exc)
             substep("rag_fallback", "WARN", "RAG degradado a respuesta segura")
-            return (
-                "Soy Eros Bot y solo puedo responder con la informacion recuperada de Clinica Eros Neuronal. "
-                "Si necesitas un dato que no aparece en el contexto actual, lo canalizo con recepcion."
+            return GeneratedReply(
+                response_text=(
+                    "Soy Eros Bot y solo puedo responder con la informacion recuperada de Clinica Eros Neuronal. "
+                    "Si necesitas un dato que no aparece en el contexto actual, lo canalizo con recepcion."
+                ),
+                reply_mode="fallback",
             )
+
+    async def build_rag_reply(
+        self,
+        user_message: str,
+        memories: list[str],
+        clinic_context: str,
+        context: ReplyContext | None = None,
+    ) -> str:
+        return (
+            await self.generate_rag_reply(
+                user_message=user_message,
+                memories=memories,
+                clinic_context=clinic_context,
+                context=context,
+            )
+        ).response_text
 
     async def build_state_summary(
         self,
@@ -330,6 +372,34 @@ class ClinicLLMService:
         pending_question: str | None = None,
         context: ReplyContext | None = None,
     ) -> tuple[AppointmentIntentPayload, str]:
+        appointment = await self.extract_appointment_payload(
+            user_message=user_message,
+            memories=memories,
+            clinic_context=clinic_context,
+            contact_name=contact_name,
+            current_slots=current_slots,
+            pending_question=pending_question,
+            context=context,
+        )
+        reply = await self.generate_appointment_reply(
+            appointment=appointment,
+            user_message=user_message,
+            memories=memories,
+            contact_name=contact_name,
+            context=context,
+        )
+        return appointment, reply.response_text
+
+    async def extract_appointment_payload(
+        self,
+        user_message: str,
+        memories: list[str],
+        clinic_context: str,
+        contact_name: str,
+        current_slots: dict[str, Any] | None = None,
+        pending_question: str | None = None,
+        context: ReplyContext | None = None,
+    ) -> AppointmentIntentPayload:
         context = context or ReplyContext()
         system_prompt = (
             "Eres el analizador de citas de Clinica Eros Neuronal, clinica de salud mental. "
@@ -359,22 +429,15 @@ class ClinicLLMService:
             )
             appointment = AppointmentIntentPayload.model_validate(payload)
             substep("appointment_json_parse", "OK")
+            return appointment
         except Exception as exc:
             logger.warning("LLM appointment extraction failed, using heuristic fallback: %s", exc)
             substep("appointment_fallback", "WARN", "extraccion heuristica")
-            appointment = self._fallback_appointment(
+            return self._fallback_appointment(
                 user_message,
                 contact_name,
                 current_slots=current_slots or {},
             )
-        reply = await self._build_appointment_reply(
-            appointment=appointment,
-            user_message=user_message,
-            memories=memories,
-            contact_name=contact_name,
-            context=context,
-        )
-        return appointment, reply
 
     def _fallback_appointment(
         self, user_message: str, contact_name: str, current_slots: dict[str, Any] | None = None
@@ -425,14 +488,14 @@ class ClinicLLMService:
             confidence=0.65,
         )
 
-    async def _build_appointment_reply(
+    async def generate_appointment_reply(
         self,
         appointment: AppointmentIntentPayload,
         user_message: str,
         memories: list[str],
         contact_name: str,
         context: ReplyContext | None = None,
-    ) -> str:
+    ) -> GeneratedReply:
         context = context or ReplyContext()
         system_prompt = (
             "Eres Eros Bot, asistente de Clinica Eros Neuronal, clinica de salud mental. "
@@ -462,11 +525,32 @@ class ClinicLLMService:
             )
             if CALENDLY_APPOINTMENT_URL not in reply:
                 reply = f"{reply.rstrip()} Agenda aqui: {CALENDLY_APPOINTMENT_URL}".strip()
-            return reply
+            return GeneratedReply(response_text=reply, reply_mode="llm")
         except Exception as exc:
             logger.warning("LLM appointment reply failed, using deterministic fallback: %s", exc)
             substep("appointment_reply_fallback", "WARN", "respuesta de cita deterministica")
-            return self._build_appointment_reply_fallback(appointment)
+            return GeneratedReply(
+                response_text=self._build_appointment_reply_fallback(appointment),
+                reply_mode="fallback",
+            )
+
+    async def build_appointment_reply(
+        self,
+        appointment: AppointmentIntentPayload,
+        user_message: str,
+        memories: list[str],
+        contact_name: str,
+        context: ReplyContext | None = None,
+    ) -> str:
+        return (
+            await self.generate_appointment_reply(
+                appointment=appointment,
+                user_message=user_message,
+                memories=memories,
+                contact_name=contact_name,
+                context=context,
+            )
+        ).response_text
 
     def _build_conversation_fallback(self, context: ReplyContext) -> str:
         if _is_first_turn(context):

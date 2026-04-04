@@ -58,8 +58,13 @@ if dspy is not None:
         """Draft a conversational assistant reply."""
 
         user_message = dspy.InputField()
+        summary = dspy.InputField()
+        active_goal = dspy.InputField()
+        stage = dspy.InputField()
+        pending_question = dspy.InputField()
+        last_assistant_message = dspy.InputField()
+        recent_turns = dspy.InputField()
         memories = dspy.InputField()
-        reply_context = dspy.InputField()
 
         response_text = dspy.OutputField()
 
@@ -68,9 +73,32 @@ if dspy is not None:
         """Draft a grounded RAG reply."""
 
         user_message = dspy.InputField()
+        summary = dspy.InputField()
+        active_goal = dspy.InputField()
+        stage = dspy.InputField()
+        pending_question = dspy.InputField()
+        last_assistant_message = dspy.InputField()
+        recent_turns = dspy.InputField()
         memories = dspy.InputField()
-        clinic_context = dspy.InputField()
-        reply_context = dspy.InputField()
+        retrieved_context = dspy.InputField()
+
+        response_text = dspy.OutputField()
+
+
+    class AppointmentReplySignature(dspy.Signature):
+        """Draft an appointment booking reply."""
+
+        user_message = dspy.InputField()
+        contact_name = dspy.InputField()
+        summary = dspy.InputField()
+        active_goal = dspy.InputField()
+        stage = dspy.InputField()
+        pending_question = dspy.InputField()
+        last_assistant_message = dspy.InputField()
+        recent_turns = dspy.InputField()
+        memories = dspy.InputField()
+        appointment_state = dspy.InputField()
+        booking_url = dspy.InputField()
 
         response_text = dspy.OutputField()
 
@@ -104,6 +132,10 @@ else:
         pass
 
 
+    class AppointmentReplySignature:  # pragma: no cover - placeholder for missing dependency
+        pass
+
+
     class StateSummarySignature:  # pragma: no cover - placeholder for missing dependency
         pass
 
@@ -113,5 +145,6 @@ SIGNATURES: dict[str, Any] = {
     "appointment_extraction": AppointmentExtractionSignature,
     "conversation_reply": ConversationReplySignature,
     "rag_reply": RagReplySignature,
+    "appointment_reply": AppointmentReplySignature,
     "state_summary": StateSummarySignature,
 }

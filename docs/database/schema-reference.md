@@ -178,7 +178,9 @@ Registra las migraciones aplicadas al subsistema de checkpoints.
 
 ## Trazas de la aplicación
 
-### `trace_turns`
+Las tablas de tracing viven en el schema dedicado `tracing` por defecto. Ese schema se configura con `trace_postgres_schema` y lo usan tanto `PostgresTraceRepository` como `PostgresDSPyDatasetStore`.
+
+### `tracing.trace_turns`
 
 Registro principal de un turno trazado.
 
@@ -189,91 +191,142 @@ Registro principal de un turno trazado.
 | Responsable principal | `app.tracing.repository.PostgresTraceRepository` |
 | Índices importantes | `trace_turns_pkey`, `trace_turns_dedupe_key_key`, `idx_trace_turns_session_key`, `idx_trace_turns_actor_key`, `idx_trace_turns_flow_key`, `idx_trace_turns_started_at`, `idx_trace_turns_outcome` |
 
-| Columna | Tipo | Nullable | Default |
-| --- | --- | --- | --- |
-| `trace_id` | `text` | No |  |
-| `parent_trace_id` | `text` | Yes |  |
-| `session_key` | `text` | No |  |
-| `actor_key` | `text` | No |  |
-| `app_key` | `text` | No |  |
-| `flow_key` | `text` | No |  |
-| `dedupe_key` | `text` | Yes |  |
-| `started_at` | `timestamp with time zone` | No |  |
-| `completed_at` | `timestamp with time zone` | Yes |  |
-| `component_version` | `text` | Yes |  |
-| `model_backend` | `text` | Yes |  |
-| `model_name` | `text` | Yes |  |
-| `outcome` | `text` | No |  |
-| `has_error` | `boolean` | No | `false` |
-| `projector_eligibility_summary` | `jsonb` | No | `'{}'::jsonb` |
-| `input_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `output_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `error_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `metrics_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `tags` | `jsonb` | No | `'{}'::jsonb` |
-| `extra_payload` | `jsonb` | No | `'{}'::jsonb` |
+### `tracing.trace_fragments`
 
-Notas:
+Guarda fragmentos ordenados capturados durante un turno. Para datasets, los fragmentos relevantes son `conversation_reply_input`, `conversation_reply_output`, `rag_reply_input`, `rag_reply_output`, `appointment_reply_input` y `appointment_reply_output`.
 
-- `session_key` es la clave de agrupación a nivel conversación.
-- `actor_key` identifica al contacto o actor.
-- `dedupe_key` evita inserts duplicados del mismo evento lógico.
-
-### `trace_fragments`
-
-Guarda fragmentos ordenados capturados durante un turno.
-
-| Propiedad | Valor |
-| --- | --- |
-| Clave primaria | (`trace_id`, `order`) |
-| Foreign key | `trace_id` -> `trace_turns(trace_id)` |
-| Responsable principal | `app.tracing.repository.PostgresTraceRepository` |
-| Índices importantes | `trace_fragments_pkey` |
-
-| Columna | Tipo | Nullable | Default |
-| --- | --- | --- | --- |
-| `trace_id` | `text` | No |  |
-| `order` | `integer` | No |  |
-| `kind` | `text` | No |  |
-| `label` | `text` | No | `''::text` |
-| `created_at` | `timestamp with time zone` | No |  |
-| `latency_ms` | `integer` | Yes |  |
-| `token_usage` | `jsonb` | No | `'{}'::jsonb` |
-| `payload` | `jsonb` | No | `'{}'::jsonb` |
-
-Notas:
-
-- `order` preserva la secuencia de fragmentos dentro de un turno.
-- `kind` identifica el tipo lógico del fragmento, por ejemplo routing o retrieval.
-
-### `trace_examples`
+### `tracing.trace_examples`
 
 Guarda ejemplos proyectados derivados de turnos trazados.
 
 | Propiedad | Valor |
 | --- | --- |
 | Clave primaria | (`trace_id`, `task_name`, `projector_version`) |
-| Foreign key | `trace_id` -> `trace_turns(trace_id)` |
+| Foreign key | `trace_id` -> `tracing.trace_turns(trace_id)` |
 | Responsable principal | `app.tracing.repository.PostgresTraceRepository` |
-| Índices importantes | `trace_examples_pkey` |
-
-| Columna | Tipo | Nullable | Default |
-| --- | --- | --- | --- |
-| `trace_id` | `text` | No |  |
-| `task_name` | `text` | No |  |
-| `projector_version` | `text` | No |  |
-| `created_at` | `timestamp with time zone` | No |  |
-| `split` | `text` | No | `'train'::text` |
-| `quality_label` | `text` | Yes |  |
-| `input_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `target_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `metadata_payload` | `jsonb` | No | `'{}'::jsonb` |
-| `eligibility_reason` | `text` | No | `''::text` |
+| Índices importantes | `trace_examples_pkey`, `idx_trace_examples_task_version_created_at` |
 
 Notas:
 
-- `task_name` agrupa ejemplos proyectados por tarea.
-- `projector_version` permite que la misma traza produzca múltiples proyecciones versionadas de forma independiente.
+- En esta fase solo se almacenan datasets para `conversation_reply`, `rag_reply` y `appointment_reply`.
+- `input_payload` guarda el JSON estructurado exacto disponible en producción.
+- `target_payload` guarda solo `response_text`.
+- `metadata_payload` guarda metadatos operativos como `node` y `reply_mode`.
+
+## Payloads esperados
+
+### `conversation_reply`
+
+```json
+{
+  "input_payload": {
+    "user_message": "Quiero saber si ofrecen terapia",
+    "summary": "Usuario pide informacion general.",
+    "active_goal": "conversation",
+    "stage": "open",
+    "pending_question": "",
+    "last_assistant_message": "Hola, soy Eros Bot.",
+    "recent_turns": [
+      {
+        "user": "Hola",
+        "assistant": "Hola, soy Eros Bot."
+      }
+    ],
+    "memories": [
+      "Prefiere respuestas breves"
+    ]
+  },
+  "target_payload": {
+    "response_text": "Claro, puedo orientarte sobre los servicios de la clinica."
+  },
+  "metadata_payload": {
+    "node": "conversation",
+    "reply_mode": "llm"
+  }
+}
+```
+
+### `rag_reply`
+
+```json
+{
+  "input_payload": {
+    "user_message": "Cuales son sus horarios?",
+    "summary": "Usuario pregunta por informacion operativa.",
+    "active_goal": "information",
+    "stage": "lookup",
+    "pending_question": "",
+    "last_assistant_message": "Con gusto reviso eso.",
+    "recent_turns": [],
+    "memories": [
+      "Ya pregunto por costos antes"
+    ],
+    "retrieved_context": "Horarios: lunes a viernes de 9 a 18 hrs."
+  },
+  "target_payload": {
+    "response_text": "Nuestros horarios son de lunes a viernes de 9 a 18 hrs."
+  },
+  "metadata_payload": {
+    "node": "rag",
+    "reply_mode": "llm"
+  }
+}
+```
+
+### `appointment_reply`
+
+```json
+{
+  "input_payload": {
+    "user_message": "Quiero una cita manana a las 10",
+    "contact_name": "Juan Perez",
+    "summary": "Usuario desea agendar una cita.",
+    "active_goal": "appointment",
+    "stage": "collecting_slots",
+    "pending_question": "Necesito el motivo o especialidad para continuar.",
+    "last_assistant_message": "Claro, te ayudo con tu cita.",
+    "recent_turns": [],
+    "memories": [
+      "Prefiere horario matutino"
+    ],
+    "appointment_state": {
+      "patient_name": "Juan Perez",
+      "reason": null,
+      "preferred_date": "manana",
+      "preferred_time": "10 am",
+      "missing_fields": [
+        "reason"
+      ],
+      "should_handoff": true,
+      "confidence": 0.9
+    },
+    "booking_url": "https://calendly.com/gayagocr/new-meeting"
+  },
+  "target_payload": {
+    "response_text": "Puedo ayudarte con eso. Comparteme el motivo de la cita y tambien puedes agendar aqui: https://calendly.com/gayagocr/new-meeting"
+  },
+  "metadata_payload": {
+    "node": "appointment",
+    "reply_mode": "fallback"
+  }
+}
+```
+
+Reglas:
+
+- `rag_reply.input_payload.retrieved_context` guarda el contexto completo usado por producción, no previews truncados.
+- No se usa `reply_context`, `clinic_context_preview` ni `rag_context_preview` como payload final de dataset.
+- `appointment_reply` se proyecta desde la redacción final de la respuesta, no desde la extracción de slots.
+
+## Script de preparación
+
+El script [`scripts/prepare_trace_postgres.py`](/Users/gabrielgonzalez/Desktop/proyectos/eros/scripts/prepare_trace_postgres.py) prepara únicamente la infraestructura de tracing:
+
+- pide `host`, `port`, `database`, `user`, `password`, `schema` y `sslmode` por terminal;
+- construye el DSN en memoria;
+- no persiste credenciales a disco;
+- crea el schema dedicado y las tablas/índices de tracing de forma idempotente;
+- imprime un resumen JSON final con el password oculto.
 
 ## Resumen de constraints
 
@@ -282,14 +335,14 @@ Notas:
 | Constraint | Tabla | Referencia |
 | --- | --- | --- |
 | `store_vectors_prefix_key_fkey` | `store_vectors` | `store(prefix, key)` |
-| `trace_fragments_trace_id_fkey` | `trace_fragments` | `trace_turns(trace_id)` |
-| `trace_examples_trace_id_fkey` | `trace_examples` | `trace_turns(trace_id)` |
+| `trace_fragments_trace_id_fkey` | `tracing.trace_fragments` | `tracing.trace_turns(trace_id)` |
+| `trace_examples_trace_id_fkey` | `tracing.trace_examples` | `tracing.trace_turns(trace_id)` |
 
 ### Constraints únicas
 
 | Constraint | Tabla | Columnas |
 | --- | --- | --- |
-| `trace_turns_dedupe_key_key` | `trace_turns` | `dedupe_key` |
+| `trace_turns_dedupe_key_key` | `tracing.trace_turns` | `dedupe_key` |
 
 ## Resumen de índices
 
@@ -301,8 +354,9 @@ Notas:
 | `checkpoints` | `checkpoints_thread_id_idx` | `btree (thread_id)` |
 | `checkpoint_blobs` | `checkpoint_blobs_thread_id_idx` | `btree (thread_id)` |
 | `checkpoint_writes` | `checkpoint_writes_thread_id_idx` | `btree (thread_id)` |
-| `trace_turns` | `idx_trace_turns_session_key` | `btree (session_key)` |
-| `trace_turns` | `idx_trace_turns_actor_key` | `btree (actor_key)` |
-| `trace_turns` | `idx_trace_turns_flow_key` | `btree (flow_key)` |
-| `trace_turns` | `idx_trace_turns_started_at` | `btree (started_at)` |
-| `trace_turns` | `idx_trace_turns_outcome` | `btree (outcome)` |
+| `tracing.trace_turns` | `idx_trace_turns_session_key` | `btree (session_key)` |
+| `tracing.trace_turns` | `idx_trace_turns_actor_key` | `btree (actor_key)` |
+| `tracing.trace_turns` | `idx_trace_turns_flow_key` | `btree (flow_key)` |
+| `tracing.trace_turns` | `idx_trace_turns_started_at` | `btree (started_at)` |
+| `tracing.trace_turns` | `idx_trace_turns_outcome` | `btree (outcome)` |
+| `tracing.trace_examples` | `idx_trace_examples_task_version_created_at` | `btree (task_name, projector_version, created_at DESC)` |

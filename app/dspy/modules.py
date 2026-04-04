@@ -4,6 +4,7 @@ from typing import Any
 
 from app.dspy.signatures import (
     AppointmentExtractionSignature,
+    AppointmentReplySignature,
     ConversationReplySignature,
     RagReplySignature,
     StateRouterSignature,
@@ -49,6 +50,14 @@ class ConversationReplyModule:
 class RagReplyModule:
     def __init__(self, predictor: Any | None = None) -> None:
         self._predictor = predictor or _build_predictor(RagReplySignature)
+
+    def forward(self, **kwargs: Any) -> Any:
+        return self._predictor(**kwargs)
+
+
+class AppointmentReplyModule:
+    def __init__(self, predictor: Any | None = None) -> None:
+        self._predictor = predictor or _build_predictor(AppointmentReplySignature)
 
     def forward(self, **kwargs: Any) -> Any:
         return self._predictor(**kwargs)

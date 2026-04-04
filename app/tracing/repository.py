@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
+import re
 from typing import Any, Protocol
 
 from app.tracing.types import ProjectedExample, TraceRecord
@@ -48,15 +49,20 @@ class InMemoryTraceRepository:
 
 
 class PostgresTraceRepository:
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, schema: str = "tracing") -> None:
         self._dsn = dsn
+        self._schema = _validate_schema_name(schema)
 
     async def setup(self) -> None:
+        trace_turns = self._qualified_table("trace_turns")
+        trace_fragments = self._qualified_table("trace_fragments")
+        trace_examples = self._qualified_table("trace_examples")
         async with self._connection() as conn:
             async with conn.cursor() as cur:
+                await cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{self._schema}";')
                 await cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS trace_turns (
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {trace_turns} (
                         trace_id TEXT PRIMARY KEY,
                         parent_trace_id TEXT NULL,
                         session_key TEXT NOT NULL,
@@ -71,51 +77,57 @@ class PostgresTraceRepository:
                         model_name TEXT NULL,
                         outcome TEXT NOT NULL,
                         has_error BOOLEAN NOT NULL DEFAULT FALSE,
-                        projector_eligibility_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        output_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        error_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        metrics_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        tags JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        extra_payload JSONB NOT NULL DEFAULT '{}'::jsonb
+                        projector_eligibility_summary JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        input_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        output_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        error_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        metrics_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        tags JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        extra_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb
                     );
                     """
                 )
-                await cur.execute("CREATE INDEX IF NOT EXISTS idx_trace_turns_session_key ON trace_turns(session_key);")
-                await cur.execute("CREATE INDEX IF NOT EXISTS idx_trace_turns_actor_key ON trace_turns(actor_key);")
-                await cur.execute("CREATE INDEX IF NOT EXISTS idx_trace_turns_flow_key ON trace_turns(flow_key);")
-                await cur.execute("CREATE INDEX IF NOT EXISTS idx_trace_turns_started_at ON trace_turns(started_at);")
-                await cur.execute("CREATE INDEX IF NOT EXISTS idx_trace_turns_outcome ON trace_turns(outcome);")
+                await cur.execute(f"CREATE INDEX IF NOT EXISTS idx_trace_turns_session_key ON {trace_turns}(session_key);")
+                await cur.execute(f"CREATE INDEX IF NOT EXISTS idx_trace_turns_actor_key ON {trace_turns}(actor_key);")
+                await cur.execute(f"CREATE INDEX IF NOT EXISTS idx_trace_turns_flow_key ON {trace_turns}(flow_key);")
+                await cur.execute(f"CREATE INDEX IF NOT EXISTS idx_trace_turns_started_at ON {trace_turns}(started_at);")
+                await cur.execute(f"CREATE INDEX IF NOT EXISTS idx_trace_turns_outcome ON {trace_turns}(outcome);")
                 await cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS trace_fragments (
-                        trace_id TEXT NOT NULL REFERENCES trace_turns(trace_id) ON DELETE CASCADE,
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {trace_fragments} (
+                        trace_id TEXT NOT NULL REFERENCES {trace_turns}(trace_id) ON DELETE CASCADE,
                         "order" INTEGER NOT NULL,
                         kind TEXT NOT NULL,
                         label TEXT NOT NULL DEFAULT '',
                         created_at TIMESTAMPTZ NOT NULL,
                         latency_ms INTEGER NULL,
-                        token_usage JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        token_usage JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
                         PRIMARY KEY (trace_id, "order")
                     );
                     """
                 )
                 await cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS trace_examples (
-                        trace_id TEXT NOT NULL REFERENCES trace_turns(trace_id) ON DELETE CASCADE,
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {trace_examples} (
+                        trace_id TEXT NOT NULL REFERENCES {trace_turns}(trace_id) ON DELETE CASCADE,
                         task_name TEXT NOT NULL,
                         projector_version TEXT NOT NULL,
                         created_at TIMESTAMPTZ NOT NULL,
                         split TEXT NOT NULL DEFAULT 'train',
                         quality_label TEXT NULL,
-                        input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        target_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                        metadata_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        input_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        target_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                        metadata_payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
                         eligibility_reason TEXT NOT NULL DEFAULT '',
                         PRIMARY KEY (trace_id, task_name, projector_version)
                     );
+                    """
+                )
+                await cur.execute(
+                    f"""
+                    CREATE INDEX IF NOT EXISTS idx_trace_examples_task_version_created_at
+                    ON {trace_examples}(task_name, projector_version, created_at DESC);
                     """
                 )
             await conn.commit()
@@ -124,8 +136,15 @@ class PostgresTraceRepository:
         if not records and not examples:
             return
 
-        from psycopg.types.json import Jsonb
+        try:
+            from psycopg.types.json import Jsonb
+        except ModuleNotFoundError:  # pragma: no cover - exercised in unit tests without psycopg
+            def Jsonb(value: Any) -> Any:  # type: ignore[misc]
+                return value
 
+        trace_turns = self._qualified_table("trace_turns")
+        trace_fragments = self._qualified_table("trace_fragments")
+        trace_examples = self._qualified_table("trace_examples")
         async with self._connection() as conn:
             async with conn.cursor() as cur:
                 accepted_trace_ids: set[str] = set()
@@ -133,7 +152,7 @@ class PostgresTraceRepository:
                     dedupe_key = record.envelope.dedupe_key
                     if dedupe_key:
                         await cur.execute(
-                            "SELECT trace_id FROM trace_turns WHERE dedupe_key = %s",
+                            f"SELECT trace_id FROM {trace_turns} WHERE dedupe_key = %s",
                             (dedupe_key,),
                         )
                         existing_row = await cur.fetchone()
@@ -141,8 +160,8 @@ class PostgresTraceRepository:
                             accepted_trace_ids.add(existing_row[0])
                             continue
                     await cur.execute(
-                        """
-                        INSERT INTO trace_turns (
+                        f"""
+                        INSERT INTO {trace_turns} (
                             trace_id, parent_trace_id, session_key, actor_key, app_key, flow_key, dedupe_key,
                             started_at, completed_at, component_version, model_backend, model_name, outcome,
                             has_error, projector_eligibility_summary, input_payload, output_payload, error_payload,
@@ -202,8 +221,8 @@ class PostgresTraceRepository:
                         accepted_trace_ids.add(inserted_row[0])
                     for fragment in record.fragments:
                         await cur.execute(
-                            """
-                            INSERT INTO trace_fragments (
+                            f"""
+                            INSERT INTO {trace_fragments} (
                                 trace_id, "order", kind, label, created_at, latency_ms, token_usage, payload
                             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (trace_id, "order") DO NOTHING
@@ -221,7 +240,7 @@ class PostgresTraceRepository:
                         )
                 if examples:
                     await cur.execute(
-                        "SELECT trace_id FROM trace_turns WHERE trace_id = ANY(%s)",
+                        f"SELECT trace_id FROM {trace_turns} WHERE trace_id = ANY(%s)",
                         (list({example.trace_id for example in examples}),),
                     )
                     accepted_trace_ids.update(row[0] for row in await cur.fetchall())
@@ -229,8 +248,8 @@ class PostgresTraceRepository:
                     if example.trace_id not in accepted_trace_ids:
                         continue
                     await cur.execute(
-                        """
-                        INSERT INTO trace_examples (
+                        f"""
+                        INSERT INTO {trace_examples} (
                             trace_id, task_name, projector_version, created_at, split, quality_label,
                             input_payload, target_payload, metadata_payload, eligibility_reason
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -267,3 +286,13 @@ class PostgresTraceRepository:
             yield conn
         finally:
             await conn.close()
+
+    def _qualified_table(self, table_name: str) -> str:
+        return f'"{self._schema}"."{table_name}"'
+
+
+def _validate_schema_name(schema: str) -> str:
+    value = schema.strip()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise ValueError(f"Invalid PostgreSQL schema name: {schema!r}")
+    return value

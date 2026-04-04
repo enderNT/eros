@@ -21,7 +21,7 @@ async def _run() -> int:
     if not settings.trace_postgres_dsn:
         raise RuntimeError("`trace_postgres_dsn` is required to export DSPy datasets.")
 
-    store = PostgresDSPyDatasetStore(settings.trace_postgres_dsn)
+    store = PostgresDSPyDatasetStore(settings.trace_postgres_dsn, schema=settings.trace_postgres_schema)
     written = await store.export_jsonl(
         Path(args.output_dir),
         task_names=args.tasks,
