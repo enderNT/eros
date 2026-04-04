@@ -6,7 +6,9 @@ import logging
 from fastapi import FastAPI
 
 from app.graph.workflow import ClinicWorkflow
+from app.observability.console_logging import configure_console_logging
 from app.observability.flow_logger import configure_flow_logger
+from app.observability.router_input_logger import configure_router_input_logger
 from app.services.agent import ClinicAgentService
 from app.services.chatwoot import ChatwootClient
 from app.services.checkpointer import build_graph_checkpointer
@@ -22,12 +24,10 @@ from app.webhooks.routes import build_webhook_router
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
-        format="%(asctime)s | %(levelname)-5s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    configure_flow_logger(getattr(logging, settings.log_level.upper(), logging.INFO))
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    configure_console_logging(log_level)
+    configure_flow_logger(log_level)
+    configure_router_input_logger(settings.router_input_debug)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

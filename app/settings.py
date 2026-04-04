@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     log_level: str = "INFO"
+    router_input_debug: bool = False
 
     llm_provider: str = "openai_compatible"
     llm_api_key: str | None = None

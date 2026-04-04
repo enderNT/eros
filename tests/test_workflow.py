@@ -12,6 +12,7 @@ from app.settings import Settings
 class FakeLLMService:
     def __init__(self):
         self.summary_calls = 0
+        self.conversation_contexts = []
 
     async def classify_state_route(self, routing_packet, guard_hint=None):
         del guard_hint
@@ -43,18 +44,26 @@ class FakeLLMService:
             reason="test",
         )
 
-    async def build_conversation_reply(self, user_message, memories):
+    async def build_conversation_reply(self, user_message, memories, context=None):
         del memories
+        self.conversation_contexts.append(context)
         return f"Soy Eros Bot. Respuesta para: {user_message}"
 
-    async def build_rag_reply(self, user_message, memories, clinic_context):
-        del memories, clinic_context
+    async def build_rag_reply(self, user_message, memories, clinic_context, context=None):
+        del memories, clinic_context, context
         return f"RAG Eros Bot para: {user_message}"
 
     async def extract_appointment_intent(
-        self, user_message, memories, clinic_context, contact_name, current_slots=None, pending_question=None
+        self,
+        user_message,
+        memories,
+        clinic_context,
+        contact_name,
+        current_slots=None,
+        pending_question=None,
+        context=None,
     ):
-        del memories, clinic_context, contact_name, pending_question
+        del memories, clinic_context, contact_name, pending_question, context
         current_slots = current_slots or {}
         payload = AppointmentIntentPayload(
             patient_name=current_slots.get("patient_name", "Juan Perez"),
@@ -172,3 +181,17 @@ def test_workflow_keeps_appointment_state_across_turns():
     assert qdrant.calls == 0
     assert memory.saved
     assert llm.summary_calls >= 1
+
+
+def test_workflow_passes_recent_context_to_conversation_reply():
+    workflow, _, _, llm = build_workflow()
+    conversation_id = 909
+
+    asyncio.run(workflow.run(build_webhook("Hola", conversation_id=conversation_id)))
+    asyncio.run(workflow.run(build_webhook("y que sigue?", conversation_id=conversation_id)))
+
+    second_context = llm.conversation_contexts[-1]
+    assert second_context is not None
+    assert second_context.last_assistant_message == "Soy Eros Bot. Respuesta para: Hola"
+    assert second_context.recent_turns[-1]["user"] == "Hola"
+    assert second_context.recent_turns[-1]["assistant"] == "Soy Eros Bot. Respuesta para: Hola"

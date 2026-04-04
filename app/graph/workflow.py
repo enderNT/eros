@@ -11,7 +11,7 @@ from app.memory_runtime import ConversationMemoryRuntime, ShortTermState, TurnMe
 from app.models.schemas import ChatwootWebhook
 from app.observability.flow_logger import mark_error, step, substep
 from app.services.clinic_config import ClinicConfigLoader
-from app.services.llm import ClinicLLMService
+from app.services.llm import ClinicLLMService, ReplyContext
 from app.services.qdrant import QdrantRetrievalService
 from app.services.router import StateRoutingService
 from app.settings import Settings
@@ -45,6 +45,7 @@ class GraphState(TypedDict, total=False):
     handoff_required: bool
     turn_count: int
     summary_refresh_requested: bool
+    recent_turns: list[dict[str, str]]
 
 
 class ClinicWorkflow:
@@ -204,6 +205,7 @@ class ClinicWorkflow:
             response_text = await self._llm_service.build_conversation_reply(
                 user_message=state["last_user_message"],
                 memories=state.get("recalled_memories", []),
+                context=_build_reply_context(state),
             )
             step("3.a.1 conversation_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
@@ -243,6 +245,7 @@ class ClinicWorkflow:
                 user_message=state["last_user_message"],
                 memories=state.get("recalled_memories", []),
                 clinic_context=rag_context,
+                context=_build_reply_context(state),
             )
             step("3.b.1 rag_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
@@ -273,6 +276,7 @@ class ClinicWorkflow:
                 contact_name=state["contact_name"],
                 current_slots=state.get("appointment_slots", {}),
                 pending_question=state.get("pending_question"),
+                context=_build_reply_context(state),
             )
             appointment_slots = _merge_slots(state.get("appointment_slots", {}), appointment.model_dump())
             missing_fields = list(appointment.missing_fields)
@@ -374,6 +378,11 @@ class ClinicWorkflow:
         if state.get("summary_refresh_requested"):
             updates["summary"] = _shorten(commit_result.summary, 700)
             updates["summary_refresh_requested"] = False
+        updates["recent_turns"] = _append_recent_turn(
+            state.get("recent_turns", []),
+            user_message=user_message,
+            assistant_message=response_text,
+        )
         if commit_result.stored_records:
             step("3.10 store_memory", "OK", f"persistidas {len(commit_result.stored_records)} memorias utiles")
         else:
@@ -483,6 +492,45 @@ def _build_domain_state(state: GraphState) -> dict[str, Any]:
         "response_text": state.get("response_text", ""),
         "refresh_summary": state.get("summary_refresh_requested", False),
     }
+
+
+def _build_reply_context(state: GraphState) -> ReplyContext:
+    return ReplyContext(
+        turn_count=int(state.get("turn_count", 0)),
+        summary=state.get("summary", ""),
+        active_goal=state.get("active_goal", ""),
+        stage=state.get("stage", ""),
+        pending_action=state.get("pending_action", ""),
+        pending_question=state.get("pending_question", ""),
+        last_assistant_message=state.get("last_assistant_message", ""),
+        last_tool_result=state.get("last_tool_result", ""),
+        appointment_slots=deepcopy(state.get("appointment_slots", {})),
+        recent_turns=deepcopy(state.get("recent_turns", [])),
+    )
+
+
+def _append_recent_turn(
+    recent_turns: list[dict[str, str]],
+    *,
+    user_message: str,
+    assistant_message: str,
+    limit: int = 3,
+) -> list[dict[str, str]]:
+    updated = [
+        {
+            "user": _shorten(turn.get("user", ""), 220),
+            "assistant": _shorten(turn.get("assistant", ""), 220),
+        }
+        for turn in recent_turns
+        if turn.get("user") or turn.get("assistant")
+    ]
+    updated.append(
+        {
+            "user": _shorten(user_message, 220),
+            "assistant": _shorten(assistant_message, 220),
+        }
+    )
+    return updated[-limit:]
 
 
 def _capture_trace_fragment(kind: str, payload: dict[str, Any], *, label: str = "") -> None:

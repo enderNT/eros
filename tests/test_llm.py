@@ -7,6 +7,7 @@ from app.services.llm import (
     CALENDLY_APPOINTMENT_URL,
     ClinicLLMService,
     OpenAICompatibleProvider,
+    ReplyContext,
     build_llm_provider,
 )
 from app.settings import Settings
@@ -155,7 +156,16 @@ async def test_clinic_llm_service_uses_provider_contract_for_text():
     provider = FakeProvider(text_response="respuesta desde provider")
     service = ClinicLLMService(provider)
 
-    reply = await service.build_conversation_reply("Hola", ["Prefiere horario matutino"])
+    reply = await service.build_conversation_reply(
+        "Hola",
+        ["Prefiere horario matutino"],
+        context=ReplyContext(
+            turn_count=2,
+            summary="El usuario pidio orientacion inicial",
+            last_assistant_message="Claro, cuentame un poco mas.",
+            recent_turns=[{"user": "Hola", "assistant": "Claro, cuentame un poco mas."}],
+        ),
+    )
 
     assert reply == "respuesta desde provider"
     assert len(provider.text_calls) == 1
@@ -165,6 +175,31 @@ async def test_clinic_llm_service_uses_provider_contract_for_text():
     assert messages[1]["role"] == "user"
     assert "Eros Bot" in messages[0]["content"]
     assert "Clinica Eros Neuronal" in messages[0]["content"]
+    assert "Contexto del hilo:" in messages[1]["content"]
+    assert "Es primer intercambio: no" in messages[1]["content"]
+    assert "El usuario pidio orientacion inicial" in messages[1]["content"]
+    assert "Claro, cuentame un poco mas." in messages[1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_clinic_llm_service_conversation_fallback_keeps_context_after_first_turn():
+    provider = FakeProvider(error=RuntimeError("provider unavailable"))
+    service = ClinicLLMService(provider)
+
+    reply = await service.build_conversation_reply(
+        "gracias",
+        [],
+        context=ReplyContext(
+            turn_count=3,
+            active_goal="conversation",
+            stage="open",
+            last_assistant_message="Te comparti la informacion de horarios.",
+            recent_turns=[{"user": "cuales son sus horarios", "assistant": "Te comparti la informacion de horarios."}],
+        ),
+    )
+
+    assert not reply.startswith("Hola")
+    assert "Seguimos con tu consulta" in reply
 
 
 @pytest.mark.asyncio

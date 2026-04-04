@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import json
 import logging
 import re
@@ -19,6 +20,20 @@ CALENDLY_APPOINTMENT_URL = "https://calendly.com/gayagocr/new-meeting"
 class LLMMessage(TypedDict):
     role: Literal["system", "user", "assistant"]
     content: str
+
+
+@dataclass(slots=True)
+class ReplyContext:
+    turn_count: int = 0
+    summary: str = ""
+    active_goal: str = ""
+    stage: str = ""
+    pending_action: str = ""
+    pending_question: str = ""
+    last_assistant_message: str = ""
+    last_tool_result: str = ""
+    appointment_slots: dict[str, Any] = field(default_factory=dict)
+    recent_turns: list[dict[str, str]] = field(default_factory=list)
 
 
 class LLMProvider(Protocol):
@@ -146,18 +161,28 @@ class ClinicLLMService:
     def __init__(self, provider: LLMProvider) -> None:
         self._provider = provider
 
-    async def build_conversation_reply(self, user_message: str, memories: list[str]) -> str:
+    async def build_conversation_reply(
+        self,
+        user_message: str,
+        memories: list[str],
+        context: ReplyContext | None = None,
+    ) -> str:
+        context = context or ReplyContext()
         system_prompt = (
             "Eres Eros Bot, el asistente virtual de Clinica Eros Neuronal, una clinica de salud mental. "
             "Responde en espanol con tono humano, breve, claro y sereno. "
+            "Mantén continuidad con el hilo conversacional y evita reiniciar el contexto en cada turno. "
             "Cuando el usuario saluda, pregunta quien eres o es el primer intercambio, presentate como "
             "'Eros Bot, asistente de Clinica Eros Neuronal'. "
             "Ayuda con conversacion general, orientacion inicial y dudas basicas de la clinica. "
+            "Si ya existe contexto previo, no te vuelvas a presentar a menos que el usuario lo pida. "
+            "Si NO es el primer intercambio, continua la conversacion sin volver a decir hola ni presentarte otra vez. "
             "No inventes servicios ni diagnósticos; si falta informacion concreta, dilo y canaliza con recepcion."
         )
         user_prompt = (
+            f"{_format_reply_context(context)}\n"
             f"Memorias relevantes: {memories}\n"
-            f"Pregunta del usuario: {user_message}\n"
+            f"Mensaje actual del usuario: {user_message}\n"
             "Responde en espanol de forma breve, amable y profesional."
         )
         try:
@@ -171,24 +196,29 @@ class ClinicLLMService:
         except Exception as exc:
             logger.warning("LLM conversation failed, using deterministic fallback: %s", exc)
             substep("conversation_fallback", "WARN", "mensaje deterministico")
-            return (
-                "Hola, soy Eros Bot, asistente de Clinica Eros Neuronal. "
-                "Puedo ayudarte con informacion general de la clinica, orientacion inicial y solicitudes de cita. "
-                "Si tu pregunta requiere un dato no disponible, la canalizo con recepcion."
-            )
+            return self._build_conversation_fallback(context)
 
-    async def build_rag_reply(self, user_message: str, memories: list[str], clinic_context: str) -> str:
+    async def build_rag_reply(
+        self,
+        user_message: str,
+        memories: list[str],
+        clinic_context: str,
+        context: ReplyContext | None = None,
+    ) -> str:
+        context = context or ReplyContext()
         system_prompt = (
             "Eres Eros Bot, asistente de Clinica Eros Neuronal, una clinica de salud mental. "
             "Estas respondiendo en modo RAG. Debes usar solo el contexto recuperado y la memoria compartida; "
+            "mantén continuidad con el hilo conversacional y resuelve seguimientos usando el estado recibido. "
             "no inventes informacion, horarios, precios, especialistas ni politicas. "
             "Si el contexto no alcanza, dilo con claridad y ofrece canalizar con recepcion. "
             "Da respuestas precisas, utiles y alineadas con una clinica de salud mental."
         )
         user_prompt = (
+            f"{_format_reply_context(context, include_tool_result=True)}\n"
             f"Contexto recuperado por RAG:\n{clinic_context}\n"
             f"Memoria conversacional: {memories}\n"
-            f"Pregunta: {user_message}\n"
+            f"Mensaje actual del usuario: {user_message}\n"
             "Responde en espanol. Si el contexto recuperado contiene la respuesta, usalo de forma directa y concreta. "
             "Si no, explica brevemente que falta informacion y ofrece apoyo adicional."
         )
@@ -298,7 +328,9 @@ class ClinicLLMService:
         contact_name: str,
         current_slots: dict[str, Any] | None = None,
         pending_question: str | None = None,
+        context: ReplyContext | None = None,
     ) -> tuple[AppointmentIntentPayload, str]:
+        context = context or ReplyContext()
         system_prompt = (
             "Eres el analizador de citas de Clinica Eros Neuronal, clinica de salud mental. "
             "Tu tarea es extraer datos para agendar una cita. "
@@ -308,6 +340,7 @@ class ClinicLLMService:
         )
         user_prompt = (
             f"Nombre de contacto: {contact_name}\n"
+            f"{_format_reply_context(context, include_slots=True)}\n"
             f"Memorias relevantes: {memories}\n"
             f"Slots actuales: {current_slots or {}}\n"
             f"Pendiente: {pending_question or 'n/a'}\n"
@@ -339,6 +372,7 @@ class ClinicLLMService:
             user_message=user_message,
             memories=memories,
             contact_name=contact_name,
+            context=context,
         )
         return appointment, reply
 
@@ -397,16 +431,20 @@ class ClinicLLMService:
         user_message: str,
         memories: list[str],
         contact_name: str,
+        context: ReplyContext | None = None,
     ) -> str:
+        context = context or ReplyContext()
         system_prompt = (
             "Eres Eros Bot, asistente de Clinica Eros Neuronal, clinica de salud mental. "
             "Redacta respuestas para ayudar a agendar citas. "
             "Debes sonar claro, amable y profesional. "
+            "Mantén continuidad con el hilo y no vuelvas a pedir datos que ya esten presentes en el contexto. "
             f"Incluye siempre este enlace exacto para agendar: {CALENDLY_APPOINTMENT_URL} "
             "No prometas disponibilidad distinta a la que el usuario confirme despues en Calendly o con recepcion."
         )
         user_prompt = (
             f"Nombre del contacto: {contact_name}\n"
+            f"{_format_reply_context(context, include_slots=True)}\n"
             f"Memorias relevantes: {memories}\n"
             f"Mensaje del usuario: {user_message}\n"
             f"Payload de cita: {appointment.model_dump()}\n"
@@ -429,6 +467,25 @@ class ClinicLLMService:
             logger.warning("LLM appointment reply failed, using deterministic fallback: %s", exc)
             substep("appointment_reply_fallback", "WARN", "respuesta de cita deterministica")
             return self._build_appointment_reply_fallback(appointment)
+
+    def _build_conversation_fallback(self, context: ReplyContext) -> str:
+        if _is_first_turn(context):
+            return (
+                "Hola, soy Eros Bot, asistente de Clinica Eros Neuronal. "
+                "Puedo ayudarte con informacion general de la clinica, orientacion inicial y solicitudes de cita. "
+                "Si tu pregunta requiere un dato no disponible, la canalizo con recepcion."
+            )
+        if context.active_goal == "appointment" and context.pending_question:
+            return (
+                "Seguimos con tu solicitud de cita. "
+                f"{context.pending_question.strip()} "
+                f"Si prefieres avanzar directo, puedes agendar aqui: {CALENDLY_APPOINTMENT_URL}"
+            )
+        return (
+            "Seguimos con tu consulta. "
+            "Puedo ayudarte con informacion general de la clinica, orientacion inicial y solicitudes de cita. "
+            "Si necesitas un dato puntual que no tenga disponible en este momento, lo canalizo con recepcion."
+        )
 
     def _build_appointment_reply_fallback(self, appointment: AppointmentIntentPayload) -> str:
         if appointment.missing_fields:
@@ -515,3 +572,51 @@ def _extract_json(content: str) -> dict[str, Any]:
 def _should_retry_with_json_schema(exc: Exception) -> bool:
     message = str(exc).lower()
     return "response_format.type" in message and "json_schema" in message
+
+
+def _format_reply_context(
+    context: ReplyContext,
+    *,
+    include_slots: bool = False,
+    include_tool_result: bool = False,
+) -> str:
+    lines = [
+        "Contexto del hilo:",
+        f"- Turno actual: {context.turn_count or 0}",
+        f"- Es primer intercambio: {'si' if _is_first_turn(context) else 'no'}",
+        f"- Resumen: {_present_or_na(context.summary)}",
+        f"- Objetivo activo: {_present_or_na(context.active_goal)}",
+        f"- Etapa: {_present_or_na(context.stage)}",
+        f"- Pendiente actual: {_present_or_na(context.pending_question or context.pending_action)}",
+        f"- Ultima respuesta del asistente: {_present_or_na(context.last_assistant_message)}",
+    ]
+    if context.recent_turns:
+        lines.append("- Turnos recientes:")
+        for turn in context.recent_turns[-2:]:
+            lines.append(f"  - Usuario: {_present_or_na(turn.get('user', ''))}")
+            lines.append(f"  - Asistente: {_present_or_na(turn.get('assistant', ''))}")
+    if include_slots:
+        lines.append(f"- Slots de cita: {_present_or_na(str(context.appointment_slots or {}))}")
+    if include_tool_result:
+        lines.append(f"- Ultimo resultado de herramienta: {_present_or_na(context.last_tool_result)}")
+    return "\n".join(lines)
+
+
+def _present_or_na(value: str) -> str:
+    compact = _compact_inline(value, 240)
+    return compact if compact else "n/a"
+
+
+def _compact_inline(value: str, limit: int) -> str:
+    compact = " ".join(str(value).split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3] + "..."
+
+
+def _is_first_turn(context: ReplyContext) -> bool:
+    if context.turn_count > 1:
+        return False
+    if context.recent_turns or context.last_assistant_message or context.summary:
+        return False
+    return True

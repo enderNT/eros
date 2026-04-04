@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 
 from app.graph.workflow import ClinicWorkflow
 from app.memory_runtime import ConversationMemoryRuntime, LLMConversationSummaryService
@@ -18,6 +19,7 @@ from app.tracing import (
     bind_trace_context,
     reset_trace_context,
 )
+from app.tracing.repository import PostgresTraceRepository
 
 
 class FakeLLMService:
@@ -41,18 +43,25 @@ class FakeLLMService:
             reason="test",
         )
 
-    async def build_conversation_reply(self, user_message, memories):
-        del memories
+    async def build_conversation_reply(self, user_message, memories, context=None):
+        del memories, context
         return f"Respuesta: {user_message}"
 
-    async def build_rag_reply(self, user_message, memories, clinic_context):
-        del memories, clinic_context
+    async def build_rag_reply(self, user_message, memories, clinic_context, context=None):
+        del memories, clinic_context, context
         return f"RAG: {user_message}"
 
     async def extract_appointment_intent(
-        self, user_message, memories, clinic_context, contact_name, current_slots=None, pending_question=None
+        self,
+        user_message,
+        memories,
+        clinic_context,
+        contact_name,
+        current_slots=None,
+        pending_question=None,
+        context=None,
     ):
-        del user_message, memories, clinic_context, contact_name, current_slots, pending_question
+        del user_message, memories, clinic_context, contact_name, current_slots, pending_question, context
         return AppointmentIntentPayload(), "ok"
 
     async def build_state_summary(self, current_summary, user_message, assistant_message, active_goal, stage):
@@ -204,6 +213,59 @@ async def test_trace_sink_flushes_pending_records_on_shutdown():
     await sink.close()
 
     assert "trace-shutdown" in repository.turns
+
+
+async def test_postgres_trace_repository_skips_fragments_for_deduped_records():
+    record = _build_record(trace_id="trace-duplicate", dedupe_key="dedupe-stable")
+    executed_sql: list[str] = []
+
+    class FakeCursor:
+        def __init__(self):
+            self._fetchone_value = None
+            self._fetchall_value = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, sql, params=None):
+            del params
+            normalized = " ".join(sql.split())
+            executed_sql.append(normalized)
+            if "SELECT trace_id FROM trace_turns WHERE dedupe_key" in normalized:
+                self._fetchone_value = ("trace-existing",)
+            elif "SELECT trace_id FROM trace_turns WHERE trace_id = ANY" in normalized:
+                self._fetchall_value = []
+            else:
+                self._fetchone_value = None
+
+        async def fetchone(self):
+            return self._fetchone_value
+
+        async def fetchall(self):
+            return self._fetchall_value
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        async def commit(self):
+            return None
+
+    repository = PostgresTraceRepository("postgres://unused")
+
+    @asynccontextmanager
+    async def fake_connection():
+        yield FakeConnection()
+
+    repository._connection = fake_connection  # type: ignore[method-assign]
+
+    await repository.save_batch([record], [])
+
+    assert any("SELECT trace_id FROM trace_turns WHERE dedupe_key" in sql for sql in executed_sql)
+    assert not any("INSERT INTO trace_fragments" in sql for sql in executed_sql)
 
 
 async def test_trace_repository_respects_dedupe_and_projector_version_upserts():

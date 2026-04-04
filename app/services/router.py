@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
 
 from app.models.schemas import RoutingPacket, StateRoutingDecision
 from app.observability.flow_logger import substep
+from app.observability.router_input_logger import log_router_input
 from app.services.llm import ClinicLLMService
 from app.settings import Settings
 
@@ -46,6 +48,12 @@ class StateRoutingService:
             memories=[_compact_text(memory, 160) for memory in memories[:3]],
         )
         guard_hint = self._deterministic_guard(routing_packet)
+        log_router_input(
+            {
+                "routing_packet": json.loads(routing_packet.model_dump_json(indent=2)),
+                "guard_hint": guard_hint.model_dump() if guard_hint is not None else None,
+            }
+        )
         if guard_hint is not None:
             substep("state_router_guard", "OK", guard_hint.reason)
             return guard_hint

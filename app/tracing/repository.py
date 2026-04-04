@@ -128,7 +128,18 @@ class PostgresTraceRepository:
 
         async with self._connection() as conn:
             async with conn.cursor() as cur:
+                accepted_trace_ids: set[str] = set()
                 for record in records:
+                    dedupe_key = record.envelope.dedupe_key
+                    if dedupe_key:
+                        await cur.execute(
+                            "SELECT trace_id FROM trace_turns WHERE dedupe_key = %s",
+                            (dedupe_key,),
+                        )
+                        existing_row = await cur.fetchone()
+                        if existing_row and existing_row[0] != record.envelope.trace_id:
+                            accepted_trace_ids.add(existing_row[0])
+                            continue
                     await cur.execute(
                         """
                         INSERT INTO trace_turns (
@@ -139,7 +150,28 @@ class PostgresTraceRepository:
                         ) VALUES (
                             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         )
-                        ON CONFLICT DO NOTHING
+                        ON CONFLICT (trace_id) DO UPDATE SET
+                            parent_trace_id = EXCLUDED.parent_trace_id,
+                            session_key = EXCLUDED.session_key,
+                            actor_key = EXCLUDED.actor_key,
+                            app_key = EXCLUDED.app_key,
+                            flow_key = EXCLUDED.flow_key,
+                            dedupe_key = EXCLUDED.dedupe_key,
+                            started_at = EXCLUDED.started_at,
+                            completed_at = EXCLUDED.completed_at,
+                            component_version = EXCLUDED.component_version,
+                            model_backend = EXCLUDED.model_backend,
+                            model_name = EXCLUDED.model_name,
+                            outcome = EXCLUDED.outcome,
+                            has_error = EXCLUDED.has_error,
+                            projector_eligibility_summary = EXCLUDED.projector_eligibility_summary,
+                            input_payload = EXCLUDED.input_payload,
+                            output_payload = EXCLUDED.output_payload,
+                            error_payload = EXCLUDED.error_payload,
+                            metrics_payload = EXCLUDED.metrics_payload,
+                            tags = EXCLUDED.tags,
+                            extra_payload = EXCLUDED.extra_payload
+                        RETURNING trace_id
                         """,
                         (
                             record.envelope.trace_id,
@@ -165,6 +197,9 @@ class PostgresTraceRepository:
                             Jsonb(record.extra_payload),
                         ),
                     )
+                    inserted_row = await cur.fetchone()
+                    if inserted_row:
+                        accepted_trace_ids.add(inserted_row[0])
                     for fragment in record.fragments:
                         await cur.execute(
                             """
@@ -184,7 +219,15 @@ class PostgresTraceRepository:
                                 Jsonb(fragment.payload),
                             ),
                         )
+                if examples:
+                    await cur.execute(
+                        "SELECT trace_id FROM trace_turns WHERE trace_id = ANY(%s)",
+                        (list({example.trace_id for example in examples}),),
+                    )
+                    accepted_trace_ids.update(row[0] for row in await cur.fetchall())
                 for example in examples:
+                    if example.trace_id not in accepted_trace_ids:
+                        continue
                     await cur.execute(
                         """
                         INSERT INTO trace_examples (
