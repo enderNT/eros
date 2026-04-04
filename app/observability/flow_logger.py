@@ -13,20 +13,10 @@ _flow_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("flow_id", de
 _conversation_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("conversation_id", default="-")
 _flow_started_at_var: contextvars.ContextVar[float] = contextvars.ContextVar("flow_started_at", default=0.0)
 
-_RESET = "\033[0m"
-_BOLD = "\033[1m"
-_DIM = "\033[2m"
-_CYAN = "\033[36m"
-_BLUE = "\033[34m"
-_GREEN = "\033[32m"
-_YELLOW = "\033[33m"
-_RED = "\033[31m"
-_TABLE_INNER_WIDTH = 102
-_STATUS_WIDTH = 10
-_STEP_WIDTH = 30
-_DETAIL_WIDTH = _TABLE_INNER_WIDTH - _STATUS_WIDTH - _STEP_WIDTH - 8
-_BORDER = "+" + "-" * _TABLE_INNER_WIDTH + "+"
-_HEADER_BORDER = "+" + "-" * _STATUS_WIDTH + "+" + "-" * (_STEP_WIDTH + 2) + "+" + "-" * (_DETAIL_WIDTH + 2) + "+"
+_SECTION_WIDTH = 108
+_BLOCK_SEPARATOR = "=" * _SECTION_WIDTH
+_SUBSECTION_SEPARATOR = "-" * _SECTION_WIDTH
+_DETAIL_WIDTH = _SECTION_WIDTH - 6
 
 _STEP_LABELS = {
     "webhook_received": "Webhook recibido",
@@ -100,25 +90,29 @@ def get_flow_context() -> tuple[str, str]:
 
 def start_flow(message_preview: str) -> None:
     logger.info("")
-    logger.info(_BORDER)
-    logger.info(_banner_row(f"FLOW {_flow_id_var.get()} | CONVERSATION {_conversation_id_var.get()}"))
-    logger.info(_BORDER)
-    logger.info(_banner_row("USER"))
-    for line in _wrap_text(_safe_preview(message_preview), _TABLE_INNER_WIDTH - 2):
-        logger.info(_banner_row(line))
-    logger.info(_HEADER_BORDER)
-    logger.info(_table_header())
-    logger.info(_HEADER_BORDER)
+    logger.info(_BLOCK_SEPARATOR)
+    logger.info("FLOW START")
+    logger.info(f"FLOW ID       {_flow_id_var.get()}")
+    logger.info(f"CONVERSATION  {_conversation_id_var.get()}")
+    logger.info(_SUBSECTION_SEPARATOR)
+    logger.info("USER MESSAGE")
+    for line in _wrap_text(_safe_preview(message_preview), _DETAIL_WIDTH):
+        logger.info(f"  {line}")
+    logger.info(_SUBSECTION_SEPARATOR)
+    logger.info("STEPS")
 
 
 def end_flow(status: str, detail: str = "") -> None:
     started_at = _flow_started_at_var.get()
     elapsed_ms = 0 if started_at == 0.0 else int((time.perf_counter() - started_at) * 1000)
-    suffix = f"{detail} | elapsed={elapsed_ms}ms" if detail else f"elapsed={elapsed_ms}ms"
-    for line in _table_lines("RESULT", status, suffix):
-        logger.info(line)
-    logger.info(_HEADER_BORDER)
-    logger.info(_BORDER)
+    logger.info(_SUBSECTION_SEPARATOR)
+    logger.info("RESULT")
+    logger.info(f"  STATUS   {_status_label(status).upper()}")
+    if detail:
+        for line in _wrap_text(detail, _DETAIL_WIDTH - 11):
+            logger.info(f"  DETAIL   {line}")
+    logger.info(f"  ELAPSED  {elapsed_ms}ms")
+    logger.info(_BLOCK_SEPARATOR)
 
 
 def step(name: str, status: str = "RUN", detail: str = "") -> None:
@@ -135,9 +129,11 @@ def mark_error(step_name: str, exc: Exception) -> None:
 
 def _line(name: str, status: str, detail: str, indent: int) -> str:
     clean_name = _clean_name(name)
-    if indent:
-        clean_name = f"> {clean_name}"
-    return "\n".join(_table_lines(clean_name, status, detail))
+    bullet = "  -" if indent else "  *"
+    lines = [f"{bullet} [{_status_code(status)}] {clean_name.upper()}"]
+    for wrapped in _wrap_text(detail, _DETAIL_WIDTH):
+        lines.append(f"      {wrapped}")
+    return "\n".join(lines)
 
 
 def _status_label(status: str) -> str:
@@ -150,38 +146,13 @@ def _status_label(status: str) -> str:
     return labels.get(status.upper(), status.title())
 
 
-def _status_color(status: str) -> str:
-    colors = {
-        "RUN": _BLUE,
-        "OK": _GREEN,
-        "WARN": _YELLOW,
-        "ERROR": _RED,
-    }
-    return colors.get(status.upper(), _CYAN)
-
-
-def _table_header() -> str:
-    return f"| {'STATUS':<{_STATUS_WIDTH}} | {'STEP':<{_STEP_WIDTH}} | {'DETAIL':<{_DETAIL_WIDTH}} |"
-
-
-def _table_lines(step_name: str, status: str, detail: str) -> list[str]:
-    label = _status_label(status).upper()
-    detail_lines = _wrap_text(detail, _DETAIL_WIDTH) or [""]
-    step_lines = _wrap_text(step_name, _STEP_WIDTH) or [""]
-    row_count = max(len(detail_lines), len(step_lines))
-    lines: list[str] = []
-    for index in range(row_count):
-        status_text = label if index == 0 else ""
-        step_text = step_lines[index] if index < len(step_lines) else ""
-        detail_text = detail_lines[index] if index < len(detail_lines) else ""
-        lines.append(
-            f"| {status_text:<{_STATUS_WIDTH}} | {step_text:<{_STEP_WIDTH}} | {detail_text:<{_DETAIL_WIDTH}} |"
-        )
-    return lines
-
-
-def _banner_row(text: str) -> str:
-    return f"| {text:<{_TABLE_INNER_WIDTH - 2}} |"
+def _status_code(status: str) -> str:
+    return {
+        "RUN": "RUN",
+        "OK": "OK",
+        "WARN": "WARN",
+        "ERROR": "ERR",
+    }.get(status.upper(), status.upper()[:4])
 
 
 def _wrap_text(value: str, width: int) -> list[str]:

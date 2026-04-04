@@ -6,6 +6,7 @@ from typing import Any
 
 _logger = logging.getLogger("clinica.router_input")
 _enabled = False
+_SEPARATOR = "-" * 96
 
 
 def configure_router_input_logger(enabled: bool) -> None:
@@ -28,7 +29,8 @@ def configure_router_input_logger(enabled: bool) -> None:
 def log_router_input(router_input: Any) -> None:
     if not _enabled:
         return
-    _logger.info("ROUTER INPUT\n%s", _indent_block(_stringify(router_input)))
+    rendered = _indent_block(_stringify(router_input))
+    _logger.info("%s\nROUTER INPUT\n%s\n%s", _SEPARATOR, rendered, _SEPARATOR)
 
 
 def _indent_block(value: str) -> str:
