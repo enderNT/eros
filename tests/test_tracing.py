@@ -7,7 +7,13 @@ from app.models.schemas import AppointmentIntentPayload, ChatwootWebhook, StateR
 from app.services.barbershop_memory import BarbershopMemoryPolicy
 from app.services.clinic_config import ClinicConfigLoader
 from app.services.router import StateRoutingService
-from app.services.tracing import RoutingDecisionProjector
+from app.services.tracing import (
+    AppointmentExtractionProjector,
+    ConversationReplyProjector,
+    RagReplyProjector,
+    RoutingDecisionProjector,
+    StateSummaryProjector,
+)
 from app.settings import Settings
 from app.tracing import (
     AsyncBatchTraceSink,
@@ -136,6 +142,27 @@ def _build_record(
         )
     )
     context.capture_input({"message": "Necesito una cita", "secret": "top-secret"})
+    context.capture_fragment(
+        "routing_input",
+        {
+            "routing_packet": {
+                "user_message": "Necesito una cita",
+                "conversation_summary": "",
+                "active_goal": "",
+                "stage": "",
+                "pending_action": "",
+                "pending_question": "",
+                "appointment_slots": {},
+                "last_tool_result": "",
+                "last_user_message": "Necesito una cita",
+                "last_assistant_message": "",
+                "memories": ["Prefiere tarde"],
+            },
+            "guard_hint": None,
+            "secret": "top-secret",
+        },
+        order=1,
+    )
     context.capture_fragment("memory_lookup", {"recalled_memories": ["Prefiere tarde"], "secret": "top-secret"}, order=2)
     context.capture_fragment(
         "routing_decision",
@@ -165,13 +192,15 @@ async def test_trace_sink_persists_successful_turn_with_fragments_output_and_pro
     stored = repository.turns["trace-success"]
     assert stored.outcome == "success"
     assert stored.output_payload["response_text"] == "Claro, te ayudo"
-    assert [fragment["order"] for fragment in repository.fragments["trace-success"]] == [2, 5]
+    assert [fragment["order"] for fragment in repository.fragments["trace-success"]] == [1, 2, 5]
     assert [fragment["kind"] for fragment in repository.fragments["trace-success"]] == [
+        "routing_input",
         "memory_lookup",
         "routing_decision",
     ]
-    example = repository.examples[("trace-success", "state_router", "v1")]
+    example = repository.examples[("trace-success", "state_router", "v2")]
     assert example.target_payload["next_node"] == "appointment"
+    assert example.input_payload["user_message"] == "Necesito una cita"
 
 
 async def test_trace_sink_persists_failed_turn_without_output():
@@ -318,6 +347,103 @@ async def test_trace_repository_respects_dedupe_and_projector_version_upserts():
     assert repository.examples[("trace-dedupe", "state_router", "v2")].target_payload["next_node"] == "rag"
 
 
+async def test_trace_projectors_emit_multitask_examples_when_fragments_exist():
+    repository = InMemoryTraceRepository()
+    sink = await AsyncBatchTraceSink(
+        repository,
+        projectors=[
+            AppointmentExtractionProjector(),
+            ConversationReplyProjector(),
+            RagReplyProjector(),
+            StateSummaryProjector(),
+        ],
+        batch_size=1,
+        flush_interval_seconds=10,
+    ).start()
+
+    context = TraceContext(PassThroughTraceNormalizer()).start(
+        TraceEnvelope(
+            trace_id="trace-multitask",
+            session_key="session-1",
+            actor_key="actor-1",
+            app_key="test-app",
+            flow_key="flow-1",
+            dedupe_key="trace-multitask",
+            component_version="tests",
+            model_backend="fake",
+            model_name="fake-model",
+        )
+    )
+    context.capture_input({"message": "Necesito horarios", "contact_name": "Juan"})
+    context.capture_fragment(
+        "appointment_extraction",
+        {
+            "user_message": "Quiero una cita",
+            "memories": ["Prefiere la tarde"],
+            "current_slots": {"reason": "psicoterapia"},
+            "pending_question": "Necesito la hora preferida.",
+            "reply_context": {"turn_count": 2},
+            "clinic_context_preview": "Clinica: Eros",
+            "payload": {"reason": "psicoterapia", "missing_fields": ["preferred_time"]},
+            "response_text": "Te ayudo a completar tu cita",
+            "missing_fields": ["preferred_time"],
+        },
+        order=1,
+        label="appointment",
+    )
+    context.capture_fragment(
+        "llm_reply",
+        {
+            "node": "conversation",
+            "response_text": "Seguimos con tu consulta",
+            "memories": ["Prefiere la tarde"],
+            "reply_context": {"turn_count": 2},
+        },
+        order=2,
+        label="conversation",
+    )
+    context.capture_fragment(
+        "retrieval_context",
+        {"context_preview": "Horarios de la clinica"},
+        order=3,
+        label="qdrant",
+    )
+    context.capture_fragment(
+        "llm_reply",
+        {
+            "node": "rag",
+            "response_text": "Nuestros horarios son...",
+            "memories": ["Prefiere la tarde"],
+            "reply_context": {"turn_count": 3},
+            "rag_context_preview": "Horarios de la clinica",
+        },
+        order=4,
+        label="rag",
+    )
+    context.capture_fragment(
+        "state_summary",
+        {
+            "current_summary": "Resumen anterior",
+            "user_message": "Necesito horarios",
+            "assistant_message": "Nuestros horarios son...",
+            "active_goal": "information",
+            "stage": "lookup",
+            "updated_summary": "Resumen actualizado",
+        },
+        order=5,
+        label="summary-service",
+    )
+    context.capture_output({"response_text": "Nuestros horarios son..."})
+
+    await sink.enqueue(context.finalize("success"))
+    await sink.close()
+
+    assert repository.examples[("trace-multitask", "appointment_extraction", "v1")].target_payload["reason"] == "psicoterapia"
+    assert repository.examples[("trace-multitask", "conversation_reply", "v1")].target_payload["response_text"] == "Seguimos con tu consulta"
+    assert repository.examples[("trace-multitask", "rag_reply", "v1")].input_payload["clinic_context"] == "Horarios de la clinica"
+    assert repository.examples[("trace-multitask", "state_summary", "v1")].target_payload["updated_summary"] == "Resumen actualizado"
+
+
 async def test_trace_sink_applies_field_policy_before_persist_and_before_project():
     class StageAwarePolicy:
         def apply(self, payload, *, stage, section):
@@ -389,6 +515,7 @@ def test_workflow_emits_trace_fragments_when_context_is_bound():
     fragment_kinds = [fragment.kind for fragment in record.fragments] if record else []
     assert result["next_node"] == "rag"
     assert "memory_lookup" in fragment_kinds
+    assert "routing_input" in fragment_kinds
     assert "routing_decision" in fragment_kinds
     assert "retrieval_context" in fragment_kinds
     assert "llm_reply" in fragment_kinds

@@ -5,6 +5,7 @@ import logging
 
 from fastapi import FastAPI
 
+from app.dspy import build_dspy_runtime
 from app.graph.workflow import ClinicWorkflow
 from app.observability.console_logging import configure_console_logging
 from app.observability.flow_logger import configure_flow_logger
@@ -34,7 +35,7 @@ def create_app() -> FastAPI:
         clinic_config_loader = ClinicConfigLoader(settings.clinic_config_path)
         llm_provider = build_llm_provider(settings)
         llm_service = ClinicLLMService(llm_provider)
-        router_service = StateRoutingService(settings, llm_service)
+        router_service = StateRoutingService(settings, llm_service, dspy_runtime=build_dspy_runtime(settings))
         qdrant_service = QdrantRetrievalService(settings)
         async with build_graph_checkpointer(settings) as checkpointer:
             async with build_memory_runtime(settings, llm_service) as memory_runtime:

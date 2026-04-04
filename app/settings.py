@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_timeout_seconds: int | None = None
     llm_temperature: float | None = None
+    dspy_enabled: bool = False
+    dspy_router_enabled: bool = False
+    dspy_lm_model: str | None = None
+    dspy_lm_base_url: str | None = None
+    dspy_lm_api_key: str | None = None
+    dspy_dataset_backend: Literal["postgres"] = "postgres"
 
     openai_api_key: str | None = None
     openai_base_url: str | None = None
@@ -88,6 +94,18 @@ class Settings(BaseSettings):
         if self.llm_temperature is not None:
             return self.llm_temperature
         return self.openai_temperature
+
+    @property
+    def resolved_dspy_model(self) -> str:
+        return (self.dspy_lm_model or self.resolved_llm_model).strip()
+
+    @property
+    def resolved_dspy_base_url(self) -> str | None:
+        return self.dspy_lm_base_url or self.resolved_llm_base_url
+
+    @property
+    def resolved_dspy_api_key(self) -> str | None:
+        return self.dspy_lm_api_key or self.resolved_llm_api_key
 
 
 @lru_cache

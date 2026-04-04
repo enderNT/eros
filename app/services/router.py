@@ -5,19 +5,27 @@ import logging
 import re
 from typing import Any
 
+from app.dspy.runtime import DSPyRuntime
 from app.models.schemas import RoutingPacket, StateRoutingDecision
 from app.observability.flow_logger import substep
 from app.observability.router_input_logger import log_router_input
 from app.services.llm import ClinicLLMService
 from app.settings import Settings
+from app.tracing import get_trace_context
 
 logger = logging.getLogger(__name__)
 
 
 class StateRoutingService:
-    def __init__(self, settings: Settings, llm_service: ClinicLLMService) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        llm_service: ClinicLLMService,
+        dspy_runtime: DSPyRuntime | None = None,
+    ) -> None:
         self._settings = settings
         self._llm_service = llm_service
+        self._dspy_runtime = dspy_runtime
 
     async def route_state(
         self,
@@ -48,6 +56,14 @@ class StateRoutingService:
             memories=[_compact_text(memory, 160) for memory in memories[:3]],
         )
         guard_hint = self._deterministic_guard(routing_packet)
+        _capture_trace_fragment(
+            "routing_input",
+            {
+                "routing_packet": routing_packet.model_dump(mode="json"),
+                "guard_hint": guard_hint.model_dump(mode="json") if guard_hint is not None else None,
+            },
+            label="state-router",
+        )
         log_router_input(
             {
                 "routing_packet": json.loads(routing_packet.model_dump_json(indent=2)),
@@ -58,7 +74,21 @@ class StateRoutingService:
             substep("state_router_guard", "OK", guard_hint.reason)
             return guard_hint
 
-        decision = await self._llm_service.classify_state_route(routing_packet)
+        decision: StateRoutingDecision
+        if self._dspy_runtime is not None and self._dspy_runtime.router_enabled:
+            try:
+                decision = await self._dspy_runtime.classify_state_route(routing_packet, guard_hint={})
+                substep(
+                    "state_router_dspy",
+                    "OK",
+                    f"next={decision.next_node} intent={decision.intent} confidence={decision.confidence:.2f}",
+                )
+            except Exception as exc:
+                logger.warning("DSPy router failed, falling back to LLM classifier: %s", exc)
+                substep("state_router_dspy", "WARN", "fallback a classify_state_route")
+                decision = await self._llm_service.classify_state_route(routing_packet)
+        else:
+            decision = await self._llm_service.classify_state_route(routing_packet)
         if decision.next_node == "rag" and not decision.needs_retrieval:
             decision.needs_retrieval = True
         substep(
@@ -213,3 +243,10 @@ def _compact_text(value: str, max_len: int) -> str:
     if len(compact) <= max_len:
         return compact
     return f"{compact[: max_len - 3]}..."
+
+
+def _capture_trace_fragment(kind: str, payload: dict[str, Any], *, label: str = "") -> None:
+    trace_context = get_trace_context()
+    if trace_context is None:
+        return
+    trace_context.capture_fragment(kind, payload, label=label)

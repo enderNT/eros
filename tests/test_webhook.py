@@ -10,6 +10,9 @@ def build_test_client(monkeypatch) -> TestClient:
     get_settings.cache_clear()
     monkeypatch.setenv("LLM_API_KEY", "")
     monkeypatch.setenv("MEMORY_BACKEND", "in_memory")
+    monkeypatch.setenv("MEMORY_POSTGRES_DSN", "")
+    monkeypatch.setenv("TRACE_BACKEND", "in_memory")
+    monkeypatch.setenv("TRACE_POSTGRES_DSN", "")
     client = TestClient(create_app())
     client.__enter__()
     get_settings.cache_clear()
@@ -18,6 +21,23 @@ def build_test_client(monkeypatch) -> TestClient:
 
 def test_healthcheck(monkeypatch):
     client = build_test_client(monkeypatch)
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_healthcheck_with_dspy_flags_enabled(monkeypatch):
+    get_settings.cache_clear()
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("MEMORY_BACKEND", "in_memory")
+    monkeypatch.setenv("MEMORY_POSTGRES_DSN", "")
+    monkeypatch.setenv("TRACE_BACKEND", "in_memory")
+    monkeypatch.setenv("TRACE_POSTGRES_DSN", "")
+    monkeypatch.setenv("DSPY_ENABLED", "true")
+    monkeypatch.setenv("DSPY_ROUTER_ENABLED", "true")
+    client = TestClient(create_app())
+
     response = client.get("/health")
 
     assert response.status_code == 200

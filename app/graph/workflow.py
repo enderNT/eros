@@ -202,15 +202,21 @@ class ClinicWorkflow:
     async def _conversation(self, state: GraphState) -> GraphState:
         try:
             step("3.a.1 conversation_node", "RUN", "generando respuesta")
+            reply_context = _build_reply_context(state)
             response_text = await self._llm_service.build_conversation_reply(
                 user_message=state["last_user_message"],
                 memories=state.get("recalled_memories", []),
-                context=_build_reply_context(state),
+                context=reply_context,
             )
             step("3.a.1 conversation_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
                 "llm_reply",
-                {"node": "conversation", "response_text": response_text},
+                {
+                    "node": "conversation",
+                    "response_text": response_text,
+                    "memories": list(state.get("recalled_memories", [])),
+                    "reply_context": _reply_context_payload(reply_context),
+                },
                 label="conversation",
             )
             return {
@@ -228,6 +234,7 @@ class ClinicWorkflow:
         try:
             step("3.b.1 rag_node", "RUN", "consultando contexto RAG")
             clinic_context = self._clinic_config_loader.load().to_context_text()
+            reply_context = _build_reply_context(state)
             substep("clinic_config", "OK", "config estatica cargada")
             rag_context = await self._qdrant_service.build_context(
                 query=state["last_user_message"] or "contexto del usuario",
@@ -245,12 +252,18 @@ class ClinicWorkflow:
                 user_message=state["last_user_message"],
                 memories=state.get("recalled_memories", []),
                 clinic_context=rag_context,
-                context=_build_reply_context(state),
+                context=reply_context,
             )
             step("3.b.1 rag_node", "OK", f"chars={len(response_text)}")
             _capture_trace_fragment(
                 "llm_reply",
-                {"node": "rag", "response_text": response_text},
+                {
+                    "node": "rag",
+                    "response_text": response_text,
+                    "memories": list(state.get("recalled_memories", [])),
+                    "reply_context": _reply_context_payload(reply_context),
+                    "rag_context_preview": _shorten(rag_context, 240),
+                },
                 label="rag",
             )
             return {
@@ -268,6 +281,7 @@ class ClinicWorkflow:
         try:
             step("3.c.1 appointment_node", "RUN", "extrayendo datos de cita")
             clinic_context = self._clinic_config_loader.load().to_context_text()
+            reply_context = _build_reply_context(state)
             substep("clinic_config", "OK", "config estatica cargada")
             appointment, response_text = await self._llm_service.extract_appointment_intent(
                 user_message=state["last_user_message"],
@@ -276,7 +290,7 @@ class ClinicWorkflow:
                 contact_name=state["contact_name"],
                 current_slots=state.get("appointment_slots", {}),
                 pending_question=state.get("pending_question"),
-                context=_build_reply_context(state),
+                context=reply_context,
             )
             appointment_slots = _merge_slots(state.get("appointment_slots", {}), appointment.model_dump())
             missing_fields = list(appointment.missing_fields)
@@ -298,6 +312,12 @@ class ClinicWorkflow:
             _capture_trace_fragment(
                 "appointment_extraction",
                 {
+                    "user_message": state["last_user_message"],
+                    "memories": list(state.get("recalled_memories", [])),
+                    "current_slots": deepcopy(state.get("appointment_slots", {})),
+                    "pending_question": state.get("pending_question", ""),
+                    "reply_context": _reply_context_payload(reply_context),
+                    "clinic_context_preview": _shorten(clinic_context, 240),
                     "payload": appointment.model_dump(),
                     "response_text": response_text,
                     "missing_fields": missing_fields,
@@ -392,6 +412,7 @@ class ClinicWorkflow:
             {
                 "stored_records": len(commit_result.stored_records),
                 "summary_refreshed": bool(updates.get("summary")),
+                "updated_summary": updates.get("summary", ""),
             },
             label="memory-runtime",
         )
@@ -538,3 +559,18 @@ def _capture_trace_fragment(kind: str, payload: dict[str, Any], *, label: str = 
     if trace_context is None:
         return
     trace_context.capture_fragment(kind, payload, label=label)
+
+
+def _reply_context_payload(context: ReplyContext) -> dict[str, Any]:
+    return {
+        "turn_count": context.turn_count,
+        "summary": context.summary,
+        "active_goal": context.active_goal,
+        "stage": context.stage,
+        "pending_action": context.pending_action,
+        "pending_question": context.pending_question,
+        "last_assistant_message": context.last_assistant_message,
+        "last_tool_result": context.last_tool_result,
+        "appointment_slots": deepcopy(context.appointment_slots),
+        "recent_turns": deepcopy(context.recent_turns),
+    }

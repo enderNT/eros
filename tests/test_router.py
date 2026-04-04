@@ -22,13 +22,36 @@ class FakeLLMService:
         return self.decision
 
 
-def build_service(decision: StateRoutingDecision | None = None) -> StateRoutingService:
-    return StateRoutingService(Settings(llm_api_key=None, openai_api_key=None), FakeLLMService(decision))
+class FakeDSPyRuntime:
+    def __init__(self, decision: StateRoutingDecision | Exception):
+        self.decision = decision
+        self.calls = []
+        self.router_enabled = True
+
+    async def classify_state_route(self, routing_packet: RoutingPacket, *, guard_hint=None):
+        self.calls.append((routing_packet, guard_hint))
+        if isinstance(self.decision, Exception):
+            raise self.decision
+        return self.decision
+
+
+def build_service(
+    decision: StateRoutingDecision | None = None,
+    *,
+    dspy_runtime: FakeDSPyRuntime | None = None,
+) -> tuple[StateRoutingService, FakeLLMService]:
+    llm = FakeLLMService(decision)
+    service = StateRoutingService(
+        Settings(llm_api_key=None, openai_api_key=None),
+        llm,
+        dspy_runtime=dspy_runtime,
+    )
+    return service, llm
 
 
 @pytest.mark.asyncio
 async def test_router_keeps_appointment_follow_up_in_appointment():
-    service = build_service()
+    service, _ = build_service()
 
     decision = await service.route_state(
         user_message="mañana",
@@ -50,7 +73,7 @@ async def test_router_keeps_appointment_follow_up_in_appointment():
 
 @pytest.mark.asyncio
 async def test_router_routes_rag_requests_without_llm():
-    service = build_service()
+    service, _ = build_service()
 
     decision = await service.route_state(
         user_message="Cuales son sus horarios y precios?",
@@ -80,7 +103,7 @@ async def test_router_uses_llm_when_no_guard_matches():
         state_update={"active_goal": "conversation"},
         reason="llm",
     )
-    service = build_service(decision)
+    service, llm = build_service(decision)
 
     routed = await service.route_state(
         user_message="Tengo una duda sobre algo especifico",
@@ -98,10 +121,76 @@ async def test_router_uses_llm_when_no_guard_matches():
 
     assert routed.intent == "conversation"
     assert routed.confidence == pytest.approx(0.77)
+    assert len(llm.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_router_uses_dspy_when_enabled_and_no_guard_matches():
+    dspy_decision = StateRoutingDecision(
+        next_node="rag",
+        intent="rag",
+        confidence=0.83,
+        needs_retrieval=True,
+        state_update={"active_goal": "information", "stage": "lookup"},
+        reason="dspy",
+    )
+    dspy_runtime = FakeDSPyRuntime(dspy_decision)
+    service, llm = build_service(dspy_runtime=dspy_runtime)
+
+    routed = await service.route_state(
+        user_message="Me puedes orientar sobre un caso mas complejo?",
+        conversation_summary="Seguimos evaluando una duda previa",
+        active_goal="conversation",
+        stage="open",
+        pending_action="",
+        pending_question="",
+        appointment_slots={},
+        last_tool_result="",
+        last_user_message="",
+        last_assistant_message="",
+        memories=["Prefiere respuestas concretas"],
+    )
+
+    assert routed.next_node == "rag"
+    assert routed.reason == "dspy"
+    assert len(dspy_runtime.calls) == 1
+    assert llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_router_falls_back_to_llm_when_dspy_runtime_fails():
+    llm_decision = StateRoutingDecision(
+        next_node="conversation",
+        intent="conversation",
+        confidence=0.71,
+        needs_retrieval=False,
+        state_update={"active_goal": "conversation", "stage": "open"},
+        reason="llm-fallback",
+    )
+    dspy_runtime = FakeDSPyRuntime(RuntimeError("dspy unavailable"))
+    service, llm = build_service(llm_decision, dspy_runtime=dspy_runtime)
+
+    routed = await service.route_state(
+        user_message="Quiero seguir con mi duda",
+        conversation_summary="Resumen previo",
+        active_goal="conversation",
+        stage="open",
+        pending_action="",
+        pending_question="",
+        appointment_slots={},
+        last_tool_result="",
+        last_user_message="",
+        last_assistant_message="",
+        memories=[],
+    )
+
+    assert routed.reason == "llm-fallback"
+    assert len(dspy_runtime.calls) == 1
+    assert len(llm.calls) == 1
 
 
 def test_router_summarizes_memories_to_three_items():
-    service = build_service()
+    service, _ = build_service()
 
     summarized = service.summarize_memories(
         [

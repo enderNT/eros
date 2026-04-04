@@ -81,6 +81,21 @@ def test_settings_fallback_to_openai_aliases():
     assert settings.resolved_llm_temperature == pytest.approx(0.2)
 
 
+def test_settings_fallback_to_llm_aliases_for_dspy():
+    settings = Settings(
+        llm_api_key="llm-key",
+        llm_base_url="https://llm.example.com/v1",
+        llm_model="llm-model",
+        dspy_lm_api_key=None,
+        dspy_lm_base_url=None,
+        dspy_lm_model=None,
+    )
+
+    assert settings.resolved_dspy_api_key == "llm-key"
+    assert settings.resolved_dspy_base_url == "https://llm.example.com/v1"
+    assert settings.resolved_dspy_model == "llm-model"
+
+
 def test_build_llm_provider_rejects_unknown_provider():
     settings = Settings(llm_provider="anthropic", llm_api_key="test-key")
 
