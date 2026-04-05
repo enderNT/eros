@@ -10,6 +10,7 @@ from app.graph.workflow import ClinicWorkflow
 from app.observability.console_logging import configure_console_logging
 from app.observability.flow_logger import configure_flow_logger
 from app.observability.router_input_logger import configure_router_input_logger
+from app.observability.startup_checks import log_startup_connection_checks
 from app.services.agent import ClinicAgentService
 from app.services.chatwoot import ChatwootClient
 from app.services.checkpointer import build_graph_checkpointer
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
                         trace_runtime,
                         settings,
                     )
+                    await log_startup_connection_checks(settings)
                     yield
 
     app = FastAPI(title="Clinica Assistant", version="0.1.0", lifespan=lifespan)
