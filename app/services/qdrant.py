@@ -38,7 +38,16 @@ class QdrantRetrievalService:
         top_k = limit or self._top_k
         if self._simulate or not self.ready:
             return self._simulate_search(query=query, contact_id=contact_id, limit=top_k)
-        return await self._http_search(query=query, contact_id=contact_id, limit=top_k)
+        try:
+            return await self._http_search(query=query, contact_id=contact_id, limit=top_k)
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "Qdrant search failed for contact_id=%s query=%s: %s",
+                contact_id,
+                query,
+                exc,
+            )
+            return []
 
     async def build_context(self, query: str, contact_id: str, clinic_context: str, memories: list[str]) -> str:
         results = await self.search(query=query, contact_id=contact_id)
@@ -60,6 +69,8 @@ class QdrantRetrievalService:
                 chunks.append(f"- [{result.id}] score={result.score:.3f} source={source} text={text}")
         else:
             chunks.append("- Sin resultados")
+            if self.ready and not self._simulate:
+                chunks.append("- Qdrant no disponible o sin coincidencias; se responde con contexto base de la clinica.")
         return "\n".join(chunks)
 
     async def _http_search(self, query: str, contact_id: str, limit: int) -> list[QdrantSearchResult]:
