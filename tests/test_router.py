@@ -117,6 +117,29 @@ async def test_router_keeps_short_information_follow_up_in_rag():
 
 
 @pytest.mark.asyncio
+async def test_router_prioritizes_rag_for_factual_question_during_appointment_flow():
+    service, llm = build_service()
+
+    decision = await service.route_state(
+        user_message="y cuales son los precios de la estimulacion?",
+        conversation_summary="Usuario estaba armando una cita.",
+        active_goal="appointment",
+        stage="collecting_slots",
+        pending_action="collecting_slots",
+        pending_question="Necesito la fecha preferida.",
+        appointment_slots={"reason": "psicoterapia"},
+        last_tool_result="appointment missing=preferred_date confidence=0.90",
+        last_user_message="quiero una cita",
+        last_assistant_message="Necesito la fecha preferida.",
+        memories=[],
+    )
+
+    assert decision.next_node == "rag"
+    assert decision.reason == "appointment-to-information"
+    assert llm.calls == []
+
+
+@pytest.mark.asyncio
 async def test_router_uses_llm_when_no_guard_matches():
     decision = StateRoutingDecision(
         next_node="conversation",

@@ -61,25 +61,30 @@ class QdrantRetrievalService:
     async def build_context(self, query: str, contact_id: str, clinic_context: str, memories: list[str]) -> str:
         results = await self.search(query=query, contact_id=contact_id)
         chunks = [
-            "Base de conocimiento de Clinica Eros Neuronal:",
-            clinic_context,
+            f"Consulta RAG ejecutada en Qdrant para: {query}",
             "",
             "Memoria conversacional relevante:",
             "\n".join(f"- {item}" for item in memories) if memories else "- Sin memorias",
-            "",
-            f"Consulta RAG ejecutada en Qdrant para: {query}",
             "",
             "Fragmentos recuperados desde Qdrant:",
         ]
         if results:
             for result in results:
-                source = result.payload.get("source", "unknown")
+                source = result.payload.get("source_file") or result.payload.get("source", "unknown")
                 text = result.payload.get("text", "")
                 chunks.append(f"- [{result.id}] score={result.score:.3f} source={source} text={text}")
         else:
             chunks.append("- Sin resultados")
             if self.ready and not self._simulate:
-                chunks.append("- Qdrant no disponible o sin coincidencias; se responde con contexto base de la clinica.")
+                chunks.extend(
+                    [
+                        "",
+                        "Contexto base de respaldo desde clinic.json:",
+                        clinic_context,
+                        "",
+                        "- Qdrant no disponible o sin coincidencias; se responde con contexto base de la clinica.",
+                    ]
+                )
         return "\n".join(chunks)
 
     async def _http_search(self, query: str, contact_id: str, limit: int) -> list[QdrantSearchResult]:

@@ -118,6 +118,21 @@ class StateRoutingService:
                 reason="empty-message",
             )
 
+        if self._appointment_information_request(routing_packet, user_message):
+            return StateRoutingDecision(
+                next_node="rag",
+                intent="rag",
+                confidence=0.94,
+                needs_retrieval=True,
+                state_update={
+                    "active_goal": "information",
+                    "stage": "lookup",
+                    "pending_action": "",
+                    "pending_question": "",
+                },
+                reason="appointment-to-information",
+            )
+
         if self._appointment_follow_up(routing_packet, user_message):
             return StateRoutingDecision(
                 next_node="appointment",
@@ -204,6 +219,22 @@ class StateRoutingService:
                 user_message,
             )
         )
+
+    def _appointment_information_request(self, routing_packet: RoutingPacket, user_message: str) -> bool:
+        active_appointment = routing_packet.active_goal == "appointment" or routing_packet.stage in {
+            "collecting_slots",
+            "ready_for_handoff",
+        }
+        if not active_appointment:
+            return False
+        compact = " ".join(user_message.split())
+        if not compact:
+            return False
+        if not self._explicit_rag_request(user_message):
+            return False
+        if self._looks_like_slot_answer(compact.lower()):
+            return False
+        return True
 
     def _explicit_appointment_request(self, user_message: str) -> bool:
         appointment_keywords = (
@@ -292,6 +323,18 @@ class StateRoutingService:
         if len(compact) <= 80 and any(marker in compact for marker in follow_up_markers):
             return True
         return compact.endswith("?") and len(compact) <= 120
+
+    def _looks_like_slot_answer(self, user_message: str) -> bool:
+        if re.search(
+            r"\b(hoy|mañana|manana|lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+            user_message,
+        ):
+            return True
+        if re.search(r"\b(\d{1,2}:\d{2}\s?(?:am|pm)?|\d{1,2}\s?(?:am|pm))\b", user_message):
+            return True
+        if user_message in {"si", "sí", "no", "ok", "okay", "va"}:
+            return True
+        return False
 
     def _is_simple_conversation(self, user_message: str) -> bool:
         compact = " ".join(user_message.split())

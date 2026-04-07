@@ -49,6 +49,37 @@ def test_qdrant_build_context_degrades_gracefully_when_connection_fails(monkeypa
     assert "Sin resultados" in context
 
 
+def test_qdrant_build_context_prioritizes_retrieved_fragments(monkeypatch):
+    service = build_service()
+
+    async def fake_search(*args, **kwargs):
+        del args, kwargs
+        from app.services.qdrant import QdrantSearchResult
+
+        return [
+            QdrantSearchResult(
+                id="p1",
+                score=0.91,
+                payload={"text": "Horario general confirmado", "source_file": "doc.md"},
+            )
+        ]
+
+    monkeypatch.setattr(service, "search", fake_search)
+
+    context = __import__("asyncio").run(
+        service.build_context(
+            query="horarios",
+            contact_id="123",
+            clinic_context="Horario: lun-vie 9 a 6",
+            memories=["Prefiere respuestas breves"],
+        )
+    )
+
+    assert "Fragmentos recuperados desde Qdrant" in context
+    assert "Horario general confirmado" in context
+    assert "Contexto base de respaldo desde clinic.json" not in context
+
+
 @pytest.mark.asyncio
 async def test_qdrant_http_search_uses_embedding_vector_without_contact_filter(monkeypatch):
     service = build_service()
