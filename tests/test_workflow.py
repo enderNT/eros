@@ -267,6 +267,18 @@ def test_workflow_passes_recent_context_to_conversation_reply():
     assert second_context.recent_turns[-1]["assistant"] == "Soy Eros Bot. Respuesta para: Hola"
 
 
+def test_workflow_strips_repeated_bot_intro_after_first_turn():
+    workflow, _, _, _ = build_workflow()
+    conversation_id = 910
+
+    asyncio.run(workflow.run(build_webhook("Hola", conversation_id=conversation_id)))
+    second = asyncio.run(workflow.run(build_webhook("y que sigue?", conversation_id=conversation_id)))
+
+    assert not second["response_text"].lower().startswith("hola")
+    assert not second["response_text"].lower().startswith("soy eros bot")
+    assert second["response_text"] == "Respuesta para: y que sigue?"
+
+
 def test_workflow_uses_dspy_runtime_for_reply_generation():
     dspy_runtime = FakeDSPyRuntime()
     workflow, _, qdrant, llm = build_workflow(dspy_runtime=dspy_runtime)

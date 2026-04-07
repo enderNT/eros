@@ -94,6 +94,29 @@ async def test_router_routes_rag_requests_without_llm():
 
 
 @pytest.mark.asyncio
+async def test_router_keeps_short_information_follow_up_in_rag():
+    service, llm = build_service()
+
+    decision = await service.route_state(
+        user_message="y cual estimulacion manejan?",
+        conversation_summary="Usuario pregunta por terapia magnetica.",
+        active_goal="information",
+        stage="lookup",
+        pending_action="",
+        pending_question="",
+        appointment_slots={},
+        last_tool_result="Se hablo de terapia magnetico transcraneal y seguimiento psiquiatrico.",
+        last_user_message="quiero saber sobre la terapia magnetica",
+        last_assistant_message="Te comparti informacion general.",
+        memories=[],
+    )
+
+    assert decision.next_node == "rag"
+    assert decision.reason == "information-follow-up"
+    assert llm.calls == []
+
+
+@pytest.mark.asyncio
 async def test_router_uses_llm_when_no_guard_matches():
     decision = StateRoutingDecision(
         next_node="conversation",

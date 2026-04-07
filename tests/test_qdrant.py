@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from app.services.qdrant import QdrantRetrievalService
 from app.settings import Settings
@@ -46,3 +47,58 @@ def test_qdrant_build_context_degrades_gracefully_when_connection_fails(monkeypa
     assert "Prefiere respuestas breves" in context
     assert "Qdrant no disponible" in context
     assert "Sin resultados" in context
+
+
+@pytest.mark.asyncio
+async def test_qdrant_http_search_uses_embedding_vector_without_contact_filter(monkeypatch):
+    service = build_service()
+    captured = {}
+
+    async def fake_embed_query(query: str):
+        assert query == "horarios"
+        return [0.1, 0.2, 0.3]
+
+    class FakeResponse:
+        status_code = 200
+        text = '{"result":[]}'
+        is_error = False
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "result": [
+                    {
+                        "id": "p1",
+                        "score": 0.9,
+                        "payload": {"text": "Horario general", "source": "doc"},
+                    }
+                ]
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            del exc_type, exc, tb
+            return False
+
+        async def post(self, url, json, headers):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return FakeResponse()
+
+    monkeypatch.setattr(service, "_embed_query", fake_embed_query)
+    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+
+    results = await service._http_search(query="horarios", contact_id="123", limit=3)
+
+    assert results[0].id == "p1"
+    assert captured["json"]["vector"] == [0.1, 0.2, 0.3]
+    assert "filter" not in captured["json"]

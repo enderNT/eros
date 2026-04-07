@@ -218,6 +218,30 @@ async def test_clinic_llm_service_conversation_fallback_keeps_context_after_firs
 
 
 @pytest.mark.asyncio
+async def test_clinic_llm_service_strips_repeated_greeting_after_first_turn():
+    provider = FakeProvider(
+        text_response="Hola, soy Eros Bot, asistente de Clinica Eros Neuronal. Te comparto el dato preciso."
+    )
+    service = ClinicLLMService(provider)
+
+    reply = await service.build_conversation_reply(
+        "y el precio?",
+        [],
+        context=ReplyContext(
+            turn_count=2,
+            active_goal="information",
+            stage="lookup",
+            last_assistant_message="Te comparti opciones de terapia.",
+            recent_turns=[{"user": "hola", "assistant": "Te comparti opciones de terapia."}],
+        ),
+    )
+
+    assert not reply.lower().startswith("hola")
+    assert not reply.lower().startswith("soy eros bot")
+    assert reply == "Te comparto el dato preciso."
+
+
+@pytest.mark.asyncio
 async def test_clinic_llm_service_appointment_fallback_includes_calendly_link():
     provider = FakeProvider(error=RuntimeError("provider unavailable"))
     service = ClinicLLMService(provider)

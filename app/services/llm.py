@@ -178,11 +178,15 @@ class ClinicLLMService:
             "Eres Eros Bot, el asistente virtual de Clinica Eros Neuronal, una clinica de salud mental. "
             "Responde en espanol con tono humano, breve, claro y sereno. "
             "Mantén continuidad con el hilo conversacional y evita reiniciar el contexto en cada turno. "
+            "Solo puedes saludar o presentarte si el contexto indica que es el primer intercambio o si el usuario pregunta explicitamente quien eres. "
+            "En cualquier otro turno, esta prohibido volver a saludar, decir hola o presentarte de nuevo. "
             "Cuando el usuario saluda, pregunta quien eres o es el primer intercambio, presentate como "
             "'Eros Bot, asistente de Clinica Eros Neuronal'. "
             "Ayuda con conversacion general, orientacion inicial y dudas basicas de la clinica. "
             "Si ya existe contexto previo, no te vuelvas a presentar a menos que el usuario lo pida. "
             "Si NO es el primer intercambio, continua la conversacion sin volver a decir hola ni presentarte otra vez. "
+            "No hagas preguntas aclaratorias innecesarias. "
+            "Si la pregunta es factual sobre servicios, horarios, precios, especialistas o politicas, responde directo con lo confirmado; no pidas elegir entre opciones si el contexto ya permite responder. "
             "No inventes servicios ni diagnósticos; si falta informacion concreta, dilo y canaliza con recepcion."
         )
         user_prompt = (
@@ -194,11 +198,14 @@ class ClinicLLMService:
         try:
             substep("conversation_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
             return GeneratedReply(
-                response_text=await self._provider.chat_text(
-                    [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ]
+                response_text=_finalize_reply_text(
+                    await self._provider.chat_text(
+                        [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ]
+                    ),
+                    context,
                 ),
                 reply_mode="llm",
             )
@@ -206,7 +213,7 @@ class ClinicLLMService:
             logger.warning("LLM conversation failed, using deterministic fallback: %s", exc)
             substep("conversation_fallback", "WARN", "mensaje deterministico")
             return GeneratedReply(
-                response_text=self._build_conversation_fallback(context),
+                response_text=_finalize_reply_text(self._build_conversation_fallback(context), context),
                 reply_mode="fallback",
             )
 
@@ -230,6 +237,10 @@ class ClinicLLMService:
             "Eres Eros Bot, asistente de Clinica Eros Neuronal, una clinica de salud mental. "
             "Estas respondiendo en modo RAG. Debes usar solo el contexto recuperado y la memoria compartida; "
             "mantén continuidad con el hilo conversacional y resuelve seguimientos usando el estado recibido. "
+            "Si no es el primer intercambio, no saludes ni te presentes. "
+            "Responde preguntas factuales de forma directa y concreta. "
+            "No preguntes 'cual terapia' o 'cual estimulacion' si el contexto ya enumera las opciones confirmadas; primero explica las opciones disponibles. "
+            "Si la pregunta es un seguimiento corto o eliptico, usa el hilo y el contexto recuperado antes de pedir aclaraciones. "
             "no inventes informacion, horarios, precios, especialistas ni politicas. "
             "Si el contexto no alcanza, dilo con claridad y ofrece canalizar con recepcion. "
             "Da respuestas precisas, utiles y alineadas con una clinica de salud mental."
@@ -245,11 +256,14 @@ class ClinicLLMService:
         try:
             substep("rag_prompt_compose", "OK", f"msg_chars={len(user_message)} memories={len(memories)}")
             return GeneratedReply(
-                response_text=await self._provider.chat_text(
-                    [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ]
+                response_text=_finalize_reply_text(
+                    await self._provider.chat_text(
+                        [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ]
+                    ),
+                    context,
                 ),
                 reply_mode="llm",
             )
@@ -257,9 +271,12 @@ class ClinicLLMService:
             logger.warning("LLM rag failed, using deterministic fallback: %s", exc)
             substep("rag_fallback", "WARN", "RAG degradado a respuesta segura")
             return GeneratedReply(
-                response_text=(
-                    "Soy Eros Bot y solo puedo responder con la informacion recuperada de Clinica Eros Neuronal. "
-                    "Si necesitas un dato que no aparece en el contexto actual, lo canalizo con recepcion."
+                response_text=_finalize_reply_text(
+                    (
+                        "Soy Eros Bot y solo puedo responder con la informacion recuperada de Clinica Eros Neuronal. "
+                        "Si necesitas un dato que no aparece en el contexto actual, lo canalizo con recepcion."
+                    ),
+                    context,
                 ),
                 reply_mode="fallback",
             )
@@ -502,6 +519,7 @@ class ClinicLLMService:
             "Redacta respuestas para ayudar a agendar citas. "
             "Debes sonar claro, amable y profesional. "
             "Mantén continuidad con el hilo y no vuelvas a pedir datos que ya esten presentes en el contexto. "
+            "Si no es el primer intercambio, no saludes ni te presentes otra vez. "
             f"Incluye siempre este enlace exacto para agendar: {CALENDLY_APPOINTMENT_URL} "
             "No prometas disponibilidad distinta a la que el usuario confirme despues en Calendly o con recepcion."
         )
@@ -525,12 +543,12 @@ class ClinicLLMService:
             )
             if CALENDLY_APPOINTMENT_URL not in reply:
                 reply = f"{reply.rstrip()} Agenda aqui: {CALENDLY_APPOINTMENT_URL}".strip()
-            return GeneratedReply(response_text=reply, reply_mode="llm")
+            return GeneratedReply(response_text=_finalize_reply_text(reply, context), reply_mode="llm")
         except Exception as exc:
             logger.warning("LLM appointment reply failed, using deterministic fallback: %s", exc)
             substep("appointment_reply_fallback", "WARN", "respuesta de cita deterministica")
             return GeneratedReply(
-                response_text=self._build_appointment_reply_fallback(appointment),
+                response_text=_finalize_reply_text(self._build_appointment_reply_fallback(appointment), context),
                 reply_mode="fallback",
             )
 
@@ -704,3 +722,20 @@ def _is_first_turn(context: ReplyContext) -> bool:
     if context.recent_turns or context.last_assistant_message or context.summary:
         return False
     return True
+
+
+def _finalize_reply_text(reply: str, context: ReplyContext) -> str:
+    cleaned = " ".join(reply.split()).strip()
+    if not cleaned or _is_first_turn(context):
+        return cleaned
+
+    patterns = (
+        r"^(hola|buenas|buenos dias|buenas tardes|buenas noches)[,!.:\s-]*",
+        r"^soy eros bot(?:,?\s*asistente(?: virtual)? de clinica eros neuronal)?[,!.:\s-]*",
+    )
+    previous = None
+    while cleaned and cleaned != previous:
+        previous = cleaned
+        for pattern in patterns:
+            cleaned = re.sub(pattern, "", cleaned, count=1, flags=re.IGNORECASE).lstrip(" ,.!:-")
+    return cleaned or "Puedo ayudarte con tu consulta."

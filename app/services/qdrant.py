@@ -6,6 +6,7 @@ from hashlib import sha256
 from typing import Any
 
 import httpx
+from openai import AsyncOpenAI
 
 from app.settings import Settings
 
@@ -28,7 +29,15 @@ class QdrantRetrievalService:
         self._collection_name = settings.qdrant_collection_name
         self._timeout = settings.qdrant_timeout_seconds
         self._top_k = settings.qdrant_top_k
-        self._vector_size = settings.qdrant_vector_size
+        self._embedding_model = settings.openai_embedding_model
+        self._embedding_client: AsyncOpenAI | None = None
+        client_kwargs: dict[str, Any] = {"timeout": settings.resolved_llm_timeout_seconds}
+        if settings.resolved_llm_api_key:
+            client_kwargs["api_key"] = settings.resolved_llm_api_key
+        if settings.resolved_llm_base_url:
+            client_kwargs["base_url"] = settings.resolved_llm_base_url.rstrip("/")
+        if settings.resolved_llm_api_key or settings.resolved_llm_base_url:
+            self._embedding_client = AsyncOpenAI(**client_kwargs)
 
     @property
     def ready(self) -> bool:
@@ -40,7 +49,7 @@ class QdrantRetrievalService:
             return self._simulate_search(query=query, contact_id=contact_id, limit=top_k)
         try:
             return await self._http_search(query=query, contact_id=contact_id, limit=top_k)
-        except httpx.HTTPError as exc:
+        except Exception as exc:
             logger.warning(
                 "Qdrant search failed for contact_id=%s query=%s: %s",
                 contact_id,
@@ -74,19 +83,13 @@ class QdrantRetrievalService:
         return "\n".join(chunks)
 
     async def _http_search(self, query: str, contact_id: str, limit: int) -> list[QdrantSearchResult]:
+        del contact_id
+        vector = await self._embed_query(query)
         payload = {
             "limit": limit,
             "with_payload": True,
             "with_vector": False,
-            "vector": self._fake_vector(query, contact_id),
-            "filter": {
-                "must": [
-                    {
-                        "key": "contact_id",
-                        "match": {"value": contact_id},
-                    }
-                ]
-            },
+            "vector": vector,
         }
         headers = {"Content-Type": "application/json"}
         if self._api_key:
@@ -96,6 +99,13 @@ class QdrantRetrievalService:
         logger.info("Qdrant search request prepared for collection=%s limit=%s", self._collection_name, limit)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(url, json=payload, headers=headers)
+            if response.is_error:
+                logger.warning(
+                    "Qdrant returned HTTP %s for collection=%s body=%s",
+                    response.status_code,
+                    self._collection_name,
+                    response.text[:500],
+                )
             response.raise_for_status()
 
         data = response.json()
@@ -109,6 +119,16 @@ class QdrantRetrievalService:
                 )
             )
         return results
+
+    async def _embed_query(self, query: str) -> list[float]:
+        if self._embedding_client is None:
+            raise RuntimeError("No embedding client configured for Qdrant retrieval.")
+        response = await self._embedding_client.embeddings.create(
+            model=self._embedding_model,
+            input=[query],
+        )
+        embedding = response.data[0].embedding if response.data else []
+        return [float(value) for value in embedding]
 
     def _simulate_search(self, query: str, contact_id: str, limit: int) -> list[QdrantSearchResult]:
         logger.info(
@@ -137,11 +157,3 @@ class QdrantRetrievalService:
                 )
             )
         return results
-
-    def _fake_vector(self, query: str, contact_id: str) -> list[float]:
-        digest = sha256(f"{contact_id}:{query}".encode("utf-8")).digest()
-        vector: list[float] = []
-        for index in range(self._vector_size):
-            byte = digest[index % len(digest)]
-            vector.append(round(byte / 255.0, 4))
-        return vector

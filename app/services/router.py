@@ -146,6 +146,19 @@ class StateRoutingService:
                 reason="appointment-request",
             )
 
+        if self._information_follow_up(routing_packet, user_message):
+            return StateRoutingDecision(
+                next_node="rag",
+                intent="rag",
+                confidence=0.89,
+                needs_retrieval=True,
+                state_update={
+                    "active_goal": "information",
+                    "stage": "lookup",
+                },
+                reason="information-follow-up",
+            )
+
         if self._explicit_rag_request(user_message):
             return StateRoutingDecision(
                 next_node="rag",
@@ -198,10 +211,10 @@ class StateRoutingService:
             "agendar",
             "agendo",
             "reservar",
-            "consulta",
             "turno",
-            "doctor",
-            "doctora",
+            "agenda",
+            "calendly",
+            "programar",
             "programar una visita",
         )
         return any(keyword in user_message for keyword in appointment_keywords)
@@ -213,6 +226,15 @@ class StateRoutingService:
             "precio",
             "costo",
             "costos",
+            "terapia",
+            "psicoterapia",
+            "psiquiatrica",
+            "psiquiatrico",
+            "valoracion",
+            "evaluacion",
+            "seguimiento",
+            "estimulacion",
+            "transcraneal",
             "servicio",
             "servicios",
             "doctor",
@@ -228,6 +250,48 @@ class StateRoutingService:
             "pagos",
         )
         return any(keyword in user_message for keyword in rag_keywords)
+
+    def _information_follow_up(self, routing_packet: RoutingPacket, user_message: str) -> bool:
+        has_information_context = (
+            routing_packet.active_goal == "information"
+            or routing_packet.stage == "lookup"
+            or bool(routing_packet.last_tool_result.strip())
+        )
+        if not has_information_context:
+            return False
+        if self._explicit_appointment_request(user_message):
+            return False
+
+        follow_up_markers = (
+            "cual",
+            "cuál",
+            "como",
+            "cómo",
+            "cuanto",
+            "cuánto",
+            "cuando",
+            "cuándo",
+            "esa",
+            "ese",
+            "eso",
+            "esta",
+            "este",
+            "terapia",
+            "estimulacion",
+            "transcraneal",
+            "valoracion",
+            "evaluacion",
+            "seguimiento",
+            "psicoterapia",
+            "psiquiatr",
+            "horario",
+            "precio",
+            "costo",
+        )
+        compact = " ".join(user_message.split())
+        if len(compact) <= 80 and any(marker in compact for marker in follow_up_markers):
+            return True
+        return compact.endswith("?") and len(compact) <= 120
 
     def _is_simple_conversation(self, user_message: str) -> bool:
         compact = " ".join(user_message.split())

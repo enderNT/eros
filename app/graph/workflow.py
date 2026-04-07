@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from copy import deepcopy
 from typing import Any, TypedDict
 
@@ -630,15 +631,21 @@ async def _generate_conversation_reply(llm_service: Any, **kwargs: Any) -> dict[
     context = kwargs.get("context")
     if dspy_runtime is not None and payload is not None and hasattr(dspy_runtime, "generate_conversation_reply"):
         reply = await dspy_runtime.generate_conversation_reply(payload, llm_service, context=context)
-        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+        return {
+            "response_text": _normalize_reply_output(reply.response_text, context),
+            "reply_mode": reply.reply_mode,
+        }
     if payload is not None:
         kwargs["user_message"] = payload["user_message"]
         kwargs["memories"] = payload["memories"]
     if hasattr(llm_service, "generate_conversation_reply"):
         reply = await llm_service.generate_conversation_reply(**kwargs)
-        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+        return {
+            "response_text": _normalize_reply_output(reply.response_text, context),
+            "reply_mode": reply.reply_mode,
+        }
     response_text = await llm_service.build_conversation_reply(**kwargs)
-    return {"response_text": response_text, "reply_mode": "llm"}
+    return {"response_text": _normalize_reply_output(response_text, context), "reply_mode": "llm"}
 
 
 async def _generate_rag_reply(llm_service: Any, **kwargs: Any) -> dict[str, str]:
@@ -647,16 +654,22 @@ async def _generate_rag_reply(llm_service: Any, **kwargs: Any) -> dict[str, str]
     context = kwargs.get("context")
     if dspy_runtime is not None and payload is not None and hasattr(dspy_runtime, "generate_rag_reply"):
         reply = await dspy_runtime.generate_rag_reply(payload, llm_service, context=context)
-        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+        return {
+            "response_text": _normalize_reply_output(reply.response_text, context),
+            "reply_mode": reply.reply_mode,
+        }
     if payload is not None:
         kwargs["user_message"] = payload["user_message"]
         kwargs["memories"] = payload["memories"]
         kwargs["clinic_context"] = payload["retrieved_context"]
     if hasattr(llm_service, "generate_rag_reply"):
         reply = await llm_service.generate_rag_reply(**kwargs)
-        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+        return {
+            "response_text": _normalize_reply_output(reply.response_text, context),
+            "reply_mode": reply.reply_mode,
+        }
     response_text = await llm_service.build_rag_reply(**kwargs)
-    return {"response_text": response_text, "reply_mode": "llm"}
+    return {"response_text": _normalize_reply_output(response_text, context), "reply_mode": "llm"}
 
 
 async def _extract_appointment_payload(llm_service: Any, **kwargs: Any) -> Any:
@@ -680,13 +693,46 @@ async def _generate_appointment_reply(llm_service: Any, **kwargs: Any) -> dict[s
             appointment=appointment,
             context=context,
         )
-        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+        return {
+            "response_text": _normalize_reply_output(reply.response_text, context),
+            "reply_mode": reply.reply_mode,
+        }
     if payload is not None:
         kwargs["user_message"] = payload["user_message"]
         kwargs["memories"] = payload["memories"]
         kwargs["contact_name"] = payload["contact_name"]
     if hasattr(llm_service, "generate_appointment_reply"):
         reply = await llm_service.generate_appointment_reply(**kwargs)
-        return {"response_text": reply.response_text, "reply_mode": reply.reply_mode}
+        return {
+            "response_text": _normalize_reply_output(reply.response_text, context),
+            "reply_mode": reply.reply_mode,
+        }
     response_text = await llm_service.build_appointment_reply(**kwargs)
-    return {"response_text": response_text, "reply_mode": "llm"}
+    return {"response_text": _normalize_reply_output(response_text, context), "reply_mode": "llm"}
+
+
+def _normalize_reply_output(response_text: str, context: ReplyContext | None) -> str:
+    if context is None:
+        return response_text
+    compact = " ".join(response_text.split()).strip()
+    if not compact or _is_first_turn_context(context):
+        return compact
+
+    patterns = (
+        r"^(hola|buenas|buenos dias|buenas tardes|buenas noches)[,!.:\s-]*",
+        r"^soy eros bot(?:,?\s*asistente(?: virtual)? de clinica eros neuronal)?[,!.:\s-]*",
+    )
+    previous = None
+    while compact and compact != previous:
+        previous = compact
+        for pattern in patterns:
+            compact = re.sub(pattern, "", compact, count=1, flags=re.IGNORECASE).lstrip(" ,.!:-")
+    return compact or response_text.strip()
+
+
+def _is_first_turn_context(context: ReplyContext) -> bool:
+    if context.turn_count > 1:
+        return False
+    if context.recent_turns or context.last_assistant_message or context.summary:
+        return False
+    return True
