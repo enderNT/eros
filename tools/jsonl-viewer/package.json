@@ -1,0 +1,10 @@
+{
+  "name": "jsonl-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone JSONL viewer and editor for workspace datasets",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  }
+}
