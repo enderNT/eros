@@ -1,0 +1,15 @@
+{
+  "task": "conversation_reply",
+  "dataset": "exports/dspy/conversation_reply.jsonl",
+  "examples": 5,
+  "dataset_fingerprint": "0957051de65e47d3b3c05b1c149e94bb89dc1eca246a1e7e9345362064cd208b",
+  "compiled_at": "2026-04-10T16:46:40.765622+00:00",
+  "optimizer": "dspy.LabeledFewShot",
+  "validation_split": {
+    "train_examples": 4,
+    "eval_examples": 1,
+    "rule": "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
+  },
+  "artifact_path": "artifacts/dspy/conversation_reply.json",
+  "evaluation_report_path": "artifacts/dspy/conversation_reply.eval.json"
+}

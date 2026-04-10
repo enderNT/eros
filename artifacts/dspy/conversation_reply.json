@@ -1,0 +1,112 @@
+{
+  "_predictor": {
+    "traces": [],
+    "train": [],
+    "demos": [
+      {
+        "user_message": "la terapia de estimulación",
+        "summary": "Usuario dijo \"hola\"; asistente (Eros Bot de Clínica Eros Neuronal) se presentó y pidió su nombre, conversación abierta.",
+        "active_goal": "conversation",
+        "stage": "in_assessment",
+        "pending_question": "¿Que es lo que busca el usuario, de a cuerdo a lo plamnteado por el contexto?",
+        "last_assistant_message": "¿Te refieres a terapia individual, de pareja, primera consulta (evaluación) o seguimiento? ¿Quieres un precio aproximado o el costo exacto de la clínica?\n\nNo tengo las tarifas exactas en este chat; puedo darte un rango orientativo o consultar a recepción y traerte el precio y disponibilidad. También dime si tenés obra social/prepaga, porque eso puede cambiar el costo. ¿Qué preferís?",
+        "recent_turns": "[{\"assistant\": \"Hola, soy Eros Bot, asistente de Clínica Eros Neuronal. ¿En qué puedo ayudarte hoy? ¿Cómo te llamas?\", \"user\": \"hola\"}, {\"assistant\": \"Gracias, Gabriel. Siento que te estés sintiendo así. Para orientarte mejor, ¿puedes responder brevemente a estas preguntas? 1. ¿Desde cuándo llevas con poca energía y falta de ganas? 2. ¿Es algo constante o va y viene de hace tiempo?\", \"user\": \"soy gabriel, me siento con pocas energías sin ganas de hacer nada\"}, {\"assistant\": \"¿Cual es la terapia que te interesa? Acompañamiento psicologico, o, ¿Estimulacion magnetica transcraneal?\", \"user\": \"la terapia cuanto cuesta\"}]",
+        "memories": "[\"Conversacion util: la terapia cuanto cuesta -> ¿Te refieres a terapia individual, de pareja, primera consulta (evaluación) o seguimiento?...\", \"Conversacion util: soy gabriel, me siento con pocas energías sin ganas de hacer nada -> Gracias, Gabriel. Siento que te estés sintiendo a...\"]",
+        "response_text": "La terapia de estimulacion tiene un costo de 1200 por sesion, y el numero de sesiones varia segun el protocolo aplicado, apartir de la evaluacion diagnostica que realizamos, dicha evaluacion tiene costo de 600 pesos, ¿Gustas que agendemos cita para la evaluacion?"
+      },
+      {
+        "user_message": "Holas",
+        "summary": "",
+        "active_goal": "conversation",
+        "stage": "open",
+        "pending_question": "",
+        "last_assistant_message": "",
+        "recent_turns": "[]",
+        "memories": "[]",
+        "response_text": "Hola — soy Eros Bot, asistente de Clínica Eros Neuronal. ¿Con quién tengo el gusto y en qué puedo ayudarte hoy?"
+      },
+      {
+        "user_message": "la terapia cuanto cuesta",
+        "summary": "Usuario dijo \"hola\"; asistente (Eros Bot de Clínica Eros Neuronal) se presentó y pidió su nombre, conversación abierta.",
+        "active_goal": "conversation",
+        "stage": "in_assessment",
+        "pending_question": "Que tipo de terapia de las que manejamos, es la que busca",
+        "last_assistant_message": "Siento que te estés sintiendo así. Nosotros podemos ayudar con nuestras terapias de acompañamiento psicologico y/o estimulacion magnetica trasncraneal",
+        "recent_turns": "[{\"assistant\": \"Hola, soy Eros Bot, asistente de Clínica Eros Neuronal. ¿En qué puedo ayudarte hoy? ¿Cómo te llamas?\", \"user\": \"hola\"}, {\"assistant\": \"Siento que te estés sintiendo así. Nosotros podemos ayudar con nuestras terapias de acompañamiento psicologico y/o estimulacion magnetica trasncraneal\", \"user\": \"soy gabriel, me siento con pocas energías sin ganas de hacer nada\"}]",
+        "memories": "[\"Conversacion util: soy gabriel, me siento con pocas energías sin ganas de hacer nada -> Gracias, Gabriel. Siento que te estés sintiendo a...\"]",
+        "response_text": "¿Cual es la terapia que te interesa? Acompañamiento psicologico, o, ¿Estimulacion magnetica transcraneal?"
+      },
+      {
+        "user_message": "soy gabriel, me siento con pocas energías sin ganas de hacer nada",
+        "summary": "Usuario dijo \"hola\"; asistente (Eros Bot de Clínica Eros Neuronal) se presentó y pidió su nombre, conversación abierta.",
+        "active_goal": "conversation",
+        "stage": "in_assessment",
+        "pending_question": "ask_symptom_followups",
+        "last_assistant_message": "Hola, soy Eros Bot, asistente de Clínica Eros Neuronal. ¿En qué puedo ayudarte hoy? ¿Cómo te llamas?",
+        "recent_turns": "[{\"assistant\": \"Hola, soy Eros Bot, asistente de Clínica Eros Neuronal. ¿En qué puedo ayudarte hoy? ¿Cómo te llamas?\", \"user\": \"hola\"}]",
+        "memories": "[{\"type\": \"name\", \"value\": \"Gabriel\"}]",
+        "response_text": "Entendemos como te puedes llegar a sentir, con nuestra ayuda podemos guiarte por este proceso, para guiarte hacia una mejora, dime, ¿Desde cuando llevas sientiendote asi?"
+      },
+      {
+        "user_message": "tengo depresión",
+        "summary": "Usuario informa 'tengo depresión'. No hay historial previo en el paquete de enrutamiento.",
+        "active_goal": "evaluar_severidad_y_riesgo",
+        "stage": "triage_inicial",
+        "pending_question": "¿Desde cuándo se siente así? ¿Ha tenido pensamientos de hacerse daño o suicidarse? ¿Cómo afecta esto su vida diaria y tiene apoyo cercano?",
+        "last_assistant_message": "",
+        "recent_turns": "[]",
+        "memories": "[\"Usuario reportó depresión (mensaje: 'tengo depresión')\"]",
+        "response_text": "Hola, soy Eros Bot, asistente de Clínica Eros Neuronal. Siento que estés pasando por esto y te entendemos muy bien. Para evaluar mejor y como te podriamos ayudar, ¿Me puedes decir:\n\n1) ¿Desde cuándo te sientes así?. En eros neuronal queremos apoyarte, y para ello nos gustaria que nos contaras, un poco sobre los sintomas que tienes, o si tu gustas, podemos agendar una cita para que realicemos una evaluacion presencial"
+      }
+    ],
+    "signature": {
+      "instructions": "Draft a conversational assistant reply.",
+      "fields": [
+        {
+          "prefix": "User Message:",
+          "description": "${user_message}"
+        },
+        {
+          "prefix": "Summary:",
+          "description": "${summary}"
+        },
+        {
+          "prefix": "Active Goal:",
+          "description": "${active_goal}"
+        },
+        {
+          "prefix": "Stage:",
+          "description": "${stage}"
+        },
+        {
+          "prefix": "Pending Question:",
+          "description": "${pending_question}"
+        },
+        {
+          "prefix": "Last Assistant Message:",
+          "description": "${last_assistant_message}"
+        },
+        {
+          "prefix": "Recent Turns:",
+          "description": "${recent_turns}"
+        },
+        {
+          "prefix": "Memories:",
+          "description": "${memories}"
+        },
+        {
+          "prefix": "Response Text:",
+          "description": "${response_text}"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.13",
+      "dspy": "3.1.3",
+      "cloudpickle": "3.1"
+    }
+  }
+}

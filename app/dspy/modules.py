@@ -23,49 +23,73 @@ def _build_predictor(signature: type[Any]) -> Any:
     return dspy.Predict(signature)
 
 
-class StateRouterModule:
-    def __init__(self, predictor: Any | None = None) -> None:
-        self._predictor = predictor or _build_predictor(StateRouterSignature)
+if dspy is not None:
 
-    def forward(self, **kwargs: Any) -> Any:
-        return self._predictor(**kwargs)
+    class _BaseDSPyModule(dspy.Module):
+        signature: type[Any]
 
+        def __init__(self, predictor: Any | None = None) -> None:
+            super().__init__()
+            self._predictor = predictor or _build_predictor(self.signature)
 
-class AppointmentExtractionModule:
-    def __init__(self, predictor: Any | None = None) -> None:
-        self._predictor = predictor or _build_predictor(AppointmentExtractionSignature)
-
-    def forward(self, **kwargs: Any) -> Any:
-        return self._predictor(**kwargs)
+        def forward(self, **kwargs: Any) -> Any:
+            return self._predictor(**kwargs)
 
 
-class ConversationReplyModule:
-    def __init__(self, predictor: Any | None = None) -> None:
-        self._predictor = predictor or _build_predictor(ConversationReplySignature)
-
-    def forward(self, **kwargs: Any) -> Any:
-        return self._predictor(**kwargs)
+    class StateRouterModule(_BaseDSPyModule):
+        signature = StateRouterSignature
 
 
-class RagReplyModule:
-    def __init__(self, predictor: Any | None = None) -> None:
-        self._predictor = predictor or _build_predictor(RagReplySignature)
-
-    def forward(self, **kwargs: Any) -> Any:
-        return self._predictor(**kwargs)
+    class AppointmentExtractionModule(_BaseDSPyModule):
+        signature = AppointmentExtractionSignature
 
 
-class AppointmentReplyModule:
-    def __init__(self, predictor: Any | None = None) -> None:
-        self._predictor = predictor or _build_predictor(AppointmentReplySignature)
-
-    def forward(self, **kwargs: Any) -> Any:
-        return self._predictor(**kwargs)
+    class ConversationReplyModule(_BaseDSPyModule):
+        signature = ConversationReplySignature
 
 
-class StateSummaryModule:
-    def __init__(self, predictor: Any | None = None) -> None:
-        self._predictor = predictor or _build_predictor(StateSummarySignature)
+    class RagReplyModule(_BaseDSPyModule):
+        signature = RagReplySignature
 
-    def forward(self, **kwargs: Any) -> Any:
-        return self._predictor(**kwargs)
+
+    class AppointmentReplyModule(_BaseDSPyModule):
+        signature = AppointmentReplySignature
+
+
+    class StateSummaryModule(_BaseDSPyModule):
+        signature = StateSummarySignature
+
+else:
+
+    class _BaseDSPyModule:
+        signature: type[Any]
+
+        def __init__(self, predictor: Any | None = None) -> None:
+            self._predictor = predictor or _build_predictor(self.signature)
+
+        def forward(self, **kwargs: Any) -> Any:
+            return self._predictor(**kwargs)
+
+
+    class StateRouterModule(_BaseDSPyModule):
+        signature = StateRouterSignature
+
+
+    class AppointmentExtractionModule(_BaseDSPyModule):
+        signature = AppointmentExtractionSignature
+
+
+    class ConversationReplyModule(_BaseDSPyModule):
+        signature = ConversationReplySignature
+
+
+    class RagReplyModule(_BaseDSPyModule):
+        signature = RagReplySignature
+
+
+    class AppointmentReplyModule(_BaseDSPyModule):
+        signature = AppointmentReplySignature
+
+
+    class StateSummaryModule(_BaseDSPyModule):
+        signature = StateSummarySignature

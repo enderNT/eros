@@ -66,16 +66,7 @@ class NativeDSPyExecutor:
     def __init__(self, settings: Settings) -> None:
         if dspy is None:
             raise RuntimeError("DSPy is not installed. Install project dependencies to enable DSPy runtime.")
-        model_name = settings.resolved_dspy_model
-        qualified_model = model_name if "/" in model_name else f"openai/{model_name}"
-        lm_kwargs: dict[str, Any] = {}
-        if settings.resolved_dspy_api_key:
-            lm_kwargs["api_key"] = settings.resolved_dspy_api_key
-        if settings.resolved_dspy_base_url:
-            lm_kwargs["api_base"] = settings.resolved_dspy_base_url.rstrip("/")
-        if settings.resolved_llm_temperature is not None:
-            lm_kwargs["temperature"] = settings.resolved_llm_temperature
-        dspy.configure(lm=dspy.LM(model=qualified_model, **lm_kwargs))
+        dspy.configure(lm=_build_dspy_lm(settings))
         self._state_router = StateRouterModule()
         self._appointment_extraction = AppointmentExtractionModule()
         self._state_summary = StateSummaryModule()
@@ -121,7 +112,11 @@ class NativeDSPyExecutor:
         load = getattr(module, "load", None)
         if not callable(load):
             raise RuntimeError(f"DSPy module {module_factory.__name__} does not support artifact loading.")
-        load(str(artifact_path))
+        try:
+            load(str(artifact_path))
+        except Exception as exc:
+            logger.warning("Failed to load DSPy artifact %s: %s", artifact_path, exc)
+            return None
         return module
 
 
@@ -267,6 +262,28 @@ def build_dspy_runtime(settings: Settings, executor: DSPyExecutor | None = None)
     return DSPyRuntime(settings=settings, executor=executor)
 
 
+def _build_dspy_lm(settings: Settings) -> Any:
+    if dspy is None:
+        raise RuntimeError("DSPy is not installed. Install project dependencies to enable DSPy runtime.")
+
+    model_name = settings.resolved_dspy_model
+    qualified_model = model_name if "/" in model_name else f"openai/{model_name}"
+    lm_kwargs: dict[str, Any] = {}
+    if settings.resolved_dspy_api_key:
+        lm_kwargs["api_key"] = settings.resolved_dspy_api_key
+    if settings.resolved_dspy_base_url:
+        lm_kwargs["api_base"] = settings.resolved_dspy_base_url.rstrip("/")
+
+    temperature = settings.resolved_llm_temperature
+    if _is_openai_reasoning_model(model_name):
+        lm_kwargs["temperature"] = None if temperature != 1.0 else temperature
+        lm_kwargs["max_tokens"] = 16000
+    elif temperature is not None:
+        lm_kwargs["temperature"] = temperature
+
+    return dspy.LM(model=qualified_model, **lm_kwargs)
+
+
 def _serialize_router_payload(routing_packet: RoutingPacket, guard_hint: dict[str, Any]) -> dict[str, Any]:
     return {
         "user_message": _coerce_text(routing_packet.user_message),
@@ -377,3 +394,9 @@ def _coerce_text(value: Any) -> str:
 
 def _stable_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _is_openai_reasoning_model(model_name: str) -> bool:
+    normalized = model_name.strip().lower()
+    bare_name = normalized.split("/", 1)[-1]
+    return bare_name.startswith("gpt-5")

@@ -1,7 +1,11 @@
 import asyncio
+import json
 from pathlib import Path
 
+import pytest
+
 from app.dspy.dataset import DSPyDatasetExample, PostgresDSPyDatasetStore
+from app.dspy.runtime import NativeDSPyExecutor
 from app.dspy.runtime import (
     _serialize_appointment_reply_payload,
     _serialize_conversation_reply_payload,
@@ -11,6 +15,7 @@ from app.dspy.runtime import (
 from app.models.schemas import RoutingPacket
 from app.services.llm import GeneratedReply
 from app.settings import Settings
+from scripts import optimize_dspy_task
 
 
 class FakeExecutor:
@@ -294,3 +299,179 @@ def test_dspy_dataset_example_jsonl_serialization():
 
     assert '"task_name": "state_router"' in row
     assert '"next_node": "conversation"' in row
+
+
+def test_optimize_script_loads_multiline_json_objects(tmp_path):
+    dataset_path = tmp_path / "conversation_reply.jsonl"
+    dataset_path.write_text(
+        (
+            json.dumps(
+                {
+                    "trace_id": "trace-1",
+                    "task_name": "conversation_reply",
+                    "input_payload": {"user_message": "Hola"},
+                    "target_payload": {"response_text": "Hola"},
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "trace_id": "trace-2",
+                    "task_name": "conversation_reply",
+                    "input_payload": {"user_message": "Precio"},
+                    "target_payload": {"response_text": "Te ayudo con eso"},
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        ),
+        encoding="utf-8",
+    )
+
+    rows = optimize_dspy_task._load_examples(dataset_path)
+
+    assert [row["trace_id"] for row in rows] == ["trace-1", "trace-2"]
+
+
+def test_optimize_script_validates_conversation_reply_examples():
+    valid_rows = optimize_dspy_task._validate_examples(
+        "conversation_reply",
+        [
+            {
+                "trace_id": "trace-1",
+                "task_name": "conversation_reply",
+                "input_payload": {"user_message": "Hola"},
+                "target_payload": {"response_text": "Hola"},
+            }
+        ],
+    )
+
+    assert len(valid_rows) == 1
+
+    with pytest.raises(ValueError, match="expected only 'conversation_reply' rows"):
+        optimize_dspy_task._validate_examples(
+            "conversation_reply",
+            [
+                {
+                    "trace_id": "trace-2",
+                    "task_name": "rag_reply",
+                    "input_payload": {"user_message": "Hola"},
+                    "target_payload": {"response_text": "Hola"},
+                }
+            ],
+        )
+
+    with pytest.raises(ValueError, match="target_payload.response_text"):
+        optimize_dspy_task._validate_examples(
+            "conversation_reply",
+            [
+                {
+                    "trace_id": "trace-3",
+                    "task_name": "conversation_reply",
+                    "input_payload": {"user_message": "Hola"},
+                    "target_payload": {},
+                }
+            ],
+        )
+
+
+def test_optimize_script_generates_conversation_reply_artifacts(tmp_path, monkeypatch):
+    dataset_path = tmp_path / "conversation_reply.jsonl"
+    dataset_rows = [
+        {
+            "trace_id": f"trace-{index}",
+            "task_name": "conversation_reply",
+            "input_payload": {
+                "user_message": f"mensaje {index}",
+                "summary": "",
+                "active_goal": "conversation",
+                "stage": "open",
+                "pending_question": "",
+                "last_assistant_message": "",
+                "recent_turns": [],
+                "memories": [],
+            },
+            "target_payload": {"response_text": f"objetivo {index}"},
+        }
+        for index in range(5)
+    ]
+    dataset_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in dataset_rows) + "\n", encoding="utf-8")
+    artifact_path = tmp_path / "artifacts" / "conversation_reply.json"
+
+    class FakeExample(dict):
+        def with_inputs(self, *keys):
+            self["input_keys"] = keys
+            return self
+
+    class FakeModule:
+        def __init__(self, mode="baseline"):
+            self.mode = mode
+
+        def forward(self, **kwargs):
+            user_message = kwargs.get("user_message", "")
+            return {"response_text": f"{self.mode}:{user_message}"}
+
+        def save(self, path):
+            Path(path).write_text(json.dumps({"mode": self.mode}), encoding="utf-8")
+
+        def load(self, path):
+            self.loaded_from = path
+
+    class FakeOptimizer:
+        def __init__(self, k):
+            self.k = k
+
+        def compile(self, module, *, trainset, sample=True):
+            compiled = FakeModule(mode=f"optimized-{len(trainset)}")
+            compiled.trainset = list(trainset)
+            return compiled
+
+    class FakeDSPy:
+        Example = FakeExample
+        LabeledFewShot = FakeOptimizer
+
+    monkeypatch.setattr(optimize_dspy_task, "dspy", FakeDSPy)
+    monkeypatch.setattr(optimize_dspy_task, "ConversationReplyModule", FakeModule)
+    monkeypatch.setitem(
+        optimize_dspy_task.TASKS,
+        "conversation_reply",
+        (FakeModule, lambda payload: dict(payload)),
+    )
+
+    result = optimize_dspy_task._run_conversation_reply_flow(dataset_path, artifact_path)
+
+    assert result["train_examples"] == 4
+    assert result["eval_examples"] == 1
+    assert artifact_path.exists()
+    assert artifact_path.with_suffix(".eval.json").exists()
+    assert artifact_path.with_suffix(".meta.json").exists()
+
+    report = json.loads(artifact_path.with_suffix(".eval.json").read_text(encoding="utf-8"))
+    assert report["valid_examples"] == 5
+    assert len(report["examples"]) == 1
+    assert report["examples"][0]["baseline_response_text"].startswith("baseline:")
+    assert report["examples"][0]["optimized_response_text"].startswith("optimized-4:")
+
+
+def test_native_dspy_executor_uses_default_conversation_artifact_path():
+    settings = Settings(llm_api_key=None, openai_api_key=None)
+
+    assert settings.resolve_dspy_artifact_path("conversation_reply") == Path("artifacts/dspy/conversation_reply.json")
+
+
+def test_native_dspy_executor_returns_none_when_artifact_load_fails(tmp_path):
+    artifact_path = tmp_path / "broken.json"
+    artifact_path.write_text("{}", encoding="utf-8")
+
+    class BrokenModule:
+        def load(self, path):
+            raise RuntimeError(f"cannot load {path}")
+
+    executor = NativeDSPyExecutor.__new__(NativeDSPyExecutor)
+
+    loaded = executor._load_module(artifact_path, BrokenModule)
+
+    assert loaded is None
