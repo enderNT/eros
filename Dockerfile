@@ -13,6 +13,7 @@ RUN apt-get update \
 COPY pyproject.toml README.md ./
 COPY app ./app
 COPY config ./config
+COPY artifacts ./artifacts
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install .
