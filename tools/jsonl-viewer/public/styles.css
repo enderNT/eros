@@ -34,6 +34,10 @@ body {
   color: var(--ink);
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 button,
 input,
 textarea {
@@ -295,6 +299,45 @@ h2 {
   background: rgba(255, 253, 249, 0.92);
 }
 
+.editor-textarea-modal {
+  min-height: min(72vh, 900px);
+}
+
+.editor-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.48);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 50;
+}
+
+.editor-modal-backdrop[hidden] {
+  display: none;
+}
+
+.editor-modal {
+  width: min(1500px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--card-strong);
+  border: 1px solid rgba(108, 82, 52, 0.18);
+  border-radius: 28px;
+  box-shadow: 0 28px 60px rgba(20, 16, 12, 0.26);
+  padding: 1.25rem;
+}
+
+.editor-modal-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -363,7 +406,8 @@ h2 {
 
   .topbar,
   .panel-header,
-  .workspace-meta {
+  .workspace-meta,
+  .editor-modal-header {
     flex-direction: column;
   }
 

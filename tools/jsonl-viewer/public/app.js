@@ -1,6 +1,7 @@
 const state = {
   workspaceRoot: "",
   files: [],
+  isModalOpen: false,
   mode: null,
   currentPath: "",
   records: [],
@@ -20,6 +21,7 @@ const elements = {
   editorSubtitle: document.querySelector("#editor-subtitle"),
   editorTextarea: document.querySelector("#editor-textarea"),
   editorTitle: document.querySelector("#editor-title"),
+  editorModalBackdrop: document.querySelector("#editor-modal-backdrop"),
   entryList: document.querySelector("#entry-list"),
   errorCount: document.querySelector("#error-count"),
   fileOptions: document.querySelector("#file-options"),
@@ -31,7 +33,13 @@ const elements = {
   loadWorkspaceBtn: document.querySelector("#load-workspace-btn"),
   localFileInput: document.querySelector("#local-file-input"),
   modeLabel: document.querySelector("#mode-label"),
+  modalDirtyLabel: document.querySelector("#modal-dirty-label"),
+  modalEditorTextarea: document.querySelector("#modal-editor-textarea"),
+  modalFormatBtn: document.querySelector("#modal-format-btn"),
+  modalValidationLabel: document.querySelector("#modal-validation-label"),
   pathInput: document.querySelector("#path-input"),
+  closeModalBtn: document.querySelector("#close-modal-btn"),
+  openModalBtn: document.querySelector("#open-modal-btn"),
   recordCount: document.querySelector("#record-count"),
   refreshFilesBtn: document.querySelector("#refresh-files-btn"),
   saveBtn: document.querySelector("#save-btn"),
@@ -171,6 +179,8 @@ function setDirty(nextDirty) {
   state.dirty = nextDirty;
   elements.dirtyLabel.textContent = nextDirty ? "Cambios sin guardar" : "Sin cambios";
   elements.dirtyLabel.className = `pill ${nextDirty ? "danger" : "neutral"}`;
+  elements.modalDirtyLabel.textContent = elements.dirtyLabel.textContent;
+  elements.modalDirtyLabel.className = elements.dirtyLabel.className;
 }
 
 function getSelectedRecordIndex() {
@@ -240,7 +250,7 @@ function renderEntryList() {
   });
 }
 
-function updateEditor() {
+function updateEditor(preserveSource = null) {
   const record = getSelectedRecord();
 
   if (!record) {
@@ -250,6 +260,10 @@ function updateEditor() {
     elements.editorTextarea.disabled = true;
     elements.validationLabel.textContent = "Sin seleccion";
     elements.validationLabel.className = "pill neutral";
+    elements.modalEditorTextarea.value = "";
+    elements.modalEditorTextarea.disabled = true;
+    elements.modalValidationLabel.textContent = "Sin seleccion";
+    elements.modalValidationLabel.className = "pill neutral";
     return;
   }
 
@@ -261,12 +275,18 @@ function updateEditor() {
   elements.editorTextarea.disabled = false;
 
   const editorValue = record.editorValue || record.raw;
-  if (elements.editorTextarea.value !== editorValue) {
+  if (preserveSource !== "main" && elements.editorTextarea.value !== editorValue) {
     elements.editorTextarea.value = editorValue;
   }
+  if (preserveSource !== "modal" && elements.modalEditorTextarea.value !== editorValue) {
+    elements.modalEditorTextarea.value = editorValue;
+  }
+  elements.modalEditorTextarea.disabled = false;
 
   elements.validationLabel.textContent = record.valid ? "JSON valido" : "JSON invalido";
   elements.validationLabel.className = `pill ${record.valid ? "success" : "danger"}`;
+  elements.modalValidationLabel.textContent = elements.validationLabel.textContent;
+  elements.modalValidationLabel.className = elements.validationLabel.className;
 }
 
 function render() {
@@ -278,6 +298,25 @@ function render() {
 function selectRecord(recordId) {
   state.selectedRecordId = recordId;
   render();
+}
+
+function openEditorModal() {
+  if (!getSelectedRecord()) {
+    setBanner("Selecciona un registro antes de abrir el modal.", "danger");
+    return;
+  }
+
+  state.isModalOpen = true;
+  elements.editorModalBackdrop.hidden = false;
+  document.body.classList.add("modal-open");
+  updateEditor();
+  elements.modalEditorTextarea.focus();
+}
+
+function closeEditorModal() {
+  state.isModalOpen = false;
+  elements.editorModalBackdrop.hidden = true;
+  document.body.classList.remove("modal-open");
 }
 
 function escapeHtml(value) {
@@ -399,13 +438,14 @@ async function saveWorkspaceFile() {
   }
 }
 
-function updateRecordFromTextArea() {
+function updateRecordFromTextArea(event) {
   const record = getSelectedRecord();
   if (!record) {
     return;
   }
 
-  const userText = elements.editorTextarea.value;
+  const source = event?.target === elements.modalEditorTextarea ? "modal" : "main";
+  const userText = source === "modal" ? elements.modalEditorTextarea.value : elements.editorTextarea.value;
 
   if (!userText.trim()) {
     record.raw = "";
@@ -415,7 +455,7 @@ function updateRecordFromTextArea() {
     record.error = "La linea esta vacia.";
     setDirty(true);
     renderEntryList();
-    updateEditor();
+    updateEditor(source);
     return;
   }
 
@@ -436,7 +476,7 @@ function updateRecordFromTextArea() {
 
   setDirty(true);
   renderEntryList();
-  updateEditor();
+  updateEditor(source);
   updateSummaryCards();
 }
 
@@ -479,7 +519,7 @@ function deleteRecord() {
   setBanner("Registro eliminado.", "success");
 }
 
-function formatSelectedRecord() {
+function formatSelectedRecord(source = "main") {
   const record = getSelectedRecord();
   if (!record) {
     setBanner("Selecciona una linea para formatearla.", "danger");
@@ -487,10 +527,15 @@ function formatSelectedRecord() {
   }
 
   try {
-    const formatted = JSON.stringify(JSON.parse(record.editorValue || record.raw), null, 2);
+    const currentValue = source === "modal" ? elements.modalEditorTextarea.value : elements.editorTextarea.value;
+    const formatted = JSON.stringify(JSON.parse(currentValue || record.editorValue || record.raw), null, 2);
     record.editorValue = formatted;
-    elements.editorTextarea.value = formatted;
-    updateEditor();
+    if (source === "modal") {
+      elements.modalEditorTextarea.value = formatted;
+    } else {
+      elements.editorTextarea.value = formatted;
+    }
+    updateEditor(source);
     setBanner("JSON formateado en el editor.", "success");
   } catch (error) {
     setBanner("No se puede formatear mientras el JSON sea invalido.", "danger");
@@ -559,14 +604,23 @@ function bindEvents() {
   elements.addEntryBtn.addEventListener("click", addRecord);
   elements.duplicateEntryBtn.addEventListener("click", duplicateRecord);
   elements.deleteEntryBtn.addEventListener("click", deleteRecord);
-  elements.formatBtn.addEventListener("click", formatSelectedRecord);
+  elements.formatBtn.addEventListener("click", () => formatSelectedRecord("main"));
   elements.downloadBtn.addEventListener("click", downloadCurrentJsonl);
+  elements.openModalBtn.addEventListener("click", openEditorModal);
+  elements.closeModalBtn.addEventListener("click", closeEditorModal);
+  elements.modalFormatBtn.addEventListener("click", () => formatSelectedRecord("modal"));
   elements.jumpBtn.addEventListener("click", jumpToRecord);
   elements.searchInput.addEventListener("input", (event) => {
     state.searchTerm = event.target.value;
     render();
   });
   elements.editorTextarea.addEventListener("input", updateRecordFromTextArea);
+  elements.modalEditorTextarea.addEventListener("input", updateRecordFromTextArea);
+  elements.editorModalBackdrop.addEventListener("click", (event) => {
+    if (event.target === elements.editorModalBackdrop) {
+      closeEditorModal();
+    }
+  });
   elements.localFileInput.addEventListener("change", handleLocalFileSelection);
   elements.pathInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -579,6 +633,10 @@ function bindEvents() {
     }
   });
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.isModalOpen) {
+      closeEditorModal();
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
       if (state.mode === "workspace") {
