@@ -10,6 +10,7 @@ from app.dspy.runtime import (
     _serialize_appointment_reply_payload,
     _serialize_conversation_reply_payload,
     _serialize_rag_reply_payload,
+    _serialize_state_router_payload,
     build_dspy_runtime,
 )
 from app.models.schemas import RoutingPacket
@@ -106,6 +107,29 @@ def test_conversation_reply_payload_serialization_is_stable():
 
     assert serialized["recent_turns"] == '[{"assistant": "A", "user": "U"}]'
     assert serialized["memories"] == '["Recuerdo 1", "Recuerdo 2"]'
+
+
+def test_state_router_payload_serialization_is_stable():
+    serialized = _serialize_state_router_payload(
+        {
+            "user_message": "Hola",
+            "conversation_summary": "Resumen",
+            "active_goal": "conversation",
+            "stage": "open",
+            "pending_action": "",
+            "pending_question": "",
+            "appointment_slots": {"preferred_date": "mañana"},
+            "last_tool_result": "",
+            "last_user_message": "Hola",
+            "last_assistant_message": "Hola anterior",
+            "memories": ["Recuerdo 1"],
+            "guard_hint": {"next_node": "conversation"},
+        }
+    )
+
+    assert serialized["appointment_slots"] == '{"preferred_date": "mañana"}'
+    assert serialized["memories"] == '["Recuerdo 1"]'
+    assert serialized["guard_hint"] == '{"next_node": "conversation"}'
 
 
 def test_rag_reply_payload_serialization_keeps_full_context():
@@ -245,9 +269,11 @@ def test_settings_resolve_dspy_artifact_path_with_task_specific_override():
         llm_api_key=None,
         openai_api_key=None,
         dspy_artifacts_dir=Path("artifacts/base"),
+        dspy_state_router_artifact=Path("custom/state_router.json"),
         dspy_rag_reply_artifact=Path("custom/rag.json"),
     )
 
+    assert settings.resolve_dspy_artifact_path("state_router") == Path("custom/state_router.json")
     assert settings.resolve_dspy_artifact_path("conversation_reply") == Path("artifacts/base/conversation_reply.json")
     assert settings.resolve_dspy_artifact_path("rag_reply") == Path("custom/rag.json")
 
@@ -378,6 +404,81 @@ def test_optimize_script_validates_conversation_reply_examples():
         )
 
 
+def test_optimize_script_validates_state_router_examples():
+    valid_rows = optimize_dspy_task._validate_examples(
+        "state_router",
+        [
+            {
+                "trace_id": "trace-1",
+                "task_name": "state_router",
+                "input_payload": {
+                    "user_message": "Hola",
+                    "conversation_summary": "",
+                    "active_goal": "",
+                    "stage": "",
+                    "pending_action": "",
+                    "pending_question": "",
+                    "appointment_slots": {},
+                    "last_tool_result": "",
+                    "last_user_message": "Hola",
+                    "last_assistant_message": "",
+                    "memories": [],
+                    "guard_hint": {},
+                },
+                "target_payload": {
+                    "next_node": "conversation",
+                    "intent": "conversation",
+                    "confidence": 0.9,
+                    "needs_retrieval": False,
+                    "state_update": {},
+                    "reason": "simple-conversation",
+                },
+            }
+        ],
+    )
+
+    assert len(valid_rows) == 1
+
+    with pytest.raises(ValueError, match="input_payload.user_message"):
+        optimize_dspy_task._validate_examples(
+            "state_router",
+            [
+                {
+                    "trace_id": "trace-2",
+                    "task_name": "state_router",
+                    "input_payload": {"conversation_summary": ""},
+                    "target_payload": {
+                        "next_node": "conversation",
+                        "intent": "conversation",
+                        "confidence": 0.9,
+                        "needs_retrieval": False,
+                        "state_update": {},
+                        "reason": "simple-conversation",
+                    },
+                }
+            ],
+        )
+
+    with pytest.raises(ValueError, match="target_payload.next_node"):
+        optimize_dspy_task._validate_examples(
+            "state_router",
+            [
+                {
+                    "trace_id": "trace-3",
+                    "task_name": "state_router",
+                    "input_payload": {"user_message": "Hola"},
+                    "target_payload": {
+                        "intent": "conversation",
+                        "confidence": 0.9,
+                        "needs_retrieval": False,
+                        "state_update": {},
+                        "reason": "simple-conversation",
+                    },
+                }
+            ],
+        )
+
+
 def test_optimize_script_generates_conversation_reply_artifacts(tmp_path, monkeypatch):
     dataset_path = tmp_path / "conversation_reply.jsonl"
     dataset_rows = [
@@ -456,10 +557,107 @@ def test_optimize_script_generates_conversation_reply_artifacts(tmp_path, monkey
     assert report["examples"][0]["optimized_response_text"].startswith("optimized-4:")
 
 
+def test_optimize_script_generates_state_router_artifacts(tmp_path, monkeypatch):
+    dataset_path = tmp_path / "state_router.jsonl"
+    dataset_rows = [
+        {
+            "trace_id": f"trace-{index}",
+            "task_name": "state_router",
+            "input_payload": {
+                "user_message": f"mensaje {index}",
+                "conversation_summary": "",
+                "active_goal": "conversation",
+                "stage": "open",
+                "pending_action": "",
+                "pending_question": "",
+                "appointment_slots": {},
+                "last_tool_result": "",
+                "last_user_message": f"mensaje {index}",
+                "last_assistant_message": "",
+                "memories": [],
+                "guard_hint": {},
+            },
+            "target_payload": {
+                "next_node": "conversation" if index % 2 == 0 else "rag",
+                "intent": "conversation" if index % 2 == 0 else "rag",
+                "confidence": 0.9,
+                "needs_retrieval": bool(index % 2),
+                "state_update": {"stage": "open"},
+                "reason": f"reason {index}",
+            },
+        }
+        for index in range(5)
+    ]
+    dataset_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in dataset_rows) + "\n", encoding="utf-8")
+    artifact_path = tmp_path / "artifacts" / "state_router.json"
+
+    class FakeExample(dict):
+        def with_inputs(self, *keys):
+            self["input_keys"] = keys
+            return self
+
+    class FakeModule:
+        def __init__(self, mode="baseline"):
+            self.mode = mode
+
+        def forward(self, **kwargs):
+            user_message = kwargs.get("user_message", "")
+            return {
+                "next_node": "conversation",
+                "intent": f"{self.mode}:{user_message}",
+                "confidence": 0.8,
+                "needs_retrieval": False,
+                "state_update": {"mode": self.mode},
+                "reason": self.mode,
+            }
+
+        def save(self, path):
+            Path(path).write_text(json.dumps({"mode": self.mode}), encoding="utf-8")
+
+        def load(self, path):
+            self.loaded_from = path
+
+    class FakeOptimizer:
+        def __init__(self, k):
+            self.k = k
+
+        def compile(self, module, *, trainset, sample=True):
+            compiled = FakeModule(mode=f"optimized-{len(trainset)}")
+            compiled.trainset = list(trainset)
+            return compiled
+
+    class FakeDSPy:
+        Example = FakeExample
+        LabeledFewShot = FakeOptimizer
+
+    monkeypatch.setattr(optimize_dspy_task, "dspy", FakeDSPy)
+    monkeypatch.setattr(optimize_dspy_task, "StateRouterModule", FakeModule)
+    monkeypatch.setitem(
+        optimize_dspy_task.TASKS,
+        "state_router",
+        (FakeModule, lambda payload: dict(payload)),
+    )
+
+    result = optimize_dspy_task._run_state_router_flow(dataset_path, artifact_path)
+
+    assert result["train_examples"] == 4
+    assert result["eval_examples"] == 1
+    assert artifact_path.exists()
+    assert artifact_path.with_suffix(".eval.json").exists()
+    assert artifact_path.with_suffix(".meta.json").exists()
+
+    report = json.loads(artifact_path.with_suffix(".eval.json").read_text(encoding="utf-8"))
+    assert report["valid_examples"] == 5
+    assert len(report["examples"]) == 1
+    assert report["examples"][0]["baseline_output"]["intent"].startswith("baseline:")
+    assert report["examples"][0]["optimized_output"]["intent"].startswith("optimized-4:")
+
+
 def test_native_dspy_executor_uses_default_conversation_artifact_path():
     settings = Settings(llm_api_key=None, openai_api_key=None)
 
     assert settings.resolve_dspy_artifact_path("conversation_reply") == Path("artifacts/dspy/conversation_reply.json")
+    assert settings.resolve_dspy_artifact_path("state_router") == Path("artifacts/dspy/state_router.json")
 
 
 def test_native_dspy_executor_returns_none_when_artifact_load_fails(tmp_path):

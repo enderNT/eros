@@ -38,6 +38,21 @@ class ConversationReplyPayload(TypedDict):
     memories: list[str]
 
 
+class StateRouterPayload(TypedDict):
+    user_message: str
+    conversation_summary: str
+    active_goal: str
+    stage: str
+    pending_action: str
+    pending_question: str
+    appointment_slots: dict[str, Any]
+    last_tool_result: str
+    last_user_message: str
+    last_assistant_message: str
+    memories: list[str]
+    guard_hint: dict[str, Any]
+
+
 class RagReplyPayload(ConversationReplyPayload):
     retrieved_context: str
 
@@ -67,10 +82,13 @@ class NativeDSPyExecutor:
         if dspy is None:
             raise RuntimeError("DSPy is not installed. Install project dependencies to enable DSPy runtime.")
         dspy.configure(lm=_build_dspy_lm(settings))
-        self._state_router = StateRouterModule()
         self._appointment_extraction = AppointmentExtractionModule()
         self._state_summary = StateSummaryModule()
         self._modules = {
+            "state_router": self._load_module(
+                settings.resolve_dspy_artifact_path("state_router"),
+                StateRouterModule,
+            ),
             "conversation_reply": self._load_module(
                 settings.resolve_dspy_artifact_path("conversation_reply"),
                 ConversationReplyModule,
@@ -86,8 +104,7 @@ class NativeDSPyExecutor:
         }
 
     def predict_state_router(self, payload: dict[str, Any]) -> dict[str, Any]:
-        prediction = self._state_router.forward(**payload)
-        return _prediction_to_dict(prediction)
+        return self._predict_task("state_router", payload)
 
     def predict_conversation_reply(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._predict_task("conversation_reply", payload)
@@ -285,19 +302,38 @@ def _build_dspy_lm(settings: Settings) -> Any:
 
 
 def _serialize_router_payload(routing_packet: RoutingPacket, guard_hint: dict[str, Any]) -> dict[str, Any]:
+    return _serialize_state_router_payload(
+        {
+            "user_message": routing_packet.user_message,
+            "conversation_summary": routing_packet.conversation_summary,
+            "active_goal": routing_packet.active_goal,
+            "stage": routing_packet.stage,
+            "pending_action": routing_packet.pending_action,
+            "pending_question": routing_packet.pending_question,
+            "appointment_slots": routing_packet.appointment_slots,
+            "last_tool_result": routing_packet.last_tool_result,
+            "last_user_message": routing_packet.last_user_message,
+            "last_assistant_message": routing_packet.last_assistant_message,
+            "memories": routing_packet.memories,
+            "guard_hint": guard_hint,
+        }
+    )
+
+
+def _serialize_state_router_payload(payload: StateRouterPayload | dict[str, Any]) -> dict[str, Any]:
     return {
-        "user_message": _coerce_text(routing_packet.user_message),
-        "conversation_summary": _coerce_text(routing_packet.conversation_summary),
-        "active_goal": _coerce_text(routing_packet.active_goal),
-        "stage": _coerce_text(routing_packet.stage),
-        "pending_action": _coerce_text(routing_packet.pending_action),
-        "pending_question": _coerce_text(routing_packet.pending_question),
-        "appointment_slots": _stable_json(routing_packet.appointment_slots),
-        "last_tool_result": _coerce_text(routing_packet.last_tool_result),
-        "last_user_message": _coerce_text(routing_packet.last_user_message),
-        "last_assistant_message": _coerce_text(routing_packet.last_assistant_message),
-        "memories": _stable_json(routing_packet.memories),
-        "guard_hint": _stable_json(guard_hint),
+        "user_message": _coerce_text(payload.get("user_message")),
+        "conversation_summary": _coerce_text(payload.get("conversation_summary")),
+        "active_goal": _coerce_text(payload.get("active_goal")),
+        "stage": _coerce_text(payload.get("stage")),
+        "pending_action": _coerce_text(payload.get("pending_action")),
+        "pending_question": _coerce_text(payload.get("pending_question")),
+        "appointment_slots": _stable_json(payload.get("appointment_slots", {})),
+        "last_tool_result": _coerce_text(payload.get("last_tool_result")),
+        "last_user_message": _coerce_text(payload.get("last_user_message")),
+        "last_assistant_message": _coerce_text(payload.get("last_assistant_message")),
+        "memories": _stable_json(payload.get("memories", [])),
+        "guard_hint": _stable_json(payload.get("guard_hint", {})),
     }
 
 

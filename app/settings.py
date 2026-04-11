@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     dspy_lm_api_key: str | None = None
     dspy_dataset_backend: Literal["postgres"] = "postgres"
     dspy_artifacts_dir: Path = Field(default=Path("artifacts/dspy"))
+    dspy_state_router_artifact: Path | None = None
     dspy_conversation_reply_artifact: Path | None = None
     dspy_rag_reply_artifact: Path | None = None
     dspy_appointment_reply_artifact: Path | None = None
@@ -114,6 +115,7 @@ class Settings(BaseSettings):
 
     def resolve_dspy_artifact_path(self, task_name: str) -> Path:
         overrides = {
+            "state_router": self.dspy_state_router_artifact,
             "conversation_reply": self.dspy_conversation_reply_artifact,
             "rag_reply": self.dspy_rag_reply_artifact,
             "appointment_reply": self.dspy_appointment_reply_artifact,
