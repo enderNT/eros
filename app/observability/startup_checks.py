@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 import logging
 from urllib.parse import urlsplit
+from typing import Any
 
 from app.settings import Settings
 
@@ -21,8 +22,8 @@ class StartupCheckResult:
         return f"{self.name}={self.status}{suffix}"
 
 
-async def log_startup_connection_checks(settings: Settings) -> None:
-    results = await collect_startup_connection_checks(settings)
+async def log_startup_connection_checks(settings: Settings, *, checkpointer: Any | None = None) -> None:
+    results = await collect_startup_connection_checks(settings, checkpointer=checkpointer)
     if not results:
         return
 
@@ -32,12 +33,18 @@ async def log_startup_connection_checks(settings: Settings) -> None:
     logger.log(level, "Startup connectivity: %s", rendered)
 
 
-async def collect_startup_connection_checks(settings: Settings) -> list[StartupCheckResult]:
+async def collect_startup_connection_checks(
+    settings: Settings,
+    *,
+    checkpointer: Any | None = None,
+) -> list[StartupCheckResult]:
     results = [
-        _memory_postgres_result(settings),
-        _checkpointer_postgres_result(settings),
-        _tracing_postgres_result(settings),
+        await _memory_postgres_result(settings),
+        await _checkpointer_postgres_result(settings),
+        await _tracing_postgres_result(settings),
     ]
+    if checkpointer is not None:
+        results.append(await _runtime_checkpointer_result(checkpointer))
     results.append(await _httpish_service_result("qdrant", settings.qdrant_enabled, settings.qdrant_simulate, settings.qdrant_base_url))
     results.append(
         await _httpish_service_result(
@@ -60,28 +67,51 @@ async def collect_startup_connection_checks(settings: Settings) -> list[StartupC
     return results
 
 
-def _memory_postgres_result(settings: Settings) -> StartupCheckResult:
+async def _memory_postgres_result(settings: Settings) -> StartupCheckResult:
     if settings.memory_backend != "langgraph_postgres":
         return StartupCheckResult("postgres.memory", "disabled", f"backend={settings.memory_backend}")
     if not settings.memory_postgres_dsn:
         return StartupCheckResult("postgres.memory", "config_missing", "missing dsn")
-    return StartupCheckResult("postgres.memory", "ok", _format_host_port(settings.memory_postgres_dsn))
+    return await _postgres_service_result("postgres.memory", settings.memory_postgres_dsn)
 
 
-def _checkpointer_postgres_result(settings: Settings) -> StartupCheckResult:
+async def _checkpointer_postgres_result(settings: Settings) -> StartupCheckResult:
     dsn = settings.memory_postgres_dsn or settings.trace_postgres_dsn
     if not dsn:
         return StartupCheckResult("postgres.checkpoints", "disabled", "in_memory")
-    return StartupCheckResult("postgres.checkpoints", "ok", _format_host_port(dsn))
+    return await _postgres_service_result("postgres.checkpoints", dsn)
 
 
-def _tracing_postgres_result(settings: Settings) -> StartupCheckResult:
+async def _tracing_postgres_result(settings: Settings) -> StartupCheckResult:
     if settings.trace_backend != "postgres":
         return StartupCheckResult("postgres.tracing", "disabled", f"backend={settings.trace_backend}")
     if not settings.trace_postgres_dsn:
         return StartupCheckResult("postgres.tracing", "config_missing", "missing dsn")
     detail = f"{_format_host_port(settings.trace_postgres_dsn)} schema={settings.trace_postgres_schema}"
-    return StartupCheckResult("postgres.tracing", "ok", detail)
+    result = await _postgres_service_result("postgres.tracing", settings.trace_postgres_dsn)
+    result.detail = detail if result.status == "ok" else f"{detail} {result.detail}".strip()
+    return result
+
+
+async def _runtime_checkpointer_result(checkpointer: Any) -> StartupCheckResult:
+    backend_name = getattr(checkpointer, "backend_name", type(checkpointer).__name__)
+    probe = getattr(checkpointer, "probe", None)
+    if not callable(probe):
+        return StartupCheckResult("graph.checkpointer_runtime", "ok", backend_name)
+    try:
+        await probe()
+    except Exception as exc:
+        return StartupCheckResult("graph.checkpointer_runtime", "failed", f"{backend_name} {type(exc).__name__}")
+    return StartupCheckResult("graph.checkpointer_runtime", "ok", backend_name)
+
+
+async def _postgres_service_result(name: str, dsn: str) -> StartupCheckResult:
+    detail = _format_host_port(dsn)
+    try:
+        await _probe_postgres_dsn(dsn)
+    except Exception as exc:
+        return StartupCheckResult(name, "failed", f"{detail} {type(exc).__name__}")
+    return StartupCheckResult(name, "ok", detail)
 
 
 async def _httpish_service_result(
@@ -139,3 +169,20 @@ async def _probe_tcp_endpoint(host: str, port: int, *, ssl: bool, timeout_second
         if writer is not None:
             writer.close()
             await writer.wait_closed()
+
+
+async def _probe_postgres_dsn(dsn: str, *, timeout_seconds: float = 1.5) -> None:
+    try:
+        from psycopg import AsyncConnection
+    except ModuleNotFoundError:
+        host, port, _ = _parse_network_target(dsn)
+        await _probe_tcp_endpoint(host, port, ssl=False, timeout_seconds=timeout_seconds)
+        return
+
+    connection = await AsyncConnection.connect(dsn, connect_timeout=timeout_seconds)
+    try:
+        async with connection.cursor() as cursor:
+            await cursor.execute("SELECT 1")
+            await cursor.fetchone()
+    finally:
+        await connection.close()

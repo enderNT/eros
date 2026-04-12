@@ -39,6 +39,7 @@ def test_startup_checks_probe_enabled_http_services(monkeypatch):
         calls.append((host, port, ssl))
 
     monkeypatch.setattr("app.observability.startup_checks._probe_tcp_endpoint", fake_probe)
+    monkeypatch.setattr("app.observability.startup_checks._probe_postgres_dsn", lambda dsn: fake_probe("postgres", 5432, ssl=False))
 
     settings = Settings(
         memory_backend="langgraph_postgres",
@@ -76,8 +77,13 @@ def test_startup_checks_mark_failures_without_raising(monkeypatch):
         raise ConnectionRefusedError("boom")
 
     monkeypatch.setattr("app.observability.startup_checks._probe_tcp_endpoint", fake_probe)
+    monkeypatch.setattr("app.observability.startup_checks._probe_postgres_dsn", lambda dsn: fake_probe("postgres", 5432, ssl=False))
 
     settings = Settings(
+        memory_backend="langgraph_postgres",
+        memory_postgres_dsn="postgresql://user:pass@db.internal:5432/app",
+        trace_backend="postgres",
+        trace_postgres_dsn="postgresql://user:pass@trace.internal:5432/app",
         qdrant_enabled=True,
         qdrant_simulate=False,
         qdrant_base_url="http://qdrant.internal:6333",
@@ -90,5 +96,8 @@ def test_startup_checks_mark_failures_without_raising(monkeypatch):
     results = asyncio.run(collect_startup_connection_checks(settings))
     mapped = _result_map(results)
 
+    assert mapped["postgres.memory"].status == "failed"
+    assert mapped["postgres.checkpoints"].status == "failed"
+    assert mapped["postgres.tracing"].status == "failed"
     assert mapped["qdrant"].status == "failed"
     assert mapped["chatwoot"].status == "failed"

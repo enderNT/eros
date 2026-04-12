@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -45,15 +46,30 @@ def build_webhook_router(agent_service: ClinicAgentService | None = None) -> API
             )
         substep("webhook_payload_validated", "OK", "contenido detectado")
         substep("webhook_background_dispatch", "RUN", "enviando al flujo asyncrono")
-        asyncio.create_task(_safe_process(resolved_agent_service, payload, flow_id))
+        runtime_monitor = getattr(request.app.state, "background_task_monitor", None)
+        asyncio.create_task(_safe_process(resolved_agent_service, payload, flow_id, runtime_monitor))
         substep("webhook_background_dispatch", "OK", "task creada")
         return {"status": "accepted", "conversation_id": payload.conversation_id}
 
     return router
 
 
-async def _safe_process(agent_service: ClinicAgentService, payload: ChatwootWebhook, flow_id: str) -> None:
+async def _safe_process(
+    agent_service: ClinicAgentService,
+    payload: ChatwootWebhook,
+    flow_id: str,
+    runtime_monitor: Any | None = None,
+) -> None:
     try:
         await agent_service.process_webhook(payload, flow_id=flow_id)
+        if runtime_monitor is not None:
+            runtime_monitor.record_success(payload.conversation_id, flow_id)
     except Exception as exc:  # pragma: no cover - logging defensivo
-        logger.exception("Background webhook processing failed for %s: %s", payload.conversation_id, exc)
+        if runtime_monitor is not None:
+            runtime_monitor.record_failure(payload.conversation_id, flow_id, exc)
+        logger.exception(
+            "Webhook was accepted but background processing failed for conversation=%s flow=%s: %s",
+            payload.conversation_id,
+            flow_id,
+            exc,
+        )
