@@ -21,7 +21,7 @@ services:
       - ./var/log/stateful-assistant:/app/var/log/stateful-assistant
     depends_on:
       dspy-service:
-        condition: service_healthy
+        condition: service_started
 
   dspy-service:
     build:
@@ -34,8 +34,4 @@ services:
       DSPY_DATASETS_DIR: /service/datasets
     ports:
       - "${DOCKER_DSPY_PORT:-8001}:8001"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+
