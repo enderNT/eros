@@ -252,12 +252,12 @@ export class TurnOrchestrator {
         latency_ms: Date.now() - startedAt
       });
 
-      if (graphResult.route === "rag" && this.deps.settings.knowledge.enabled) {
+      if (graphResult.route === "rag") {
         await executionLogger.tool("knowledge_provider", {
-          component: this.deps.settings.knowledge.provider,
+          component: "qdrant",
           request: {
             query: context.inbound.text,
-            topK: this.deps.settings.knowledge.topK
+            topK: this.deps.settings.qdrant.topK
           },
           response: {
             count: graphResult.knowledge.length,

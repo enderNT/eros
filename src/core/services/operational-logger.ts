@@ -58,7 +58,6 @@ export class OperationalLogger {
       environment: this.settings.app.env,
       host: this.settings.app.host,
       port: this.settings.app.port,
-      log_level: this.settings.app.logLevel,
       log_to_console: this.settings.logging.consoleEnabled,
       log_to_file: this.settings.logging.fileEnabled,
       log_file_path: this.settings.logging.fileEnabled ? this.baseFilePath : "disabled",

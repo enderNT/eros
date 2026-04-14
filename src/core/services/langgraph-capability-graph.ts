@@ -105,10 +105,10 @@ export class LangGraphCapabilityGraph {
 
   private async ragNode(state: LangGraphState): Promise<Partial<LangGraphState>> {
     const knowledge =
-      this.deps.settings.knowledge.enabled && state.routeDecision.needsKnowledge
+      state.routeDecision.needsKnowledge
         ? await this.deps.knowledgeProvider.retrieve(
             state.context.inbound.text,
-            this.deps.settings.knowledge.topK
+            this.deps.settings.qdrant.topK
           )
         : state.knowledge;
 

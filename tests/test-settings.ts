@@ -2,7 +2,7 @@ import type { AppSettings } from "../src/config";
 
 export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   const base: AppSettings = {
-    app: { env: "test", name: "test-app", host: "0.0.0.0", port: 3000, logLevel: "INFO", locale: "es-MX", timezone: "America/Mexico_City" },
+    app: { env: "test", name: "test-app", host: "0.0.0.0", port: 3000, locale: "es-MX", timezone: "America/Mexico_City" },
     logging: {
       consoleEnabled: false,
       fileEnabled: false,
@@ -35,7 +35,17 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
         addPath: "/v1/memories"
       }
     },
-    knowledge: { provider: "none", enabled: false, topK: 3, timeoutMs: 1000 },
+    qdrant: {
+      enabled: false,
+      simulate: true,
+      baseUrl: "",
+      apiKey: "",
+      collectionName: "clinic_knowledge",
+      timeoutMs: 1000,
+      topK: 3,
+      vectorSize: 1536,
+      embeddingModel: "text-embedding-3-small"
+    },
     channel: {
       provider: "none",
       replyEnabled: false,
@@ -78,9 +88,9 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
         ...overrides.memory?.mem0
       }
     },
-    knowledge: {
-      ...base.knowledge,
-      ...overrides.knowledge
+    qdrant: {
+      ...base.qdrant,
+      ...overrides.qdrant
     },
     channel: {
       ...base.channel,

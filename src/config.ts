@@ -4,7 +4,6 @@ export interface AppSettings {
     name: string;
     host: string;
     port: number;
-    logLevel: string;
     locale: string;
     timezone: string;
   };
@@ -31,7 +30,6 @@ export interface AppSettings {
   router: {
     confidenceThreshold: number;
     knowledgeThreshold: number;
-    inputDebug: boolean;
   };
   prompt: {
     memoryMaxItems: number;
@@ -58,12 +56,6 @@ export interface AppSettings {
       searchPath: string;
       addPath: string;
     };
-  };
-  knowledge: {
-    provider: string;
-    enabled: boolean;
-    topK: number;
-    timeoutMs: number;
   };
   clinic: {
     configPath: string;
@@ -145,7 +137,6 @@ export function loadSettings(): AppSettings {
       name: readString("APP_NAME", "stateful-assistant"),
       host: readString("APP_HOST", "0.0.0.0"),
       port: readNumber("APP_PORT", 3000),
-      logLevel: readString("APP_LOG_LEVEL", "INFO"),
       locale: readString("APP_DEFAULT_LOCALE", "es-MX"),
       timezone: readString("APP_DEFAULT_TIMEZONE", "America/Mexico_City")
     },
@@ -174,8 +165,7 @@ export function loadSettings(): AppSettings {
     },
     router: {
       confidenceThreshold: readNumber("ROUTER_CONFIDENCE_THRESHOLD", 0.62),
-      knowledgeThreshold: readNumber("ROUTER_KNOWLEDGE_THRESHOLD", 0.58),
-      inputDebug: readBoolean("ROUTER_INPUT_DEBUG", false)
+      knowledgeThreshold: readNumber("ROUTER_KNOWLEDGE_THRESHOLD", 0.58)
     },
     prompt: {
       memoryMaxItems: readNumber("PROMPT_MEMORY_MAX_ITEMS", 3),
@@ -202,12 +192,6 @@ export function loadSettings(): AppSettings {
         searchPath: readString("MEM0_SEARCH_PATH", "/v1/memories/search"),
         addPath: readString("MEM0_ADD_PATH", "/v1/memories")
       }
-    },
-    knowledge: {
-      provider: readString("KNOWLEDGE_PROVIDER", "none"),
-      enabled: readBoolean("KNOWLEDGE_ENABLED", false),
-      topK: readNumber("KNOWLEDGE_TOP_K", 5),
-      timeoutMs: readNumber("KNOWLEDGE_TIMEOUT_MS", 10000)
     },
     clinic: {
       configPath: readString("CLINIC_CONFIG_PATH", "./config/clinic.json"),
