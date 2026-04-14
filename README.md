@@ -1,86 +1,183 @@
-# Clinica Assistant
+# Eros Assistant Migration
 
-Backend en Python para una clinica que recibe mensajes por webhook de Chatwoot, usa un proveedor `LLM` configurable para generacion y clasificacion de estado, orquesta con `LangGraph`, mantiene continuidad conversacional corta con estado de hilo y memoria duradera mediante un runtime reusable sobre stores de LangGraph, y prepara recuperacion RAG con `Qdrant`.
+Esta carpeta es la migracion de la app actual de Clinica Eros hacia la arquitectura del template TypeScript/Bun/Elysia.
 
-## Componentes
+Se conserva:
 
-- `FastAPI` para el webhook `POST`.
-- `LangGraph` para el flujo conversacional con estado corto por `conversation_id`.
-- Un proveedor `LLM` configurable como backend remoto de generacion, resumen y clasificacion de estado.
-- Un runtime reusable de memoria conversacional con adapters in-memory y `LangGraph` Postgres store.
-- Un tracer reusable de turnos con captura estructurada, batch async y proyeccion lista para DSPy.
-- `Qdrant` como vector store para el nodo RAG, con modo de simulacion habilitado por defecto.
-- Configuracion local estatica para servicios, horarios, doctores y politicas, cargada solo cuando la rama de RAG o cita la necesita.
+- payloads de dominio para routing, replies y LangGraph
+- estado de negocio `GraphState`
+- firmas DSPy del dominio
+- separacion de flujo entre `conversation`, `rag` y `appointment`
 
-## Setup local
+Se cambia:
 
-1. Crear y activar entorno virtual:
+- stack principal a `TS/Bun/Elysia`
+- implementacion de grafo a `LangGraph JS/TS`
+- servicio DSPy a bridge Python de dominio
+- se desactiva el tracing persistente en Postgres
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+# Stateful Assistant Template
+
+Boilerplate genérico para un asistente conversacional stateful en `Bun.js` con:
+
+- API HTTP en `Elysia`
+- orquestador de turno genérico
+- capacidades `conversation`, `knowledge` y `action`
+- estado corto por sesión
+- memoria larga desacoplada detrás de interfaz
+- provider LLM local o remoto compatible con OpenAI
+- provider de memoria larga `Mem0` opcional
+- bridge opcional hacia un servicio Python estilo `DSPy`
+- integración interna con `LangGraph` en `JS/TS` para rutas `conversation` y `rag`
+- logging operacional dual (`terminal` resumida + `archivo` detallado con rotación)
+- Docker y `docker-compose` para desarrollo local
+
+## Objetivo
+
+Este proyecto sirve como base reusable para construir asistentes conversacionales multicanal sin acoplar el core a un dominio, un canal o un proveedor concreto. La idea es que la lógica transversal ya exista aquí y que cualquier especialización futura viva en adapters, providers o módulos externos.
+
+## Estructura
+
+- `src/`: core, adapters y servidor HTTP.
+- `dspy_service/`: servicio Python opcional para predicciones/fallbacks optimizados.
+- `tests/`: pruebas mínimas del contrato interno.
+- `docs/`: documentación de arquitectura, desarrollo y extensión.
+
+## Arquitectura
+
+El flujo principal del turno es:
+
+`ingest -> load_context -> route -> execute capability -> finalize -> persist -> emit`
+
+Piezas principales:
+
+- `adapters/http`: normalizan payloads externos al contrato `InboundMessage`.
+- `core/orchestrator`: coordina el turno completo.
+- `core/capabilities`: ejecuta `conversation`, `knowledge` o `action`.
+- `core/services`: implementaciones base en memoria, bridge HTTP a DSPy, `LangGraph` y utilidades.
+- `dspy_service/`: servicio Python opcional reservado para `DSPy`.
+- `domain/contracts` y `domain/ports`: contratos internos e interfaces desacopladas.
+
+Documentación ampliada:
+
+- [`docs/architecture.md`](./docs/architecture.md)
+- [`docs/development.md`](./docs/development.md)
+- [`docs/langgraph.md`](./docs/langgraph.md)
+- [`docs/logging.md`](./docs/logging.md)
+
+## Endpoints
+
+- `GET /health`: health check del servicio principal.
+- `POST /webhooks/messages`: recibe eventos y responde `202 Accepted`; el turno se procesa de forma asíncrona.
+- `POST /webhooks/chatwoot`: endpoint equivalente al webhook de la app Python original.
+- `POST /turns/execute`: ejecuta el turno de forma síncrona; útil para pruebas locales e integración.
+- `GET /debug/traces`: expone las trazas guardadas en el sink en memoria.
+
+Con `Chatwoot`, el webhook principal ya puede:
+
+- aceptar mensajes entrantes reales
+- ignorar salientes/privados para evitar loops
+- responder por la API oficial de conversaciones si `CHANNEL_PROVIDER=chatwoot`
+
+## Ejemplo de payload
+
+```json
+{
+  "sessionId": "session-123",
+  "actorId": "user-42",
+  "channel": "generic_http",
+  "text": "Hola, necesito ayuda con el template"
+}
 ```
 
-2. Instalar dependencias:
+## Configuración
+
+La configuración está centralizada en [`.env.example`](./.env.example) y separada por namespaces:
+
+- `APP_*`, `BUN_*`
+- `APP_LOG_*`
+- `LLM_*`
+- `MEMORY_*`
+- `KNOWLEDGE_*`
+- `TRACE_*`
+- `DSPY_*`
+- `CHANNEL_*`
+- `CHATWOOT_*`
+- `DOCKER_*`
+
+Regla de diseño:
+
+- Sí van en variables de entorno: URLs, llaves, toggles, budgets, thresholds y selección de proveedor.
+- No deben ir ahí: prompts de dominio, catálogos funcionales, copy del bot o definición de acciones de negocio.
+
+## Desarrollo
 
 ```bash
-pip install -e ".[dev]"
+docker compose up --build
 ```
 
-3. Preparar variables de entorno:
+Los logs operativos se publican en dos destinos:
+
+- terminal con una vista resumida por ejecución
+- archivo persistente en `APP_LOG_DIR/APP_LOG_FILE`
+
+Con `docker compose`, el destino de archivo queda montado en `/var/log/stateful-assistant`.
+
+La implementacion migrada para Eros cubre:
+
+- `conversation`
+- `rag`
+- `appointment`
+
+Si tienes `bun` instalado localmente:
 
 ```bash
-cp .env.example .env
+bun install
+bun test
+bun x tsc --noEmit
+bun run src/index.ts
 ```
 
-4. Ajustar `config/clinic.json` con los datos reales de la clinica. Ese archivo alimenta el contexto de RAG y la extraccion de intencion de cita, no el router ni la conversacion general.
-
-5. Exportar la configuracion del proveedor LLM en tu entorno:
+Para levantar solo el servicio Python de `DSPy` en local:
 
 ```bash
-export LLM_PROVIDER="openai_compatible"
-export LLM_API_KEY="..."
-export LLM_MODEL="gpt-5-mini"
+make dspy
 ```
 
-Si usas un endpoint compatible con OpenAI, tambien puedes definir `LLM_BASE_URL`.
-6. Ejecutar la API:
+Para levantar app + `DSPy` juntos en local:
 
 ```bash
-uvicorn app.main:create_app --factory --reload
+bun run dev:with-dspy
 ```
 
-7. Si necesitas exponer el webhook localmente con `ngrok`, puedes usar:
+Para publicar tu app local con `ngrok`:
 
 ```bash
-make ngrok
-make webhook-url
+bun run ngrok
 ```
 
-Opcionalmente define `NGROK_AUTHTOKEN` y `NGROK_DOMAIN` en `.env` si quieres autenticar el agente o fijar una URL.
+## Extensión
 
-8. Si vas a usar Qdrant real, configurar `QDRANT_ENABLED=true`, `QDRANT_SIMULATE=false` y apuntar `QDRANT_BASE_URL` al cluster o instancia local. Si no, el flujo RAG usa simulacion controlada y sigue funcionando.
+Para convertir este template en un producto concreto, normalmente basta con reemplazar o agregar estas piezas:
 
-9. Si vas a usar persistencia real para memoria o tracing, configura sus DSN:
+- `MemoryProvider`: para persistencia y búsqueda real de memoria larga.
+- `KnowledgeProvider`: para retrieval real.
+- `OutboundTransport`: para emitir respuestas por un canal externo.
+- `LlmProvider`: para usar un proveedor LLM real.
+- `DspyBridge`: para activar predicción por el servicio Python si aplica.
 
-```bash
-export MEMORY_BACKEND="langgraph_postgres"
-export MEMORY_POSTGRES_DSN="postgresql://user:pass@localhost:5432/clinica"
-export TRACE_BACKEND="postgres"
-export TRACE_POSTGRES_DSN="postgresql://user:pass@localhost:5432/clinica"
-```
+## Estado actual del template
 
-Tambien puedes dejar `TRACE_BACKEND=in_memory` para desarrollo local o `TRACE_BACKEND=noop` si quieres desactivar la captura.
+Incluye implementaciones base seguras para desarrollo:
 
-## Flujo
-
-1. Chatwoot envia un `POST` al webhook.
-2. La API responde inmediatamente con un acuse.
-3. En segundo plano se recuperan pocas memorias relevantes del runtime de memoria y el estado corto del hilo viaja en `LangGraph`.
-4. Un router de estado aplica guards deterministas y, si hace falta, un clasificador LLM para decidir entre conversacion general, RAG o cita.
-5. Solo si la rama es `rag` o `appointment`, se carga `config/clinic.json` para construir el contexto clinico completo.
-6. La respuesta se envia por la API de Chatwoot si esta habilitada; si no, queda registrada en logs.
-
-## Git
-
-El repositorio se inicializa localmente, pero no se hace commit automatico ni se versiona nada por defecto.
+- estado corto en memoria
+- memoria larga en memoria
+- memoria larga remota opcional con `Mem0`
+- knowledge provider nulo
+- transporte de salida no-op
+- tracing en memoria
+- logging operacional con sanitización y correlación por ejecución
+- rotación de logs tipo ring buffer por archivo/líneas
+- bridge HTTP a DSPy con timeout, retry conservador y apertura temporal de circuito
+- subgrafo LangGraph en TypeScript para `conversation` y `rag`
+- preservación de payloads/estados del subgrafo para no acoplar el template a un negocio concreto
