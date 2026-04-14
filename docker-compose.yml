@@ -9,7 +9,7 @@ services:
       - .env.example
     environment:
       APP_PORT: ${APP_PORT:-3000}
-      APP_LOG_DIR: /var/log/stateful-assistant
+      APP_LOG_DIR: /app/var/log/stateful-assistant
       APP_LOG_TO_FILE: "true"
       APP_CONTAINER_NAME: app
       APP_LOG_MAX_FILES: ${APP_LOG_MAX_FILES:-10}
@@ -18,7 +18,7 @@ services:
     ports:
       - "${DOCKER_APP_PORT:-3000}:${APP_PORT:-3000}"
     volumes:
-      - app-logs:/var/log/stateful-assistant
+      - ./var/log/stateful-assistant:/app/var/log/stateful-assistant
     depends_on:
       dspy-service:
         condition: service_healthy
@@ -39,6 +39,3 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-
-volumes:
-  app-logs:

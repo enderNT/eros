@@ -1,7 +1,7 @@
 import type { InboundMessage, TurnOutcome } from "../domain/contracts";
 import type { ClinicStateStore, OutboundTransport, TraceSink } from "../domain/ports";
 import { ExecutionLogger, OperationalLogger } from "./services/operational-logger";
-import { ClinicWorkflow } from "./services/clinic-workflow";
+import { ClinicWorkflow, ClinicWorkflowDiagnostics } from "./services/clinic-workflow";
 
 function mapCapability(nextNode: string): "conversation" | "knowledge" | "action" {
   if (nextNode === "rag") return "knowledge";
@@ -72,6 +72,27 @@ function buildRouteDecision(state: {
   };
 }
 
+function buildConsoleFlowSummary(
+  nextNode: string,
+  diagnostics: ClinicWorkflowDiagnostics
+): string {
+  const capability = mapCapability(nextNode);
+  const parts: string[] = [];
+
+  if (diagnostics.retrieval) {
+    const retrieval = diagnostics.retrieval.fallbackUsed
+      ? `${diagnostics.retrieval.status}->${diagnostics.retrieval.backend}`
+      : `${diagnostics.retrieval.status}:${diagnostics.retrieval.backend}`;
+    parts.push(retrieval);
+  }
+
+  if (diagnostics.reply) {
+    parts.push(`${diagnostics.reply.provider}:${diagnostics.reply.replyMode}`);
+  }
+
+  return parts.length > 0 ? `${capability} [${parts.join(", ")}]` : capability;
+}
+
 export class ClinicOrchestrator {
   constructor(
     private readonly stateStore: ClinicStateStore,
@@ -134,10 +155,12 @@ export class ClinicOrchestrator {
           promptDigest: initialState.summary
         }
       });
-      const result = await this.workflow.run(initialState, traceId);
+      const workflowResult = await this.workflow.run(initialState, traceId);
+      const result = workflowResult.state;
       await this.stateStore.save(inbound.sessionId, result);
       await this.logStateSave(executionLogger, inbound, result);
       await this.traceSink.append(traceId, "workflow_result", result);
+      await this.logWorkflowDiagnostics(executionLogger, inbound, result, workflowResult.diagnostics);
       await executionLogger.route({
         resolver: "clinic_routing_service",
         input: buildRouteInput(initialState),
@@ -153,8 +176,9 @@ export class ClinicOrchestrator {
           nextNode: result.next_node,
           appointmentPayload: result.appointment_payload
         },
-        usedDspy: false,
-        knowledgeCount: result.next_node === "rag" && result.last_tool_result ? 1 : 0
+        usedDspy: workflowResult.diagnostics.reply?.provider === "dspy_service",
+        knowledgeCount: workflowResult.diagnostics.retrieval?.resultCount ?? 0,
+        consoleSummary: buildConsoleFlowSummary(result.next_node, workflowResult.diagnostics)
       });
 
       if (result.response_text) {
@@ -263,7 +287,7 @@ export class ClinicOrchestrator {
   private async logStateSave(
     executionLogger: ExecutionLogger,
     inbound: InboundMessage,
-    state: Awaited<ReturnType<ClinicWorkflow["run"]>>
+    state: Awaited<ReturnType<ClinicWorkflow["run"]>>["state"]
   ): Promise<void> {
     await executionLogger.memoryWrite("clinic_state", {
       scope: "short_term",
@@ -275,5 +299,61 @@ export class ClinicOrchestrator {
       status: "ok",
       summary: `saved clinic_state turns=${state.turn_count}`
     });
+  }
+
+  private async logWorkflowDiagnostics(
+    executionLogger: ExecutionLogger,
+    inbound: InboundMessage,
+    state: Awaited<ReturnType<ClinicWorkflow["run"]>>["state"],
+    diagnostics: ClinicWorkflowDiagnostics
+  ): Promise<void> {
+    if (diagnostics.retrieval) {
+      await executionLogger.tool("knowledge_provider", {
+        component: diagnostics.retrieval.backend === "clinic_config"
+          ? "clinic_config_fallback"
+          : diagnostics.retrieval.backend === "simulate"
+            ? "qdrant_simulation"
+            : "qdrant",
+        request: {
+          query: inbound.text,
+          contact_id: inbound.actorId
+        },
+        response: {
+          backend: diagnostics.retrieval.backend,
+          status: diagnostics.retrieval.status,
+          result_count: diagnostics.retrieval.resultCount,
+          fallback_used: diagnostics.retrieval.fallbackUsed
+        },
+        status: diagnostics.retrieval.status
+      });
+    }
+
+    if (diagnostics.appointmentExtraction) {
+      await executionLogger.tool("appointment_extraction", {
+        component: diagnostics.appointmentExtraction.provider,
+        request: {
+          user_message: inbound.text,
+          contact_name: state.contact_name
+        },
+        response: {
+          clinic_context_present: diagnostics.appointmentExtraction.clinicContextPresent
+        },
+        status: "ok"
+      });
+    }
+
+    if (diagnostics.reply) {
+      await executionLogger.tool(`${diagnostics.reply.node}_reply`, {
+        component: diagnostics.reply.provider,
+        request: {
+          node: diagnostics.reply.node,
+          intent: state.intent
+        },
+        response: {
+          reply_mode: diagnostics.reply.replyMode
+        },
+        status: diagnostics.reply.replyMode === "fallback" ? "fallback" : "ok"
+      });
+    }
   }
 }

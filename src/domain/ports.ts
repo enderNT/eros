@@ -57,6 +57,14 @@ export interface HealthStatus {
   details?: Record<string, unknown>;
 }
 
+export interface ClinicKnowledgeContext {
+  text: string;
+  backend: "qdrant" | "clinic_config" | "simulate";
+  status: "ok" | "no_results" | "qdrant_unavailable" | "simulated";
+  resultCount: number;
+  fallbackUsed: boolean;
+}
+
 export interface TraceSink {
   startTurn(inbound: InboundMessage): Promise<string>;
   append(traceId: string, event: string, payload: unknown): Promise<void>;
@@ -176,7 +184,7 @@ export interface ClinicDspyBridge {
 }
 
 export interface ClinicKnowledgeProvider {
-  buildContext(query: string, contactId: string, memories: string[]): Promise<string>;
+  buildContext(query: string, contactId: string, memories: string[]): Promise<ClinicKnowledgeContext>;
 }
 
 export interface ClinicConfigProvider {

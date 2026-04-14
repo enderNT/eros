@@ -11,12 +11,49 @@ import type {
 } from "../../domain/contracts";
 import type {
   ClinicDspyBridge,
+  ClinicKnowledgeContext,
   ClinicKnowledgeProvider,
   ClinicLlmService,
   ClinicMemoryRuntime,
   ClinicRoutingService,
   TraceSink
 } from "../../domain/ports";
+
+export interface ClinicWorkflowDiagnostics {
+  retrieval?: {
+    backend: ClinicKnowledgeContext["backend"];
+    status: ClinicKnowledgeContext["status"];
+    resultCount: number;
+    fallbackUsed: boolean;
+  };
+  reply?: {
+    node: ClinicGraphNode;
+    provider: "dspy_service" | "llm_service";
+    replyMode: GeneratedReply["reply_mode"];
+  };
+  appointmentExtraction?: {
+    provider: "llm_service";
+    clinicContextPresent: boolean;
+  };
+}
+
+export interface ClinicWorkflowRunResult {
+  state: GraphState;
+  diagnostics: ClinicWorkflowDiagnostics;
+}
+
+function mergeDiagnostics(
+  left: ClinicWorkflowDiagnostics,
+  right: ClinicWorkflowDiagnostics
+): ClinicWorkflowDiagnostics {
+  return {
+    ...left,
+    ...right,
+    retrieval: right.retrieval ?? left.retrieval,
+    reply: right.reply ?? left.reply,
+    appointmentExtraction: right.appointmentExtraction ?? left.appointmentExtraction
+  };
+}
 
 const GraphAnnotation = Annotation.Root({
   state: Annotation<GraphState>({
@@ -26,6 +63,10 @@ const GraphAnnotation = Annotation.Root({
   traceId: Annotation<string>({
     reducer: (_left, right) => right,
     default: () => ""
+  }),
+  diagnostics: Annotation<ClinicWorkflowDiagnostics>({
+    reducer: mergeDiagnostics,
+    default: () => ({})
   })
 });
 
@@ -152,27 +193,27 @@ export class ClinicWorkflow {
     private readonly traceSink?: TraceSink
   ) {
     this.graph = new StateGraph(GraphAnnotation)
-      .addNode("load_context", async ({ state, traceId }) => ({
-        state: await this.traceNode("load_context", traceId, state, (current) => this.loadContext(current, traceId))
-      }))
-      .addNode("route", async ({ state, traceId }) => ({
-        state: await this.traceNode("route", traceId, state, (current) => this.route(current, traceId))
-      }))
-      .addNode("conversation", async ({ state, traceId }) => ({
-        state: await this.traceNode("conversation", traceId, state, (current) => this.conversation(current, traceId))
-      }))
-      .addNode("rag", async ({ state, traceId }) => ({
-        state: await this.traceNode("rag", traceId, state, (current) => this.rag(current, traceId))
-      }))
-      .addNode("appointment", async ({ state, traceId }) => ({
-        state: await this.traceNode("appointment", traceId, state, (current) => this.appointment(current, traceId))
-      }))
-      .addNode("finalize_turn", async ({ state, traceId }) => ({
-        state: await this.traceNode("finalize_turn", traceId, state, async (current) => this.finalizeTurn(current))
-      }))
-      .addNode("store_memory", async ({ state, traceId }) => ({
-        state: await this.traceNode("store_memory", traceId, state, (current) => this.storeMemory(current, traceId))
-      }))
+      .addNode("load_context", async ({ state, traceId }) =>
+        this.traceNode("load_context", traceId, state, (current) => this.loadContext(current, traceId))
+      )
+      .addNode("route", async ({ state, traceId }) =>
+        this.traceNode("route", traceId, state, (current) => this.route(current, traceId))
+      )
+      .addNode("conversation", async ({ state, traceId }) =>
+        this.traceNode("conversation", traceId, state, (current) => this.conversation(current, traceId))
+      )
+      .addNode("rag", async ({ state, traceId }) =>
+        this.traceNode("rag", traceId, state, (current) => this.rag(current, traceId))
+      )
+      .addNode("appointment", async ({ state, traceId }) =>
+        this.traceNode("appointment", traceId, state, (current) => this.appointment(current, traceId))
+      )
+      .addNode("finalize_turn", async ({ state, traceId }) =>
+        this.traceNode("finalize_turn", traceId, state, async (current) => this.finalizeTurn(current))
+      )
+      .addNode("store_memory", async ({ state, traceId }) =>
+        this.traceNode("store_memory", traceId, state, (current) => this.storeMemory(current, traceId))
+      )
       .addEdge(START, "load_context")
       .addEdge("load_context", "route")
       .addConditionalEdges("route", ({ state }) => state.next_node, {
@@ -188,9 +229,12 @@ export class ClinicWorkflow {
       .compile();
   }
 
-  async run(initialState: GraphState, traceId = ""): Promise<GraphState> {
-    const result = await this.graph.invoke({ state: initialState, traceId });
-    return result.state;
+  async run(initialState: GraphState, traceId = ""): Promise<ClinicWorkflowRunResult> {
+    const result = await this.graph.invoke({ state: initialState, traceId, diagnostics: {} });
+    return {
+      state: result.state,
+      diagnostics: result.diagnostics
+    };
   }
 
   private async loadContext(state: GraphState, traceId?: string): Promise<GraphState> {
@@ -236,7 +280,10 @@ export class ClinicWorkflow {
     };
   }
 
-  private async conversation(state: GraphState, traceId?: string): Promise<GraphState> {
+  private async conversation(
+    state: GraphState,
+    traceId?: string
+  ): Promise<{ state: GraphState; diagnostics: ClinicWorkflowDiagnostics }> {
     const payload = this.buildConversationPayload(state);
     const context = buildReplyContext(state);
     await this.trace(traceId, "clinic.conversation.input", payload);
@@ -251,24 +298,42 @@ export class ClinicWorkflow {
     });
 
     return {
-      ...state,
-      response_text: generatedReply.response_text,
-      last_assistant_message: generatedReply.response_text,
-      last_tool_result: "",
-      handoff_required: false,
-      appointment_payload: {}
+      state: {
+        ...state,
+        response_text: generatedReply.response_text,
+        last_assistant_message: generatedReply.response_text,
+        last_tool_result: "",
+        handoff_required: false,
+        appointment_payload: {}
+      },
+      diagnostics: {
+        reply: {
+          node: "conversation",
+          provider: dspyReply ? "dspy_service" : "llm_service",
+          replyMode: generatedReply.reply_mode
+        }
+      }
     };
   }
 
-  private async rag(state: GraphState, traceId?: string): Promise<GraphState> {
+  private async rag(
+    state: GraphState,
+    traceId?: string
+  ): Promise<{ state: GraphState; diagnostics: ClinicWorkflowDiagnostics }> {
     const ragContext = await this.knowledgeProvider.buildContext(
       state.last_user_message || "contexto del usuario",
       state.actor_id,
       state.recalled_memories
     );
+    await this.trace(traceId, "clinic.rag.retrieval.meta", {
+      backend: ragContext.backend,
+      status: ragContext.status,
+      result_count: ragContext.resultCount,
+      fallback_used: ragContext.fallbackUsed
+    });
     const payload = {
       ...this.buildConversationPayload(state),
-      retrieved_context: ragContext
+      retrieved_context: ragContext.text
     };
     const context = buildReplyContext(state);
     await this.trace(traceId, "clinic.rag.input", payload);
@@ -283,16 +348,34 @@ export class ClinicWorkflow {
     });
 
     return {
-      ...state,
-      last_tool_result: compact(ragContext, 240),
-      response_text: generatedReply.response_text,
-      last_assistant_message: generatedReply.response_text,
-      handoff_required: false,
-      appointment_payload: {}
+      state: {
+        ...state,
+        last_tool_result: compact(ragContext.text, 240),
+        response_text: generatedReply.response_text,
+        last_assistant_message: generatedReply.response_text,
+        handoff_required: false,
+        appointment_payload: {}
+      },
+      diagnostics: {
+        retrieval: {
+          backend: ragContext.backend,
+          status: ragContext.status,
+          resultCount: ragContext.resultCount,
+          fallbackUsed: ragContext.fallbackUsed
+        },
+        reply: {
+          node: "rag",
+          provider: dspyReply ? "dspy_service" : "llm_service",
+          replyMode: generatedReply.reply_mode
+        }
+      }
     };
   }
 
-  private async appointment(state: GraphState, traceId?: string): Promise<GraphState> {
+  private async appointment(
+    state: GraphState,
+    traceId?: string
+  ): Promise<{ state: GraphState; diagnostics: ClinicWorkflowDiagnostics }> {
     const context = buildReplyContext(state);
     const extractionPayload = {
       user_message: state.last_user_message,
@@ -342,20 +425,33 @@ export class ClinicWorkflow {
         : `${generatedReply.response_text} Tu solicitud quedo lista para recepcion.`.trim();
 
     return {
-      ...state,
-      response_text: responseText,
-      last_assistant_message: responseText,
-      appointment_slots: appointmentSlots,
-      pending_question: pendingQuestion,
-      pending_action: pendingAction,
-      active_goal: "appointment",
-      stage,
-      last_tool_result: compact(
-        `appointment missing=${appointment.missing_fields.join(",") || "none"} confidence=${appointment.confidence.toFixed(2)}`,
-        200
-      ),
-      handoff_required: appointment.should_handoff,
-      appointment_payload: appointment as Record<string, unknown>
+      state: {
+        ...state,
+        response_text: responseText,
+        last_assistant_message: responseText,
+        appointment_slots: appointmentSlots,
+        pending_question: pendingQuestion,
+        pending_action: pendingAction,
+        active_goal: "appointment",
+        stage,
+        last_tool_result: compact(
+          `appointment missing=${appointment.missing_fields.join(",") || "none"} confidence=${appointment.confidence.toFixed(2)}`,
+          200
+        ),
+        handoff_required: appointment.should_handoff,
+        appointment_payload: appointment as Record<string, unknown>
+      },
+      diagnostics: {
+        appointmentExtraction: {
+          provider: "llm_service",
+          clinicContextPresent: false
+        },
+        reply: {
+          node: "appointment",
+          provider: dspyReply ? "dspy_service" : "llm_service",
+          replyMode: generatedReply.reply_mode
+        }
+      }
     };
   }
 
@@ -448,12 +544,17 @@ export class ClinicWorkflow {
     nodeName: string,
     traceId: string,
     state: GraphState,
-    task: (current: GraphState) => Promise<GraphState>
-  ): Promise<GraphState> {
+    task: (current: GraphState) => Promise<GraphState | { state: GraphState; diagnostics?: ClinicWorkflowDiagnostics }>
+  ): Promise<{ state: GraphState; diagnostics?: ClinicWorkflowDiagnostics }> {
     await this.trace(traceId, `langgraph.node.${nodeName}.before`, state);
-    const nextState = await task(state);
+    const outcome = await task(state);
+    const nextState = "state" in outcome ? outcome.state : outcome;
+    const diagnostics = "state" in outcome ? outcome.diagnostics : undefined;
     await this.trace(traceId, `langgraph.node.${nodeName}.after`, nextState);
-    return nextState;
+    return {
+      state: nextState,
+      ...(diagnostics ? { diagnostics } : {})
+    };
   }
 
   private async trace(traceId: string | undefined, event: string, payload: unknown): Promise<void> {

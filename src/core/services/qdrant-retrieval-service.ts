@@ -1,5 +1,5 @@
 import type { AppSettings } from "../../config";
-import type { ClinicConfigProvider, ClinicKnowledgeProvider } from "../../domain/ports";
+import type { ClinicConfigProvider, ClinicKnowledgeContext, ClinicKnowledgeProvider } from "../../domain/ports";
 
 interface QdrantPoint {
   id?: string | number;
@@ -35,32 +35,38 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
     return Boolean(this.settings.qdrant.enabled && this.settings.qdrant.baseUrl && this.settings.qdrant.collectionName);
   }
 
-  async buildContext(query: string, contactId: string, memories: string[]): Promise<string> {
-    const results = await this.search(query, contactId);
-    const chunks = [
-      `Consulta RAG ejecutada en Qdrant para: ${query}`,
-      "",
-      "Memoria conversacional relevante:",
-      memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias"
-    ];
-
-    if (results.length > 0) {
-      chunks.push("", "Fragmentos recuperados desde Qdrant:");
-      for (const result of results) {
-        const source = String(result.payload?.source_file ?? result.payload?.source ?? "unknown");
-        const text = String(result.payload?.text ?? "");
-        chunks.push(`- [${String(result.id ?? "unknown")}] score=${Number(result.score ?? 0).toFixed(3)} source=${source} text=${shorten(text, 240)}`);
-      }
-    } else {
-      const fallbackContext = await this.loadFallbackContext();
-      if (fallbackContext) {
-        chunks.push("", "Contexto base de respaldo desde clinic.json:", fallbackContext);
-      } else {
-        chunks.push("", "Fragmentos recuperados desde Qdrant:", "- Sin resultados");
-      }
+  async buildContext(query: string, contactId: string, memories: string[]): Promise<ClinicKnowledgeContext> {
+    if (this.settings.qdrant.simulate) {
+      const simulated = this.simulate(query, contactId);
+      return {
+        text: this.renderContext(query, memories, simulated),
+        backend: "simulate",
+        status: "simulated",
+        resultCount: simulated.length,
+        fallbackUsed: false
+      };
     }
 
-    return chunks.join("\n");
+    if (!this.ready) {
+      return this.buildFallbackOrUnavailableContext(query, memories, "qdrant_unavailable");
+    }
+
+    const results = await this.search(query, contactId);
+    if (results === null) {
+      return this.buildFallbackOrUnavailableContext(query, memories, "qdrant_unavailable");
+    }
+
+    if (results.length > 0) {
+      return {
+        text: this.renderContext(query, memories, results),
+        backend: "qdrant",
+        status: "ok",
+        resultCount: results.length,
+        fallbackUsed: false
+      };
+    }
+
+    return this.buildFallbackOrUnavailableContext(query, memories, "no_results");
   }
 
   private async loadFallbackContext(): Promise<string> {
@@ -75,11 +81,7 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
     }
   }
 
-  private async search(query: string, contactId: string): Promise<QdrantPoint[]> {
-    if (this.settings.qdrant.simulate || !this.ready) {
-      return this.simulate(query, contactId);
-    }
-
+  private async search(query: string, contactId: string): Promise<QdrantPoint[] | null> {
     try {
       const vector = await this.embed(query);
       const response = await fetch(
@@ -100,13 +102,100 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
         }
       );
       if (!response.ok) {
-        return [];
+        return null;
       }
       const payload = (await response.json()) as { result?: QdrantPoint[] };
       return payload.result?.slice(0, this.settings.qdrant.topK) ?? [];
     } catch {
-      return [];
+      return null;
     }
+  }
+
+  private async buildFallbackOrUnavailableContext(
+    query: string,
+    memories: string[],
+    status: "qdrant_unavailable" | "no_results"
+  ): Promise<ClinicKnowledgeContext> {
+    const fallbackContext = await this.loadFallbackContext();
+    if (fallbackContext) {
+      return {
+        text: this.renderFallbackContext(query, memories, fallbackContext, status),
+        backend: "clinic_config",
+        status,
+        resultCount: 0,
+        fallbackUsed: true
+      };
+    }
+
+    return {
+      text: this.renderEmptyContext(query, memories, status),
+      backend: "qdrant",
+      status,
+      resultCount: 0,
+      fallbackUsed: false
+    };
+  }
+
+  private renderContext(query: string, memories: string[], results: QdrantPoint[]): string {
+    const chunks = [
+      `Consulta RAG ejecutada en Qdrant para: ${query}`,
+      "",
+      "Memoria conversacional relevante:",
+      memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
+      "",
+      "Fragmentos recuperados desde Qdrant:"
+    ];
+
+    for (const result of results) {
+      const source = String(result.payload?.source_file ?? result.payload?.source ?? "unknown");
+      const text = String(result.payload?.text ?? "");
+      chunks.push(`- [${String(result.id ?? "unknown")}] score=${Number(result.score ?? 0).toFixed(3)} source=${source} text=${shorten(text, 240)}`);
+    }
+
+    return chunks.join("\n");
+  }
+
+  private renderFallbackContext(
+    query: string,
+    memories: string[],
+    fallbackContext: string,
+    status: "qdrant_unavailable" | "no_results"
+  ): string {
+    const title = status === "qdrant_unavailable"
+      ? "Qdrant no disponible. Usando respaldo de clinic.json."
+      : "Qdrant sin resultados. Usando respaldo de clinic.json.";
+
+    return [
+      title,
+      `Consulta original: ${query}`,
+      "",
+      "Memoria conversacional relevante:",
+      memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
+      "",
+      "Contexto base de respaldo desde clinic.json:",
+      fallbackContext
+    ].join("\n");
+  }
+
+  private renderEmptyContext(
+    query: string,
+    memories: string[],
+    status: "qdrant_unavailable" | "no_results"
+  ): string {
+    const title = status === "qdrant_unavailable"
+      ? "Qdrant no disponible y no hay respaldo local."
+      : "Qdrant no devolvio resultados y no hay respaldo local.";
+
+    return [
+      title,
+      `Consulta original: ${query}`,
+      "",
+      "Memoria conversacional relevante:",
+      memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
+      "",
+      "Fragmentos recuperados desde Qdrant:",
+      "- Sin resultados"
+    ].join("\n");
   }
 
   private async embed(query: string): Promise<number[]> {

@@ -411,8 +411,12 @@ export class ExecutionLogger {
     result: unknown;
     usedDspy: boolean;
     knowledgeCount: number;
+    consoleSummary?: string;
   }): Promise<void> {
-    this.parent.writeConsoleLine("FLOW", `${data.capability} -> ${extractConsoleResult(data.result)}`);
+    this.parent.writeConsoleLine(
+      "FLOW",
+      `${data.consoleSummary ?? data.capability} -> ${extractConsoleResult(data.result)}`
+    );
     await this.block("06.FLOW", data);
   }
 
