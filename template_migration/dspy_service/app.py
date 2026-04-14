@@ -6,12 +6,20 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from signatures import (
-    AppointmentReplySignature,
-    ConversationReplySignature,
-    RagReplySignature,
-    StateRouterSignature,
-)
+try:
+    from signatures import (
+        AppointmentReplySignature,
+        ConversationReplySignature,
+        RagReplySignature,
+        StateRouterSignature,
+    )
+except ModuleNotFoundError:  # pragma: no cover - package-style fallback
+    from .signatures import (  # type: ignore
+        AppointmentReplySignature,
+        ConversationReplySignature,
+        RagReplySignature,
+        StateRouterSignature,
+    )
 
 try:
     import dspy  # type: ignore

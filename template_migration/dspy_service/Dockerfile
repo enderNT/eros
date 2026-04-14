@@ -5,6 +5,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py ./
+COPY signatures.py ./
 COPY datasets ./datasets
 COPY artifacts ./artifacts
 
