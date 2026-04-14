@@ -1,6 +1,6 @@
 import type { AppSettings } from "../../config";
 import type { RoutingPacket, StateRoutingDecision } from "../../domain/contracts";
-import type { ClinicDspyBridge } from "../../domain/ports";
+import type { ClinicDspyBridge, TraceSink } from "../../domain/ports";
 import { ClinicLlmService } from "./clinic-llm-service";
 
 function compact(value: string, limit: number): string {
@@ -12,7 +12,8 @@ export class ClinicRoutingService {
   constructor(
     private readonly settings: AppSettings,
     private readonly llmService: ClinicLlmService,
-    private readonly dspyBridge: ClinicDspyBridge
+    private readonly dspyBridge: ClinicDspyBridge,
+    private readonly traceSink?: TraceSink
   ) {}
 
   async routeState(input: {
@@ -27,7 +28,7 @@ export class ClinicRoutingService {
     last_user_message: string;
     last_assistant_message: string;
     memories: string[];
-  }): Promise<StateRoutingDecision> {
+  }, traceId?: string): Promise<StateRoutingDecision> {
     const routingPacket: RoutingPacket = {
       user_message: compact(input.user_message, 400),
       conversation_summary: compact(input.conversation_summary, 500),
@@ -43,25 +44,53 @@ export class ClinicRoutingService {
       last_assistant_message: compact(input.last_assistant_message, 280),
       memories: input.memories.slice(0, 3).map((memory) => compact(memory, 160))
     };
+    const signaturePayload = {
+      ...routingPacket,
+      guard_hint: {}
+    };
+
+    if (traceId) {
+      await this.traceSink?.append(traceId, "clinic.route.input", signaturePayload);
+    }
 
     const guard = this.deterministicGuard(routingPacket);
     if (guard) {
+      if (traceId) {
+        await this.traceSink?.append(traceId, "clinic.route.output", guard);
+        await this.traceSink?.append(traceId, "clinic.route.meta", {
+          provider: "guard"
+        });
+      }
       return guard;
     }
 
     if (this.settings.dspy.enabled) {
-      const decision = await this.dspyBridge.predictStateRouter({ ...routingPacket, guard_hint: {} });
+      const decision = await this.dspyBridge.predictStateRouter(signaturePayload);
       if (decision) {
-        return decision.next_node === "rag" && !decision.needs_retrieval
+        const normalized = decision.next_node === "rag" && !decision.needs_retrieval
           ? { ...decision, needs_retrieval: true }
           : decision;
+        if (traceId) {
+          await this.traceSink?.append(traceId, "clinic.route.output", normalized);
+          await this.traceSink?.append(traceId, "clinic.route.meta", {
+            provider: "dspy"
+          });
+        }
+        return normalized;
       }
     }
 
     const decision = await this.llmService.classifyStateRoute(routingPacket, {});
-    return decision.next_node === "rag" && !decision.needs_retrieval
+    const normalized = decision.next_node === "rag" && !decision.needs_retrieval
       ? { ...decision, needs_retrieval: true }
       : decision;
+    if (traceId) {
+      await this.traceSink?.append(traceId, "clinic.route.output", normalized);
+      await this.traceSink?.append(traceId, "clinic.route.meta", {
+        provider: "llm"
+      });
+    }
+    return normalized;
   }
 
   summarizeMemories(memories: string[]): string[] {

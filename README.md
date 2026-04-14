@@ -14,7 +14,7 @@ Se cambia:
 - stack principal a `TS/Bun/Elysia`
 - implementacion de grafo a `LangGraph JS/TS`
 - servicio DSPy a bridge Python de dominio
-- se desactiva el tracing persistente en Postgres
+- el tracing persistente en Postgres vive en la app `TS/Bun`, no en el servicio Python
 
 # Stateful Assistant Template
 
@@ -67,11 +67,14 @@ Documentación ampliada:
 
 ## Endpoints
 
-- `GET /health`: health check del servicio principal.
+- `GET /health/live`: liveness básica del proceso.
+- `GET /health/ready`: readiness del servicio para recibir tráfico.
+- `GET /health/deps`: estado de dependencias observables como tracing y DSPy.
+- `GET /health`: alias compatible de readiness.
 - `POST /webhooks/messages`: recibe eventos y responde `202 Accepted`; el turno se procesa de forma asíncrona.
 - `POST /webhooks/chatwoot`: endpoint equivalente al webhook de la app Python original.
 - `POST /turns/execute`: ejecuta el turno de forma síncrona; útil para pruebas locales e integración.
-- `GET /debug/traces`: expone las trazas guardadas en el sink en memoria.
+- `GET /debug/traces`: expone el snapshot reciente del sink de trazas activo.
 
 Con `Chatwoot`, el webhook principal ya puede:
 
@@ -175,9 +178,11 @@ Incluye implementaciones base seguras para desarrollo:
 - memoria larga remota opcional con `Mem0`
 - knowledge provider nulo
 - transporte de salida no-op
-- tracing en memoria
+- tracing en memoria o persistente en Postgres
 - logging operacional con sanitización y correlación por ejecución
 - rotación de logs tipo ring buffer por archivo/líneas
 - bridge HTTP a DSPy con timeout, retry conservador y apertura temporal de circuito
 - subgrafo LangGraph en TypeScript para `conversation` y `rag`
 - preservación de payloads/estados del subgrafo para no acoplar el template a un negocio concreto
+
+En modo `postgres`, el tracing se guarda después de responder al usuario y cada flush usa una conexión corta por ejecución.

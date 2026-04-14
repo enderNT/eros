@@ -2,7 +2,15 @@ import type { AppSettings } from "../src/config";
 
 export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   const base: AppSettings = {
-    app: { env: "test", name: "test-app", host: "0.0.0.0", port: 3000, locale: "es-MX", timezone: "America/Mexico_City" },
+    app: {
+      env: "test",
+      name: "test-app",
+      host: "0.0.0.0",
+      port: 3000,
+      locale: "es-MX",
+      timezone: "America/Mexico_City",
+      shutdownGraceMs: 200
+    },
     logging: {
       consoleEnabled: false,
       fileEnabled: false,
@@ -54,7 +62,23 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
         apiAccessToken: ""
       }
     },
-    trace: { backend: "in_memory", appKey: "test", projectorsEnabled: true, storeRawRecall: true, storePromptDigest: true },
+    trace: {
+      backend: "in_memory",
+      appKey: "test",
+      projectorsEnabled: true,
+      storeRawRecall: true,
+      storePromptDigest: true,
+      flushTimeoutMs: 500,
+      recentLimit: 20,
+      projectorVersion: "test-v1",
+      postgres: {
+        connectionString: "",
+        schema: "tracing",
+        connectTimeoutMs: 100,
+        queryTimeoutMs: 100,
+        healthTimeoutMs: 100
+      }
+    },
     dspy: {
       enabled: false,
       serviceUrl: "http://localhost:8001",

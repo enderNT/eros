@@ -31,6 +31,36 @@ Para no romper contratos existentes:
 4. El nodo correspondiente produce la respuesta.
 5. Bun conserva la responsabilidad de persistencia, memoria, logging y emisión.
 
+## Rutas de negocio vs tareas trazables
+
+En la app siguen existiendo las mismas rutas funcionales de negocio:
+
+- `route`
+- `conversation`
+- `rag`
+- `appointment`
+
+Para tracing y curación de datasets se registran además tareas observables más finas, sin cambiar las firmas ni los payloads de dominio:
+
+- `route_decision`
+- `conversation_reply`
+- `rag_reply`
+- `appointment_extraction`
+- `appointment_reply`
+- `state_summary`
+
+La idea es separar mejor lo que después se quiere descargar desde Postgres para revisión, curación y optimización de `DSPy`.
+
+### Matriz rápida
+
+| Flujo del turno | Tareas trazables típicas |
+| --- | --- |
+| conversación simple | `route_decision`, `conversation_reply`, `state_summary` |
+| consulta con RAG | `route_decision`, `rag_reply`, `state_summary` |
+| cita | `route_decision`, `appointment_extraction`, `appointment_reply`, `state_summary` |
+
+No todas las tareas ocurren en todos los turnos.
+
 ## Rutas implementadas
 
 ### conversation

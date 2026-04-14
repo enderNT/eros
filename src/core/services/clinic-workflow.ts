@@ -15,13 +15,18 @@ import type {
   ClinicKnowledgeProvider,
   ClinicLlmService,
   ClinicMemoryRuntime,
-  ClinicRoutingService
+  ClinicRoutingService,
+  TraceSink
 } from "../../domain/ports";
 
 const GraphAnnotation = Annotation.Root({
   state: Annotation<GraphState>({
     reducer: (_left, right) => right,
     default: () => createEmptyGraphState()
+  }),
+  traceId: Annotation<string>({
+    reducer: (_left, right) => right,
+    default: () => ""
   })
 });
 
@@ -145,16 +150,31 @@ export class ClinicWorkflow {
     private readonly clinicConfigProvider: ClinicConfigProvider,
     private readonly knowledgeProvider: ClinicKnowledgeProvider,
     private readonly dspyBridge: ClinicDspyBridge,
-    private readonly settings: AppSettings
+    private readonly settings: AppSettings,
+    private readonly traceSink?: TraceSink
   ) {
     this.graph = new StateGraph(GraphAnnotation)
-      .addNode("load_context", async ({ state }) => ({ state: await this.loadContext(state) }))
-      .addNode("route", async ({ state }) => ({ state: await this.route(state) }))
-      .addNode("conversation", async ({ state }) => ({ state: await this.conversation(state) }))
-      .addNode("rag", async ({ state }) => ({ state: await this.rag(state) }))
-      .addNode("appointment", async ({ state }) => ({ state: await this.appointment(state) }))
-      .addNode("finalize_turn", async ({ state }) => ({ state: this.finalizeTurn(state) }))
-      .addNode("store_memory", async ({ state }) => ({ state: await this.storeMemory(state) }))
+      .addNode("load_context", async ({ state, traceId }) => ({
+        state: await this.traceNode("load_context", traceId, state, (current) => this.loadContext(current, traceId))
+      }))
+      .addNode("route", async ({ state, traceId }) => ({
+        state: await this.traceNode("route", traceId, state, (current) => this.route(current, traceId))
+      }))
+      .addNode("conversation", async ({ state, traceId }) => ({
+        state: await this.traceNode("conversation", traceId, state, (current) => this.conversation(current, traceId))
+      }))
+      .addNode("rag", async ({ state, traceId }) => ({
+        state: await this.traceNode("rag", traceId, state, (current) => this.rag(current, traceId))
+      }))
+      .addNode("appointment", async ({ state, traceId }) => ({
+        state: await this.traceNode("appointment", traceId, state, (current) => this.appointment(current, traceId))
+      }))
+      .addNode("finalize_turn", async ({ state, traceId }) => ({
+        state: await this.traceNode("finalize_turn", traceId, state, async (current) => this.finalizeTurn(current))
+      }))
+      .addNode("store_memory", async ({ state, traceId }) => ({
+        state: await this.traceNode("store_memory", traceId, state, (current) => this.storeMemory(current, traceId))
+      }))
       .addEdge(START, "load_context")
       .addEdge("load_context", "route")
       .addConditionalEdges("route", ({ state }) => state.next_node, {
@@ -170,18 +190,19 @@ export class ClinicWorkflow {
       .compile();
   }
 
-  async run(initialState: GraphState): Promise<GraphState> {
-    const result = await this.graph.invoke({ state: initialState });
+  async run(initialState: GraphState, traceId = ""): Promise<GraphState> {
+    const result = await this.graph.invoke({ state: initialState, traceId });
     return result.state;
   }
 
-  private async loadContext(state: GraphState): Promise<GraphState> {
+  private async loadContext(state: GraphState, traceId?: string): Promise<GraphState> {
     const context = await this.memoryRuntime.loadContext(
       state.session_id,
       state.actor_id,
       state.last_user_message || state.summary || "contexto del usuario",
       toShortTermState(state)
     );
+    await this.trace(traceId, "clinic.load_context.output", context);
 
     return {
       ...state,
@@ -190,7 +211,7 @@ export class ClinicWorkflow {
     };
   }
 
-  private async route(state: GraphState): Promise<GraphState> {
+  private async route(state: GraphState, traceId?: string): Promise<GraphState> {
     const decision = await this.routingService.routeState({
       user_message: state.last_user_message,
       conversation_summary: state.summary,
@@ -203,7 +224,7 @@ export class ClinicWorkflow {
       last_user_message: state.last_user_message,
       last_assistant_message: state.last_assistant_message,
       memories: state.recalled_memories
-    });
+    }, traceId);
 
     return {
       ...this.applyStatePatch(state, decision.state_update),
@@ -217,12 +238,19 @@ export class ClinicWorkflow {
     };
   }
 
-  private async conversation(state: GraphState): Promise<GraphState> {
+  private async conversation(state: GraphState, traceId?: string): Promise<GraphState> {
     const payload = this.buildConversationPayload(state);
     const context = buildReplyContext(state);
-    const generatedReply =
-      (await this.dspyBridge.predictConversationReply(payload)) ??
-      (await this.llmService.generateConversationReply(payload, context));
+    await this.trace(traceId, "clinic.conversation.input", payload);
+    const dspyReply = await this.dspyBridge.predictConversationReply(payload);
+    const generatedReply = dspyReply ?? (await this.llmService.generateConversationReply(payload, context));
+    await this.trace(traceId, "clinic.conversation.output", {
+      response_text: generatedReply.response_text
+    });
+    await this.trace(traceId, "clinic.conversation.meta", {
+      provider: dspyReply ? "dspy" : "llm",
+      reply_mode: generatedReply.reply_mode
+    });
 
     return {
       ...state,
@@ -234,7 +262,7 @@ export class ClinicWorkflow {
     };
   }
 
-  private async rag(state: GraphState): Promise<GraphState> {
+  private async rag(state: GraphState, traceId?: string): Promise<GraphState> {
     const clinicContext = await this.clinicConfigProvider.toContextText();
     const ragContext = await this.knowledgeProvider.buildContext(
       state.last_user_message || "contexto del usuario",
@@ -247,9 +275,16 @@ export class ClinicWorkflow {
       retrieved_context: ragContext
     };
     const context = buildReplyContext(state);
-    const generatedReply =
-      (await this.dspyBridge.predictRagReply(payload)) ??
-      (await this.llmService.generateRagReply(payload, context));
+    await this.trace(traceId, "clinic.rag.input", payload);
+    const dspyReply = await this.dspyBridge.predictRagReply(payload);
+    const generatedReply = dspyReply ?? (await this.llmService.generateRagReply(payload, context));
+    await this.trace(traceId, "clinic.rag.output", {
+      response_text: generatedReply.response_text
+    });
+    await this.trace(traceId, "clinic.rag.meta", {
+      provider: dspyReply ? "dspy" : "llm",
+      reply_mode: generatedReply.reply_mode
+    });
 
     return {
       ...state,
@@ -261,18 +296,29 @@ export class ClinicWorkflow {
     };
   }
 
-  private async appointment(state: GraphState): Promise<GraphState> {
+  private async appointment(state: GraphState, traceId?: string): Promise<GraphState> {
     const clinicContext = await this.clinicConfigProvider.toContextText();
     const context = buildReplyContext(state);
-    const appointment = await this.llmService.extractAppointmentPayload({
+    const extractionPayload = {
       user_message: state.last_user_message,
       memories: state.recalled_memories,
       clinic_context: clinicContext,
       contact_name: state.contact_name,
       current_slots: state.appointment_slots,
       pending_question: state.pending_question,
+      reply_context: context
+    };
+    await this.trace(traceId, "clinic.appointment_extraction.input", extractionPayload);
+    const appointment = await this.llmService.extractAppointmentPayload({
+      user_message: extractionPayload.user_message,
+      memories: extractionPayload.memories,
+      clinic_context: extractionPayload.clinic_context,
+      contact_name: extractionPayload.contact_name,
+      current_slots: extractionPayload.current_slots,
+      pending_question: extractionPayload.pending_question,
       context
     });
+    await this.trace(traceId, "clinic.appointment_extraction.output", appointment as Record<string, unknown>);
 
     const payload = {
       ...this.buildConversationPayload(state),
@@ -280,9 +326,16 @@ export class ClinicWorkflow {
       appointment_state: appointment,
       booking_url: this.settings.clinic.bookingUrl
     };
-    const generatedReply =
-      (await this.dspyBridge.predictAppointmentReply(payload)) ??
-      (await this.llmService.generateAppointmentReply(payload, appointment, context));
+    await this.trace(traceId, "clinic.appointment_reply.input", payload);
+    const dspyReply = await this.dspyBridge.predictAppointmentReply(payload);
+    const generatedReply = dspyReply ?? (await this.llmService.generateAppointmentReply(payload, appointment, context));
+    await this.trace(traceId, "clinic.appointment_reply.output", {
+      response_text: generatedReply.response_text
+    });
+    await this.trace(traceId, "clinic.appointment_reply.meta", {
+      provider: dspyReply ? "dspy" : "llm",
+      reply_mode: generatedReply.reply_mode
+    });
 
     const appointmentSlots = mergeSlots(state.appointment_slots, appointment as Record<string, unknown>);
     const pendingQuestion = appointment.missing_fields.length > 0 ? buildPendingQuestion(appointment.missing_fields) : "";
@@ -337,7 +390,7 @@ export class ClinicWorkflow {
     return cleaned;
   }
 
-  private async storeMemory(state: GraphState): Promise<GraphState> {
+  private async storeMemory(state: GraphState, traceId?: string): Promise<GraphState> {
     if (!state.response_text || !state.last_user_message || !state.actor_id || !state.session_id) {
       return state;
     }
@@ -358,8 +411,10 @@ export class ClinicWorkflow {
         contact_name: state.contact_name,
         response_text: state.response_text,
         refresh_summary: state.summary_refresh_requested
-      }
+      },
+      traceId
     );
+    await this.trace(traceId, "clinic.store_memory.output", commitResult as unknown as Record<string, unknown>);
 
     return {
       ...state,
@@ -392,5 +447,24 @@ export class ClinicWorkflow {
       recent_turns: state.recent_turns,
       memories: state.recalled_memories
     };
+  }
+
+  private async traceNode(
+    nodeName: string,
+    traceId: string,
+    state: GraphState,
+    task: (current: GraphState) => Promise<GraphState>
+  ): Promise<GraphState> {
+    await this.trace(traceId, `langgraph.node.${nodeName}.before`, state);
+    const nextState = await task(state);
+    await this.trace(traceId, `langgraph.node.${nodeName}.after`, nextState);
+    return nextState;
+  }
+
+  private async trace(traceId: string | undefined, event: string, payload: unknown): Promise<void> {
+    if (!traceId) {
+      return;
+    }
+    await this.traceSink?.append(traceId, event, payload);
   }
 }

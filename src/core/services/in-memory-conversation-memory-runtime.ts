@@ -5,7 +5,7 @@ import type {
   ShortTermState,
   TurnMemoryInput
 } from "../../domain/contracts";
-import type { ClinicLlmService, ClinicMemoryRuntime } from "../../domain/ports";
+import type { ClinicLlmService, ClinicMemoryRuntime, TraceSink } from "../../domain/ports";
 
 interface StoredMemory extends ClinicMemoryRecord {
   actor_id: string;
@@ -45,7 +45,10 @@ function compact(value: string, limit: number): string {
 export class InMemoryConversationMemoryRuntime implements ClinicMemoryRuntime {
   private readonly memories: StoredMemory[] = [];
 
-  constructor(private readonly llmService: ClinicLlmService) {}
+  constructor(
+    private readonly llmService: ClinicLlmService,
+    private readonly traceSink?: TraceSink
+  ) {}
 
   async loadContext(
     _sessionId: string,
@@ -73,17 +76,27 @@ export class InMemoryConversationMemoryRuntime implements ClinicMemoryRuntime {
     actorId: string,
     turn: TurnMemoryInput,
     shortTerm: ShortTermState,
-    domainState: Record<string, unknown>
+    domainState: Record<string, unknown>,
+    traceId?: string
   ): Promise<MemoryCommitResult> {
     let summary = shortTerm.summary;
     if (domainState.refresh_summary === true) {
-      summary = await this.llmService.buildStateSummary({
+      const signaturePayload = {
         current_summary: shortTerm.summary,
         user_message: turn.user_message,
         assistant_message: turn.assistant_message,
         active_goal: shortTerm.activeGoal ?? "",
         stage: shortTerm.stage ?? ""
-      });
+      };
+      if (traceId) {
+        await this.traceSink?.append(traceId, "clinic.state_summary.input", signaturePayload);
+      }
+      summary = await this.llmService.buildStateSummary(signaturePayload);
+      if (traceId) {
+        await this.traceSink?.append(traceId, "clinic.state_summary.output", {
+          updated_summary: summary
+        });
+      }
     }
 
     const stored_records: ClinicMemoryRecord[] = [];

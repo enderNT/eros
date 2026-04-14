@@ -52,6 +52,11 @@ export interface DspyBridge {
   predictReply?(capability: Capability, context: ExecutionContext): Promise<CapabilityResult | null>;
 }
 
+export interface HealthStatus {
+  ok: boolean;
+  details?: Record<string, unknown>;
+}
+
 export interface TraceSink {
   startTurn(inbound: InboundMessage): Promise<string>;
   append(traceId: string, event: string, payload: unknown): Promise<void>;
@@ -59,6 +64,9 @@ export interface TraceSink {
   projectReply(traceId: string, outcome: TurnOutcome, inbound: InboundMessage): Promise<void>;
   endTurn(traceId: string, outcome: TurnOutcome): Promise<void>;
   failTurn(traceId: string, error: unknown): Promise<void>;
+  flush(traceId: string): Promise<void>;
+  health(): Promise<HealthStatus>;
+  close(timeoutMs?: number): Promise<void>;
 }
 
 export interface OutboundTransport {
@@ -92,7 +100,8 @@ export interface ClinicMemoryRuntime {
     actorId: string,
     turn: TurnMemoryInput,
     shortTerm: ShortTermState,
-    domainState: Record<string, unknown>
+    domainState: Record<string, unknown>,
+    traceId?: string
   ): Promise<MemoryCommitResult>;
 }
 
@@ -152,7 +161,7 @@ export interface ClinicRoutingService {
     last_user_message: string;
     last_assistant_message: string;
     memories: string[];
-  }): Promise<StateRoutingDecision>;
+  }, traceId?: string): Promise<StateRoutingDecision>;
   summarizeMemories(memories: string[]): string[];
 }
 

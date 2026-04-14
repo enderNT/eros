@@ -96,21 +96,28 @@ export function assessChatwootWebhook(payload: ChatwootWebhookPayload): Chatwoot
 }
 
 export function normalizeInboundMessage(payload: Record<string, unknown>): InboundMessage {
-  const text = typeof payload.text === "string" ? payload.text : "";
+  const nestedMessage = payload.message && typeof payload.message === "object" ? payload.message as Record<string, unknown> : {};
+  const conversation = payload.conversation && typeof payload.conversation === "object" ? payload.conversation as Record<string, unknown> : {};
+  const sender = payload.sender && typeof payload.sender === "object" ? payload.sender as Record<string, unknown> : {};
+  const text = typeof payload.text === "string"
+    ? payload.text
+    : typeof nestedMessage.text === "string"
+      ? nestedMessage.text
+      : "";
   if (!text.trim()) {
     throw new Error("Unable to normalize inbound payload: missing text");
   }
 
   return {
-    sessionId: String(payload.sessionId ?? crypto.randomUUID()),
-    actorId: String(payload.actorId ?? "anonymous"),
+    sessionId: String(payload.sessionId ?? conversation.id ?? crypto.randomUUID()),
+    actorId: String(payload.actorId ?? sender.id ?? "anonymous"),
     channel: String(payload.channel ?? "generic_http"),
     text: text.trim(),
     correlationId: payload.correlationId ? String(payload.correlationId) : undefined,
     parentRunId: payload.parentRunId ? String(payload.parentRunId) : undefined,
     trigger: payload.trigger ? String(payload.trigger) : "http_message",
     accountId: payload.accountId ? String(payload.accountId) : undefined,
-    contactName: payload.contactName ? String(payload.contactName) : undefined,
+    contactName: payload.contactName ? String(payload.contactName) : sender.name ? String(sender.name) : undefined,
     rawPayload: payload,
     receivedAt: new Date().toISOString()
   };

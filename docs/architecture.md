@@ -70,7 +70,8 @@ La API vive en `src/app.ts` con `Elysia`.
 
 - `POST /webhooks/messages` responde rápido con `202` y procesa en segundo plano.
 - `POST /turns/execute` es útil para pruebas síncronas.
-- `GET /health` y `GET /debug/traces` cubren operación y debugging.
+- `GET /health/live`, `GET /health/ready` y `GET /health/deps` cubren operación y readiness.
+- `GET /debug/traces` expone el snapshot reciente del tracing activo.
 - `POST /webhooks/messages` también discrimina eventos de Chatwoot para procesar solo mensajes entrantes.
 
 ### Inbound / Outbound Adapters
@@ -151,7 +152,15 @@ También proyecta datasets simples en memoria para:
 Además, el template separa explícitamente:
 
 - `logs operativos`: lectura humana, terminal resumida y archivo detallado
-- `trazas`: datasets internos y snapshots de depuración
+- `trazas`: datasets internos y snapshots de depuración, en memoria o persistidos a Postgres
+
+Cuando `TRACE_BACKEND=postgres`, el tracing se persiste fuera del camino crítico de respuesta:
+
+- la app responde primero al usuario
+- después dispara el flush del tracing en segundo plano
+- cada flush abre una conexión corta a Postgres, escribe en transacción y la cierra
+
+La intención es evitar conexiones colgadas o pools persistentes que puedan degradar la app tras redeploys, reinicios o periodos de inactividad.
 
 ### Logging operacional
 

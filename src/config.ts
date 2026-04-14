@@ -6,6 +6,7 @@ export interface AppSettings {
     port: number;
     locale: string;
     timezone: string;
+    shutdownGraceMs: number;
   };
   logging: {
     consoleEnabled: boolean;
@@ -87,6 +88,16 @@ export interface AppSettings {
     projectorsEnabled: boolean;
     storeRawRecall: boolean;
     storePromptDigest: boolean;
+    flushTimeoutMs: number;
+    recentLimit: number;
+    projectorVersion: string;
+    postgres: {
+      connectionString: string;
+      schema: string;
+      connectTimeoutMs: number;
+      queryTimeoutMs: number;
+      healthTimeoutMs: number;
+    };
   };
   dspy: {
     enabled: boolean;
@@ -138,7 +149,8 @@ export function loadSettings(): AppSettings {
       host: readString("APP_HOST", "0.0.0.0"),
       port: readNumber("APP_PORT", 3000),
       locale: readString("APP_DEFAULT_LOCALE", "es-MX"),
-      timezone: readString("APP_DEFAULT_TIMEZONE", "America/Mexico_City")
+      timezone: readString("APP_DEFAULT_TIMEZONE", "America/Mexico_City"),
+      shutdownGraceMs: readNumber("APP_SHUTDOWN_GRACE_MS", 5000)
     },
     logging: {
       consoleEnabled: readBoolean("APP_LOG_TO_CONSOLE", true),
@@ -222,7 +234,17 @@ export function loadSettings(): AppSettings {
       appKey: readString("TRACE_APP_KEY", "stateful-assistant"),
       projectorsEnabled: readBoolean("TRACE_PROJECTORS_ENABLED", true),
       storeRawRecall: readBoolean("TRACE_STORE_RAW_RECALL", true),
-      storePromptDigest: readBoolean("TRACE_STORE_PROMPT_DIGEST", true)
+      storePromptDigest: readBoolean("TRACE_STORE_PROMPT_DIGEST", true),
+      flushTimeoutMs: readNumber("TRACE_FLUSH_TIMEOUT_MS", 5000),
+      recentLimit: readNumber("TRACE_RECENT_LIMIT", 200),
+      projectorVersion: readString("TRACE_PROJECTOR_VERSION", "v1"),
+      postgres: {
+        connectionString: readString("TRACE_POSTGRES_URL", ""),
+        schema: readString("TRACE_POSTGRES_SCHEMA", "tracing"),
+        connectTimeoutMs: readNumber("TRACE_POSTGRES_CONNECT_TIMEOUT_MS", 3000),
+        queryTimeoutMs: readNumber("TRACE_POSTGRES_QUERY_TIMEOUT_MS", 5000),
+        healthTimeoutMs: readNumber("TRACE_POSTGRES_HEALTH_TIMEOUT_MS", 2000)
+      }
     },
     dspy: {
       enabled: dspyEnabled,

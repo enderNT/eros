@@ -1,82 +1,65 @@
 import type { InboundMessage, RouteDecision, TurnOutcome } from "../../domain/contracts";
 import type { TraceSink } from "../../domain/ports";
-
-interface TraceRecord {
-  traceId: string;
-  startedAt: string;
-  inbound: InboundMessage;
-  events: Array<{ event: string; payload: unknown; timestamp: string }>;
-  projected: {
-    route_decision: unknown[];
-    conversation_reply: unknown[];
-    knowledge_reply: unknown[];
-    action_reply: unknown[];
-    state_summary: unknown[];
-  };
-  outcome?: TurnOutcome;
-  error?: unknown;
-}
+import {
+  appendTraceEvent,
+  createTraceRecord,
+  markTraceEnded,
+  markTraceFailed,
+  projectReply,
+  projectRouteDecision,
+  type TraceRecord
+} from "./trace-record";
 
 export class InMemoryTraceSink implements TraceSink {
   private readonly traces = new Map<string, TraceRecord>();
 
   async startTurn(inbound: InboundMessage): Promise<string> {
     const traceId = crypto.randomUUID();
-    this.traces.set(traceId, {
-      traceId,
-      startedAt: new Date().toISOString(),
-      inbound,
-      events: [],
-      projected: {
-        route_decision: [],
-        conversation_reply: [],
-        knowledge_reply: [],
-        action_reply: [],
-        state_summary: []
-      }
-    });
+    this.traces.set(traceId, createTraceRecord(traceId, inbound));
     return traceId;
   }
 
   async append(traceId: string, event: string, payload: unknown): Promise<void> {
     const trace = this.requireTrace(traceId);
-    trace.events.push({ event, payload, timestamp: new Date().toISOString() });
+    appendTraceEvent(trace, event, payload);
   }
 
   async projectRouteDecision(traceId: string, decision: RouteDecision): Promise<void> {
     const trace = this.requireTrace(traceId);
-    trace.projected.route_decision.push({
-      traceId,
-      capability: decision.capability,
-      intent: decision.intent,
-      confidence: decision.confidence,
-      reason: decision.reason
-    });
+    projectRouteDecision(trace, traceId, decision);
   }
 
   async projectReply(traceId: string, outcome: TurnOutcome, inbound: InboundMessage): Promise<void> {
     const trace = this.requireTrace(traceId);
-    trace.projected[`${outcome.capability}_reply` as "conversation_reply"].push({
-      traceId,
-      capability: outcome.capability,
-      inputText: inbound.text,
-      responseText: outcome.responseText
-    });
-    trace.projected.state_summary.push({
-      traceId,
-      summary: outcome.stateSnapshot.summary,
-      turnCount: outcome.stateSnapshot.turnCount
-    });
+    projectReply(trace, traceId, outcome, inbound);
   }
 
   async endTurn(traceId: string, outcome: TurnOutcome): Promise<void> {
     const trace = this.requireTrace(traceId);
-    trace.outcome = outcome;
+    markTraceEnded(trace, outcome);
   }
 
   async failTurn(traceId: string, error: unknown): Promise<void> {
     const trace = this.requireTrace(traceId);
-    trace.error = error;
+    markTraceFailed(trace, error);
+  }
+
+  async flush(_traceId: string): Promise<void> {
+    return;
+  }
+
+  async health(): Promise<{ ok: boolean; details?: Record<string, unknown> }> {
+    return {
+      ok: true,
+      details: {
+        backend: "in_memory",
+        traceCount: this.traces.size
+      }
+    };
+  }
+
+  async close(_timeoutMs?: number): Promise<void> {
+    return;
   }
 
   getSnapshot(): TraceRecord[] {

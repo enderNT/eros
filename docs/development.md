@@ -207,7 +207,7 @@ Antes de extender o integrar este template:
 
 1. Ejecuta `bun test`.
 2. Ejecuta `bun x tsc --noEmit`.
-3. Verifica `GET /health`.
+3. Verifica `GET /health/ready`.
 4. Prueba `POST /turns/execute`.
 5. Revisa `GET /debug/traces` para confirmar la secuencia del turno.
 6. Confirma que la terminal no muestre dumps internos innecesarios.
