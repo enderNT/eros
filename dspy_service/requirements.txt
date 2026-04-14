@@ -1,3 +1,5 @@
 fastapi==0.115.0
 uvicorn==0.30.6
 dspy-ai==2.5.43
+dspy<3
+backoff==2.2.1
