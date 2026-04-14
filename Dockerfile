@@ -5,6 +5,7 @@ COPY package.json tsconfig.json ./
 RUN bun install
 
 COPY src ./src
+COPY config ./config
 COPY tests ./tests
 COPY .env.example ./.env.example
 

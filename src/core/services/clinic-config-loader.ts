@@ -1,8 +1,20 @@
 import { readFile } from "node:fs/promises";
 import type { ClinicConfig } from "../../domain/contracts";
 
+function createFallbackClinicConfig(): ClinicConfig {
+  return {
+    clinic_name: "Clinica no configurada",
+    timezone: "America/Mexico_City",
+    services: [],
+    doctors: [],
+    hours: {},
+    policies: {}
+  };
+}
+
 export class ClinicConfigLoader {
   private cached: ClinicConfig | null = null;
+  private available = false;
 
   constructor(private readonly configPath: string) {}
 
@@ -11,13 +23,23 @@ export class ClinicConfigLoader {
       return this.cached;
     }
 
-    const raw = await readFile(this.configPath, "utf8");
-    this.cached = JSON.parse(raw) as ClinicConfig;
+    try {
+      const raw = await readFile(this.configPath, "utf8");
+      this.cached = JSON.parse(raw) as ClinicConfig;
+      this.available = true;
+    } catch {
+      this.cached = createFallbackClinicConfig();
+      this.available = false;
+    }
     return this.cached;
   }
 
   async toContextText(): Promise<string> {
     const config = await this.load();
+    if (!this.available) {
+      return "";
+    }
+
     const services = config.services
       .map((service) => `- ${String(service.name ?? "Servicio")}: ${String(service.duration_minutes ?? "N/D")} min, ${String(service.price ?? "N/D")}`)
       .join("\n");

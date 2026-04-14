@@ -30,8 +30,7 @@ export function buildApp() {
     routingService,
     llmService,
     memoryRuntime,
-    clinicConfigProvider,
-    new QdrantRetrievalService(settings),
+    new QdrantRetrievalService(settings, clinicConfigProvider),
     dspyBridge,
     settings,
     traceSink

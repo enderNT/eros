@@ -10,7 +10,6 @@ import type {
   ShortTermState
 } from "../../domain/contracts";
 import type {
-  ClinicConfigProvider,
   ClinicDspyBridge,
   ClinicKnowledgeProvider,
   ClinicLlmService,
@@ -147,7 +146,6 @@ export class ClinicWorkflow {
     private readonly routingService: ClinicRoutingService,
     private readonly llmService: ClinicLlmService,
     private readonly memoryRuntime: ClinicMemoryRuntime,
-    private readonly clinicConfigProvider: ClinicConfigProvider,
     private readonly knowledgeProvider: ClinicKnowledgeProvider,
     private readonly dspyBridge: ClinicDspyBridge,
     private readonly settings: AppSettings,
@@ -263,11 +261,9 @@ export class ClinicWorkflow {
   }
 
   private async rag(state: GraphState, traceId?: string): Promise<GraphState> {
-    const clinicContext = await this.clinicConfigProvider.toContextText();
     const ragContext = await this.knowledgeProvider.buildContext(
       state.last_user_message || "contexto del usuario",
       state.actor_id,
-      clinicContext,
       state.recalled_memories
     );
     const payload = {
@@ -297,12 +293,11 @@ export class ClinicWorkflow {
   }
 
   private async appointment(state: GraphState, traceId?: string): Promise<GraphState> {
-    const clinicContext = await this.clinicConfigProvider.toContextText();
     const context = buildReplyContext(state);
     const extractionPayload = {
       user_message: state.last_user_message,
       memories: state.recalled_memories,
-      clinic_context: clinicContext,
+      clinic_context: "",
       contact_name: state.contact_name,
       current_slots: state.appointment_slots,
       pending_question: state.pending_question,

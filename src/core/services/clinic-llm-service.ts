@@ -250,9 +250,10 @@ export class ClinicLlmService {
         `Memorias relevantes: ${JSON.stringify(input.memories)}`,
         `Slots actuales: ${JSON.stringify(input.current_slots ?? {})}`,
         `Pendiente: ${input.pending_question ?? "n/a"}`,
-        `Contexto clinico:\n${input.clinic_context}`,
         `Mensaje: ${input.user_message}`
-      ].join("\n")
+      ]
+        .concat(input.clinic_context.trim() ? [`Contexto clinico:\n${input.clinic_context}`] : [])
+        .join("\n")
     );
 
     if (!payload) {

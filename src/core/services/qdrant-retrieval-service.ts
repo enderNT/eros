@@ -1,5 +1,5 @@
 import type { AppSettings } from "../../config";
-import type { ClinicKnowledgeProvider } from "../../domain/ports";
+import type { ClinicConfigProvider, ClinicKnowledgeProvider } from "../../domain/ports";
 
 interface QdrantPoint {
   id?: string | number;
@@ -15,7 +15,10 @@ function shorten(value: string, limit: number): string {
 export class QdrantRetrievalService implements ClinicKnowledgeProvider {
   private readonly chatCompletionsUrl: string | null;
 
-  constructor(private readonly settings: AppSettings) {
+  constructor(
+    private readonly settings: AppSettings,
+    private readonly fallbackConfigProvider?: ClinicConfigProvider
+  ) {
     const trimmedBaseUrl = settings.llm.baseUrl?.trim();
     if (!trimmedBaseUrl) {
       this.chatCompletionsUrl = null;
@@ -32,31 +35,44 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
     return Boolean(this.settings.qdrant.enabled && this.settings.qdrant.baseUrl && this.settings.qdrant.collectionName);
   }
 
-  async buildContext(query: string, contactId: string, clinicContext: string, memories: string[]): Promise<string> {
+  async buildContext(query: string, contactId: string, memories: string[]): Promise<string> {
     const results = await this.search(query, contactId);
     const chunks = [
       `Consulta RAG ejecutada en Qdrant para: ${query}`,
       "",
       "Memoria conversacional relevante:",
-      memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
-      "",
-      "Fragmentos recuperados desde Qdrant:"
+      memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias"
     ];
 
     if (results.length > 0) {
+      chunks.push("", "Fragmentos recuperados desde Qdrant:");
       for (const result of results) {
         const source = String(result.payload?.source_file ?? result.payload?.source ?? "unknown");
         const text = String(result.payload?.text ?? "");
         chunks.push(`- [${String(result.id ?? "unknown")}] score=${Number(result.score ?? 0).toFixed(3)} source=${source} text=${shorten(text, 240)}`);
       }
     } else {
-      chunks.push("- Sin resultados");
-      if (this.ready && !this.settings.qdrant.simulate) {
-        chunks.push("", "Contexto base de respaldo desde clinic.json:", clinicContext);
+      const fallbackContext = await this.loadFallbackContext();
+      if (fallbackContext) {
+        chunks.push("", "Contexto base de respaldo desde clinic.json:", fallbackContext);
+      } else {
+        chunks.push("", "Fragmentos recuperados desde Qdrant:", "- Sin resultados");
       }
     }
 
     return chunks.join("\n");
+  }
+
+  private async loadFallbackContext(): Promise<string> {
+    if (!this.fallbackConfigProvider) {
+      return "";
+    }
+
+    try {
+      return (await this.fallbackConfigProvider.toContextText()).trim();
+    } catch {
+      return "";
+    }
   }
 
   private async search(query: string, contactId: string): Promise<QdrantPoint[]> {

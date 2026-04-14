@@ -176,7 +176,7 @@ export interface ClinicDspyBridge {
 }
 
 export interface ClinicKnowledgeProvider {
-  buildContext(query: string, contactId: string, clinicContext: string, memories: string[]): Promise<string>;
+  buildContext(query: string, contactId: string, memories: string[]): Promise<string>;
 }
 
 export interface ClinicConfigProvider {
