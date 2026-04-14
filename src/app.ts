@@ -5,14 +5,13 @@ import {
   normalizeChatwootInboundMessage,
   normalizeInboundMessage
 } from "./adapters/http/inbound";
-import { createOutboundTransport, createTraceSink } from "./core/factories/runtime";
+import { createClinicStateStore, createOutboundTransport, createTraceSink } from "./core/factories/runtime";
 import { ClinicOrchestrator } from "./core/clinic-orchestrator";
 import { ClinicDspyHttpBridge } from "./core/services/clinic-dspy-bridge";
 import { ClinicConfigLoader } from "./core/services/clinic-config-loader";
 import { ClinicLlmService } from "./core/services/clinic-llm-service";
 import { ClinicRoutingService } from "./core/services/clinic-routing-service";
 import { ClinicWorkflow } from "./core/services/clinic-workflow";
-import { InMemoryClinicStateStore } from "./core/services/in-memory-clinic-state-store";
 import { InMemoryConversationMemoryRuntime } from "./core/services/in-memory-conversation-memory-runtime";
 import { QdrantRetrievalService } from "./core/services/qdrant-retrieval-service";
 import { OperationalLogger } from "./core/services/operational-logger";
@@ -26,6 +25,7 @@ export function buildApp() {
   const clinicConfigProvider = new ClinicConfigLoader(settings.clinic.configPath);
   const memoryRuntime = new InMemoryConversationMemoryRuntime(llmService, traceSink);
   const routingService = new ClinicRoutingService(settings, llmService, dspyBridge, traceSink);
+  const clinicStateStore = createClinicStateStore(settings);
   const workflow = new ClinicWorkflow(
     routingService,
     llmService,
@@ -37,7 +37,7 @@ export function buildApp() {
     traceSink
   );
   const outboundTransport = createOutboundTransport(settings);
-  const orchestrator = new ClinicOrchestrator(new InMemoryClinicStateStore(), workflow, outboundTransport, traceSink, logger);
+  const orchestrator = new ClinicOrchestrator(clinicStateStore, workflow, outboundTransport, traceSink, logger);
   let shuttingDown = false;
 
   const handleWebhook = async (body: unknown, set: { status?: number | string }) => {
@@ -80,6 +80,7 @@ export function buildApp() {
 
   const buildDependencyHealth = async () => {
     const trace = await traceSink.health();
+    const state = await clinicStateStore.health();
     const dspy = settings.dspy.enabled
       ? await dspyBridge.health()
       : true;
@@ -88,6 +89,7 @@ export function buildApp() {
       ok: !shuttingDown,
       shuttingDown,
       dependencies: {
+        state,
         trace,
         dspy: {
           ok: dspy,
@@ -104,6 +106,9 @@ export function buildApp() {
   const buildReadyHealth = async () => {
     const deps = await buildDependencyHealth();
     const degraded: string[] = [];
+    if (settings.state.backend === "postgres" && !deps.dependencies.state.ok) {
+      degraded.push("state");
+    }
     if (settings.dspy.enabled && !deps.dependencies.dspy.ok) {
       degraded.push("dspy");
     }
@@ -179,6 +184,7 @@ export function buildApp() {
     app,
     shutdown: async () => {
       shuttingDown = true;
+      await clinicStateStore.close(settings.app.shutdownGraceMs);
       await traceSink.close(settings.app.shutdownGraceMs);
     }
   };

@@ -27,6 +27,7 @@ Boilerplate genérico para un asistente conversacional stateful en `Bun.js` con:
 - memoria larga desacoplada detrás de interfaz
 - provider LLM local o remoto compatible con OpenAI
 - provider de memoria larga `Mem0` opcional
+- backend de estado corto `in_memory` o `postgres`
 - bridge opcional hacia un servicio Python estilo `DSPy`
 - integración interna con `LangGraph` en `JS/TS` para rutas `conversation` y `rag`
 - logging operacional dual (`terminal` resumida + `archivo` detallado con rotación)
@@ -101,6 +102,7 @@ La configuración está centralizada en [`.env.example`](./.env.example) y separ
 - `APP_LOG_*`
 - `LLM_*`
 - `MEMORY_*`
+- `STATE_*`
 - `KNOWLEDGE_*`
 - `TRACE_*`
 - `DSPY_*`
@@ -174,6 +176,7 @@ Para convertir este template en un producto concreto, normalmente basta con reem
 Incluye implementaciones base seguras para desarrollo:
 
 - estado corto en memoria
+- estado corto opcional en Postgres usando la misma conexión de tracing
 - memoria larga en memoria
 - memoria larga remota opcional con `Mem0`
 - knowledge provider nulo

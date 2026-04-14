@@ -91,6 +91,8 @@ export interface StateStore {
 export interface ClinicStateStore {
   load(sessionId: string): Promise<GraphState | null>;
   save(sessionId: string, state: GraphState): Promise<void>;
+  health(): Promise<HealthStatus>;
+  close(timeoutMs?: number): Promise<void>;
 }
 
 export interface ClinicMemoryRuntime {

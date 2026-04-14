@@ -26,7 +26,12 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
     llm: { provider: "local", apiKey: "", baseUrl: "", model: "test-model", timeoutMs: 1000, temperature: 0 },
     router: { confidenceThreshold: 0.62, knowledgeThreshold: 0.58 },
     prompt: { memoryMaxItems: 3, memoryBudgetChars: 1200, recentTurnsLimit: 4, summarizeOnOverflow: true },
-    state: { refreshTurnThreshold: 2, refreshCharThreshold: 900 },
+    state: {
+      backend: "in_memory",
+      refreshTurnThreshold: 2,
+      refreshCharThreshold: 900,
+      checkpointNamespace: "test:clinic_state"
+    },
     memory: {
       provider: "in_memory",
       enabled: true,

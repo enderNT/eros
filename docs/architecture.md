@@ -123,6 +123,11 @@ El template separa dos niveles:
 - estado corto por `sessionId`
 - memoria larga por `actorId + agentId`
 
+El estado corto puede vivir en:
+
+- `in_memory`
+- `postgres`, reutilizando la misma conexión configurada para tracing
+
 Además conserva explícitamente:
 
 - `rawRecall`: para trazas y evaluación

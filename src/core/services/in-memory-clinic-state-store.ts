@@ -11,4 +11,18 @@ export class InMemoryClinicStateStore implements ClinicStateStore {
   async save(sessionId: string, state: GraphState): Promise<void> {
     this.stateBySession.set(sessionId, structuredClone(state));
   }
+
+  async health(): Promise<{ ok: boolean; details?: Record<string, unknown> }> {
+    return {
+      ok: true,
+      details: {
+        backend: "in_memory",
+        sessions: this.stateBySession.size
+      }
+    };
+  }
+
+  async close(_timeoutMs?: number): Promise<void> {
+    return;
+  }
 }

@@ -39,8 +39,10 @@ export interface AppSettings {
     summarizeOnOverflow: boolean;
   };
   state: {
+    backend: string;
     refreshTurnThreshold: number;
     refreshCharThreshold: number;
+    checkpointNamespace: string;
   };
   memory: {
     provider: string;
@@ -186,8 +188,10 @@ export function loadSettings(): AppSettings {
       summarizeOnOverflow: readBoolean("PROMPT_SUMMARIZE_ON_OVERFLOW", true)
     },
     state: {
+      backend: readString("STATE_BACKEND", "in_memory"),
       refreshTurnThreshold: readNumber("STATE_SUMMARY_REFRESH_TURN_THRESHOLD", 4),
-      refreshCharThreshold: readNumber("STATE_SUMMARY_REFRESH_CHAR_THRESHOLD", 900)
+      refreshCharThreshold: readNumber("STATE_SUMMARY_REFRESH_CHAR_THRESHOLD", 900),
+      checkpointNamespace: readString("STATE_CHECKPOINT_NAMESPACE", `${readString("TRACE_APP_KEY", "stateful-assistant")}:clinic_state`)
     },
     memory: {
       provider: readString("MEMORY_PROVIDER", "in_memory"),

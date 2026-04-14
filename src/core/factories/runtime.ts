@@ -1,13 +1,15 @@
 import type { AppSettings } from "../../config";
-import type { KnowledgeProvider, LlmProvider, MemoryProvider, OutboundTransport, TraceSink } from "../../domain/ports";
+import type { ClinicStateStore, KnowledgeProvider, LlmProvider, MemoryProvider, OutboundTransport, TraceSink } from "../../domain/ports";
 import { ChatwootTransport } from "../../adapters/channels/chatwoot-transport";
 import { NoopTransport } from "../../adapters/channels/noop-transport";
 import { GenericLlmProvider } from "../services/generic-llm-provider";
+import { InMemoryClinicStateStore } from "../services/in-memory-clinic-state-store";
 import { InMemoryMemoryProvider } from "../services/in-memory-memory-provider";
 import { InMemoryTraceSink } from "../services/in-memory-trace-sink";
 import { Mem0MemoryProvider } from "../services/mem0-memory-provider";
 import { NoopKnowledgeProvider } from "../services/noop-knowledge-provider";
 import { OpenAiCompatibleLlmProvider } from "../services/openai-compatible-llm-provider";
+import { PostgresClinicStateStore } from "../services/postgres-clinic-state-store";
 import { PostgresTraceSink } from "../services/postgres-trace-sink";
 
 export function createLlmProvider(settings: AppSettings): LlmProvider {
@@ -47,4 +49,12 @@ export function createTraceSink(settings: AppSettings): TraceSink {
   }
 
   return new InMemoryTraceSink();
+}
+
+export function createClinicStateStore(settings: AppSettings): ClinicStateStore {
+  if (settings.state.backend === "postgres") {
+    return new PostgresClinicStateStore(settings);
+  }
+
+  return new InMemoryClinicStateStore();
 }
