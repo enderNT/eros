@@ -19,12 +19,12 @@ La configuracion actual registra cuatro servicios: psicoterapia individual, cons
 ===
 
 ===
-Terapia magnetico trasncraneal baja intensidad
+Info de Terapia magnetico trasncraneal baja intensidad. Precios incluidos
 La Terapia magnetico trasncraneal individual tiene una duracion de 50 minutos y un precio de 900 MXN por sesion. Este servicio esta alineado con acompanamiento terapeutico para una sola persona y forma parte del componente psicoterapeutico de la clinica. El numero total de sesiones depende de lo que se haya encontrado durante la valoracion
 ===
 
 ===
-Terapia magnetico trasncraneal alta intensidad
+Info de Terapia magnetico trasncraneal alta intensidad. Precios incluidos.
 La Terapia magnetico trasncraneal individual tiene una duracion de 50 minutos y un precio de 1200 MXN por sesion. Este servicio esta alineado con acompanamiento terapeutico para una sola persona y forma parte del componente psicoterapeutico de la clinica. El numero total de sesiones depende de lo que se haya encontrado durante la valoracion
 ===
 
