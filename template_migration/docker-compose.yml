@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.example
+    environment:
+      APP_PORT: ${DOCKER_APP_PORT:-3000}
+      APP_LOG_DIR: /var/log/stateful-assistant
+      APP_LOG_TO_FILE: "true"
+      APP_CONTAINER_NAME: app
+      APP_LOG_MAX_FILES: ${APP_LOG_MAX_FILES:-10}
+      APP_LOG_MAX_LINES: ${APP_LOG_MAX_LINES:-500}
+      DSPY_SERVICE_URL: http://dspy-service:${DOCKER_DSPY_PORT:-8001}
+    ports:
+      - "${DOCKER_APP_PORT:-3000}:3000"
+    volumes:
+      - app-logs:/var/log/stateful-assistant
+    depends_on:
+      dspy-service:
+        condition: service_healthy
+
+  dspy-service:
+    build:
+      context: ./dspy_service
+      dockerfile: Dockerfile
+    env_file:
+      - .env.example
+    environment:
+      DSPY_ARTIFACTS_DIR: /service/artifacts
+      DSPY_DATASETS_DIR: /service/datasets
+    ports:
+      - "${DOCKER_DSPY_PORT:-8001}:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  app-logs:

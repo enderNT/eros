@@ -1,0 +1,24 @@
+{
+  "name": "stateful-assistant-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "dev:with-dspy": "sh ./scripts/dev-with-dspy.sh",
+    "start": "bun src/index.ts",
+    "test": "bun test tests/clinic-*.test.ts",
+    "check": "bun x tsc --noEmit",
+    "dspy": "make dspy",
+    "ngrok": "ngrok http ${NGROK_PORT:-3000}"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.39",
+    "@langchain/langgraph": "^1.2.8",
+    "elysia": "^1.1.24"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.8",
+    "typescript": "^5.6.3"
+  }
+}

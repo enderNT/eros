@@ -1,0 +1,3 @@
+{"input_text":"hola, necesito ayuda con el bot","prompt_digest":"","capability":"conversation","intent":"general_conversation"}
+{"input_text":"busca la documentación de la API","prompt_digest":"prefiere respuestas breves","capability":"knowledge","intent":"knowledge_lookup"}
+{"input_text":"crea una cita para mañana","prompt_digest":"quiere automatizar tareas","capability":"action","intent":"workflow_progress"}
