@@ -16,7 +16,23 @@ export class ClinicDspyHttpBridge implements ClinicDspyBridge {
       const response = await fetch(`${this.settings.serviceUrl}/health`, {
         signal: AbortSignal.timeout(this.settings.timeoutMs)
       });
-      return response.ok;
+      if (!response.ok) {
+        return false;
+      }
+
+      const payload = await response.json().catch(() => null) as
+        | { ready?: boolean; backend?: string }
+        | null;
+      if (!payload) {
+        return true;
+      }
+      if (payload.ready === false) {
+        return false;
+      }
+      if (payload.backend && payload.backend !== "dspy") {
+        return false;
+      }
+      return true;
     } catch {
       this.openCircuit();
       return false;
@@ -69,7 +85,22 @@ export class ClinicDspyHttpBridge implements ClinicDspyBridge {
           return null;
         }
 
-        return (await response.json()) as T;
+        const result = await response.json().catch(() => null) as Record<string, unknown> | null;
+        if (!result || typeof result !== "object") {
+          return null;
+        }
+
+        if (path === "/predict/state-router") {
+          return typeof result.next_node === "string" ? (result as T) : null;
+        }
+
+        const replyMode = typeof result.reply_mode === "string" ? result.reply_mode : "";
+        const responseText = typeof result.response_text === "string" ? result.response_text.trim() : "";
+        if (replyMode !== "llm" || !responseText) {
+          return null;
+        }
+
+        return result as T;
       } catch {
         attempt += 1;
         if (attempt > this.settings.retryCount) {

@@ -21,7 +21,23 @@ export class HttpDspyBridge implements DspyBridge {
 
     try {
       const response = await fetch(`${this.settings.serviceUrl}/health`, { signal: AbortSignal.timeout(this.settings.timeoutMs) });
-      return response.ok;
+      if (!response.ok) {
+        return false;
+      }
+
+      const payload = await response.json().catch(() => null) as
+        | { ready?: boolean; backend?: string }
+        | null;
+      if (!payload) {
+        return true;
+      }
+      if (payload.ready === false) {
+        return false;
+      }
+      if (payload.backend && payload.backend !== "dspy") {
+        return false;
+      }
+      return true;
     } catch {
       this.openCircuit();
       return false;
@@ -61,7 +77,11 @@ export class HttpDspyBridge implements DspyBridge {
           return null;
         }
 
-        return (await response.json()) as T;
+        const result = await response.json().catch(() => null) as Record<string, unknown> | null;
+        if (!result || typeof result !== "object") {
+          return null;
+        }
+        return result as T;
       } catch (error) {
         attempt += 1;
         if (attempt > this.settings.retryCount) {

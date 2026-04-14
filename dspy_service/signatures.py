@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 try:
     import dspy
 except Exception:  # pragma: no cover - optional dependency bootstrap
@@ -137,3 +139,13 @@ else:
 
     class StateSummarySignature:
         pass
+
+
+SIGNATURES: dict[str, Any] = {
+    "state_router": StateRouterSignature,
+    "appointment_extraction": AppointmentExtractionSignature,
+    "conversation_reply": ConversationReplySignature,
+    "rag_reply": RagReplySignature,
+    "appointment_reply": AppointmentReplySignature,
+    "state_summary": StateSummarySignature,
+}

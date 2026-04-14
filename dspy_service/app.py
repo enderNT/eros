@@ -1,129 +1,322 @@
 from __future__ import annotations
 
-import logging
+import json
 import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
-
-try:
-    from signatures import (
-        AppointmentReplySignature,
-        ConversationReplySignature,
-        RagReplySignature,
-        StateRouterSignature,
-    )
-except ModuleNotFoundError:  # pragma: no cover - package-style fallback
-    from .signatures import (  # type: ignore
-        AppointmentReplySignature,
-        ConversationReplySignature,
-        RagReplySignature,
-        StateRouterSignature,
-    )
+from fastapi import FastAPI, HTTPException
 
 try:
     import dspy  # type: ignore
 except Exception:  # pragma: no cover - optional dependency bootstrap
     dspy = None
 
+try:
+    from modules import MODULE_FACTORIES
+    from service_logging import DspyExecutionLogger, DspyOperationalLogger
+except ModuleNotFoundError:  # pragma: no cover - package-style fallback
+    from .modules import MODULE_FACTORIES  # type: ignore
+    from .service_logging import DspyExecutionLogger, DspyOperationalLogger  # type: ignore
 
-logging.basicConfig(level=os.getenv("DSPY_LOG_LEVEL", "INFO").upper())
-LOGGER = logging.getLogger("eros-dspy-service")
 
-app = FastAPI(title="eros-dspy-runtime", version="0.1.0")
+TASK_OUTPUT_FIELDS: dict[str, list[str]] = {
+    "state_router": ["next_node", "intent", "confidence", "needs_retrieval", "state_update", "reason"],
+    "conversation_reply": ["response_text"],
+    "rag_reply": ["response_text"],
+    "appointment_reply": ["response_text"],
+}
 
 
-def configure_dspy() -> str:
-    if not dspy:
-        return "heuristic"
-
-    api_base = os.getenv("DSPY_API_BASE", "").strip()
-    api_key = os.getenv("DSPY_API_KEY", "").strip()
-    model = os.getenv("DSPY_MODEL", "gpt-4o-mini").strip()
-    if not api_base or not api_key:
-        return "heuristic"
-
+def _load_json(path: Path) -> dict[str, Any]:
     try:
-        qualified_model = model if "/" in model else f"openai/{model}"
-        dspy.configure(lm=dspy.LM(model=qualified_model, api_base=api_base, api_key=api_key))
-        return "dspy"
-    except Exception as error:  # pragma: no cover - external runtime
-        LOGGER.exception("Failed to configure DSPy: %s", error)
-        return "heuristic"
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
-BACKEND = configure_dspy()
-
-
-def maybe_predict(signature: type[Any], payload: dict[str, Any], fields: list[str]) -> dict[str, Any] | None:
-    if not dspy or BACKEND != "dspy":
-        return None
-    try:
-        prediction = dspy.Predict(signature)(**payload)
-        return {field: getattr(prediction, field, None) for field in fields}
-    except Exception as error:  # pragma: no cover - external runtime
-        LOGGER.warning("DSPy prediction failed: %s", error)
-        return None
-
-
-def heuristic_route(payload: dict[str, Any]) -> dict[str, Any]:
-    user_message = str(payload.get("user_message", "")).lower()
-    if any(keyword in user_message for keyword in ("cita", "agendar", "agenda", "calendly", "reservar")):
-        return {
-            "next_node": "appointment",
-            "intent": "appointment",
-            "confidence": 0.82,
-            "needs_retrieval": False,
-            "state_update": {
-                "active_goal": "appointment",
-                "stage": "collecting_slots",
-                "pending_action": "collecting_slots",
-            },
-            "reason": "heuristic-appointment",
-        }
-    if any(keyword in user_message for keyword in ("horario", "precio", "servicio", "doctor", "terapia", "valoracion")):
-        return {
-            "next_node": "rag",
-            "intent": "rag",
-            "confidence": 0.78,
-            "needs_retrieval": True,
-            "state_update": {
-                "active_goal": "information",
-                "stage": "lookup",
-            },
-            "reason": "heuristic-rag",
-        }
+def _prediction_to_dict(prediction: Any) -> dict[str, Any]:
+    if isinstance(prediction, dict):
+        return dict(prediction)
+    if hasattr(prediction, "toDict"):
+        return dict(prediction.toDict())
+    if hasattr(prediction, "items"):
+        return dict(prediction.items())
     return {
-        "next_node": "conversation",
-        "intent": "conversation",
-        "confidence": 0.72,
-        "needs_retrieval": False,
-        "state_update": {
-            "active_goal": payload.get("active_goal") or "conversation",
-            "stage": payload.get("stage") or "open",
-        },
-        "reason": "heuristic-conversation",
+        "next_node": getattr(prediction, "next_node", "conversation"),
+        "intent": getattr(prediction, "intent", "conversation"),
+        "confidence": getattr(prediction, "confidence", 0.0),
+        "needs_retrieval": getattr(prediction, "needs_retrieval", False),
+        "state_update": getattr(prediction, "state_update", {}),
+        "reason": getattr(prediction, "reason", ""),
+        "response_text": getattr(prediction, "response_text", ""),
     }
 
 
-def heuristic_reply(prefix: str, payload: dict[str, Any]) -> dict[str, Any]:
-    user_message = str(payload.get("user_message", "")).strip()
-    return {"response_text": f"{prefix} {user_message}".strip(), "reply_mode": "fallback"}
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
+logging_enabled = os.getenv("DSPY_LOG_TO_CONSOLE", "true").strip().lower() != "false"
+SERVICE_LOGGER = DspyOperationalLogger(console_enabled=logging_enabled)
+
+app = FastAPI(title="eros-dspy-runtime", version="0.3.0")
+
+
+@dataclass(slots=True)
+class RuntimeSettings:
+    api_base: str
+    api_key: str
+    model: str
+    artifacts_dir: Path
+    datasets_dir: Path
+
+    @classmethod
+    def from_env(cls) -> "RuntimeSettings":
+        base_dir = Path(__file__).resolve().parent
+        artifacts_dir = os.getenv("DSPY_ARTIFACTS_DIR", "").strip()
+        datasets_dir = os.getenv("DSPY_DATASETS_DIR", "").strip()
+        return cls(
+            api_base=os.getenv("DSPY_API_BASE", "").strip(),
+            api_key=os.getenv("DSPY_API_KEY", "").strip(),
+            model=os.getenv("DSPY_MODEL", "gpt-4o-mini").strip(),
+            artifacts_dir=(Path(artifacts_dir) if artifacts_dir else (base_dir / "artifacts")).resolve(),
+            datasets_dir=(Path(datasets_dir) if datasets_dir else (base_dir / "datasets")).resolve(),
+        )
+
+
+@dataclass(slots=True)
+class TaskPredictor:
+    task_name: str
+    module: Any | None
+    mode: str
+    artifact_path: Path
+    meta: dict[str, Any]
+    load_error: str | None = None
+
+    @property
+    def available(self) -> bool:
+        return self.mode == "artifact" and self.module is not None
+
+    def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.available:
+            raise RuntimeError(f"No artifact-backed predictor available for task {self.task_name}.")
+        prediction = self.module.forward(**payload)
+        return _prediction_to_dict(prediction)
+
+    def status_payload(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "available": self.available,
+            "artifact_present": self.artifact_path.exists(),
+            "artifact_loaded": self.available,
+            "artifact_path": str(self.artifact_path),
+            "load_error": self.load_error or "",
+            "optimizer": self.meta.get("optimizer", ""),
+            "compiled_at": self.meta.get("compiled_at", ""),
+            "examples": self.meta.get("examples", 0),
+            "dataset": self.meta.get("dataset", ""),
+        }
+
+
+class DSPyServiceRuntime:
+    def __init__(self, settings: RuntimeSettings, logger: DspyOperationalLogger) -> None:
+        self.settings = settings
+        self.logger = logger
+        self.backend = self._configure_dspy()
+        self.predictors = {
+            task_name: self._build_predictor(task_name)
+            for task_name in TASK_OUTPUT_FIELDS
+        }
+        self.logger.log_startup(self.health_payload())
+
+    @property
+    def ready(self) -> bool:
+        return self.backend == "dspy" and any(predictor.available for predictor in self.predictors.values())
+
+    def predict(
+        self,
+        task_name: str,
+        payload: dict[str, Any],
+        run: DspyExecutionLogger,
+    ) -> tuple[dict[str, Any] | None, str]:
+        predictor = self.predictors.get(task_name)
+        if self.backend != "dspy":
+            run.load(f"backend={self.backend} predictor=disabled", is_error=True)
+            return None, "backend_unavailable"
+
+        if predictor is None:
+            run.load(f"task={task_name} predictor=missing", is_error=True)
+            return None, "task_missing"
+
+        descriptor = f"backend=dspy mode={predictor.mode}"
+        if predictor.artifact_path.exists():
+            descriptor += f" artifact={predictor.artifact_path.name}"
+        if predictor.load_error:
+            descriptor += f" load_error={predictor.load_error}"
+        run.load(descriptor, is_error=not predictor.available)
+
+        if not predictor.available:
+            return None, predictor.mode
+
+        try:
+            prediction = predictor.predict(payload)
+        except Exception as exc:  # pragma: no cover - runtime fallback
+            run.flow(f"{task_name} predict_failed mode={predictor.mode} error={exc}", is_error=True)
+            return None, "predict_failed"
+
+        outputs = {
+            field: prediction.get(field)
+            for field in TASK_OUTPUT_FIELDS[task_name]
+        }
+        available_outputs = [field for field, value in outputs.items() if _has_value(value)]
+        if not available_outputs:
+            run.flow(f"{task_name} artifact returned no usable outputs", is_error=True)
+            return None, "empty_prediction"
+
+        run.flow(f"{task_name} mode={predictor.mode} outputs={','.join(available_outputs)}")
+        return outputs, "ok"
+
+    def health_payload(self) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "ready": self.ready,
+            "backend": self.backend,
+            "dspy_available": bool(dspy),
+            "model": self.settings.model,
+            "api_base_configured": bool(self.settings.api_base),
+            "api_key_configured": bool(self.settings.api_key),
+            "artifacts_dir": str(self.settings.artifacts_dir),
+            "datasets_dir": str(self.settings.datasets_dir),
+            "tasks": {
+                task_name: predictor.status_payload()
+                for task_name, predictor in self.predictors.items()
+            },
+        }
+
+    def _configure_dspy(self) -> str:
+        if not dspy:
+            return "missing_dependency"
+        if not self.settings.api_base or not self.settings.api_key:
+            return "unconfigured"
+
+        try:
+            qualified_model = self.settings.model if "/" in self.settings.model else f"openai/{self.settings.model}"
+            dspy.configure(
+                lm=dspy.LM(
+                    model=qualified_model,
+                    api_base=self.settings.api_base,
+                    api_key=self.settings.api_key,
+                )
+            )
+            return "dspy"
+        except Exception as exc:  # pragma: no cover - external runtime
+            self.logger.log_system_error("configure", "dspy_runtime", exc)
+            return "configure_failed"
+
+    def _build_predictor(self, task_name: str) -> TaskPredictor:
+        artifact_path = self.settings.artifacts_dir / f"{task_name}.json"
+        meta_path = self.settings.artifacts_dir / f"{task_name}.meta.json"
+        meta = _load_json(meta_path)
+
+        if self.backend != "dspy":
+            return TaskPredictor(
+                task_name=task_name,
+                module=None,
+                mode="backend_unavailable",
+                artifact_path=artifact_path,
+                meta=meta,
+            )
+
+        module_factory = MODULE_FACTORIES.get(task_name)
+        if module_factory is None:
+            return TaskPredictor(
+                task_name=task_name,
+                module=None,
+                mode="task_missing",
+                artifact_path=artifact_path,
+                meta=meta,
+            )
+
+        if not artifact_path.exists():
+            return TaskPredictor(
+                task_name=task_name,
+                module=None,
+                mode="no_artifact",
+                artifact_path=artifact_path,
+                meta=meta,
+            )
+
+        try:
+            module = module_factory()
+            load = getattr(module, "load", None)
+            if not callable(load):
+                return TaskPredictor(
+                    task_name=task_name,
+                    module=None,
+                    mode="load_unsupported",
+                    artifact_path=artifact_path,
+                    meta=meta,
+                    load_error="module_load_unsupported",
+                )
+
+            load(str(artifact_path))
+            return TaskPredictor(
+                task_name=task_name,
+                module=module,
+                mode="artifact",
+                artifact_path=artifact_path,
+                meta=meta,
+            )
+        except Exception as exc:  # pragma: no cover - runtime fallback
+            return TaskPredictor(
+                task_name=task_name,
+                module=None,
+                mode="load_failed",
+                artifact_path=artifact_path,
+                meta=meta,
+                load_error=str(exc),
+            )
+
+
+def _predict_with_logging(task_name: str, payload: dict[str, Any]) -> tuple[dict[str, Any] | None, str, DspyExecutionLogger]:
+    run = SERVICE_LOGGER.start_run(task_name, payload)
+    run.open()
+    prediction, status = RUNTIME.predict(task_name, payload, run)
+    return prediction, status, run
+
+
+def _passthrough_to_app(task_name: str, status: str, run: DspyExecutionLogger) -> None:
+    run.out(f"task={task_name} passthrough=app_llm reason={status}", is_error=True)
+    run.end("passthrough")
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "task": task_name,
+            "reason": status,
+            "message": "No artifact-backed DSPy predictor available for this task.",
+        },
+    )
+
+
+SETTINGS = RuntimeSettings.from_env()
+RUNTIME = DSPyServiceRuntime(SETTINGS, SERVICE_LOGGER)
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "backend": BACKEND,
-        "dspy_available": bool(dspy),
-    }
+    return RUNTIME.health_payload()
 
 
 @app.post("/predict/state-router")
 def predict_state_router(payload: dict[str, Any]) -> dict[str, Any]:
-    prediction = maybe_predict(
-        StateRouterSignature,
+    prediction, status, run = _predict_with_logging(
+        "state_router",
         {
             "user_message": payload.get("user_message", ""),
             "conversation_summary": payload.get("conversation_summary", ""),
@@ -138,15 +331,20 @@ def predict_state_router(payload: dict[str, Any]) -> dict[str, Any]:
             "memories": payload.get("memories", []),
             "guard_hint": payload.get("guard_hint", {}),
         },
-        ["next_node", "intent", "confidence", "needs_retrieval", "state_update", "reason"],
     )
-    return prediction or heuristic_route(payload)
+    if not prediction:
+        _passthrough_to_app("state_router", status, run)
+
+    next_node = str(prediction.get("next_node", "conversation"))
+    run.out(f"reply_mode=artifact next_node={next_node}")
+    run.end("ok")
+    return prediction
 
 
 @app.post("/predict/conversation-reply")
 def predict_conversation_reply(payload: dict[str, Any]) -> dict[str, Any]:
-    prediction = maybe_predict(
-        ConversationReplySignature,
+    prediction, status, run = _predict_with_logging(
+        "conversation_reply",
         {
             "user_message": payload.get("user_message", ""),
             "summary": payload.get("summary", ""),
@@ -157,17 +355,23 @@ def predict_conversation_reply(payload: dict[str, Any]) -> dict[str, Any]:
             "recent_turns": payload.get("recent_turns", []),
             "memories": payload.get("memories", []),
         },
-        ["response_text"],
     )
-    return {"response_text": str(prediction.get("response_text", "")).strip(), "reply_mode": "llm"} if prediction else heuristic_reply(
-        "Seguimos con tu consulta en Clinica Eros Neuronal.", payload
-    )
+    if not prediction or not str(prediction.get("response_text", "")).strip():
+        _passthrough_to_app("conversation_reply", status, run)
+
+    response = {
+        "response_text": str(prediction.get("response_text", "")).strip(),
+        "reply_mode": "llm",
+    }
+    run.out(f"reply_mode=artifact text=\"{response['response_text'][:120]}\"")
+    run.end("ok")
+    return response
 
 
 @app.post("/predict/rag-reply")
 def predict_rag_reply(payload: dict[str, Any]) -> dict[str, Any]:
-    prediction = maybe_predict(
-        RagReplySignature,
+    prediction, status, run = _predict_with_logging(
+        "rag_reply",
         {
             "user_message": payload.get("user_message", ""),
             "summary": payload.get("summary", ""),
@@ -179,17 +383,23 @@ def predict_rag_reply(payload: dict[str, Any]) -> dict[str, Any]:
             "memories": payload.get("memories", []),
             "retrieved_context": payload.get("retrieved_context", ""),
         },
-        ["response_text"],
     )
-    return {"response_text": str(prediction.get("response_text", "")).strip(), "reply_mode": "llm"} if prediction else heuristic_reply(
-        "Comparto la informacion recuperada para tu consulta.", payload
-    )
+    if not prediction or not str(prediction.get("response_text", "")).strip():
+        _passthrough_to_app("rag_reply", status, run)
+
+    response = {
+        "response_text": str(prediction.get("response_text", "")).strip(),
+        "reply_mode": "llm",
+    }
+    run.out(f"reply_mode=artifact text=\"{response['response_text'][:120]}\"")
+    run.end("ok")
+    return response
 
 
 @app.post("/predict/appointment-reply")
 def predict_appointment_reply(payload: dict[str, Any]) -> dict[str, Any]:
-    prediction = maybe_predict(
-        AppointmentReplySignature,
+    prediction, status, run = _predict_with_logging(
+        "appointment_reply",
         {
             "user_message": payload.get("user_message", ""),
             "contact_name": payload.get("contact_name", ""),
@@ -203,8 +413,14 @@ def predict_appointment_reply(payload: dict[str, Any]) -> dict[str, Any]:
             "appointment_state": payload.get("appointment_state", {}),
             "booking_url": payload.get("booking_url", ""),
         },
-        ["response_text"],
     )
-    return {"response_text": str(prediction.get("response_text", "")).strip(), "reply_mode": "llm"} if prediction else heuristic_reply(
-        f"Puedes continuar tu solicitud de cita aqui: {payload.get('booking_url', '')}", payload
-    )
+    if not prediction or not str(prediction.get("response_text", "")).strip():
+        _passthrough_to_app("appointment_reply", status, run)
+
+    response = {
+        "response_text": str(prediction.get("response_text", "")).strip(),
+        "reply_mode": "llm",
+    }
+    run.out(f"reply_mode=artifact text=\"{response['response_text'][:120]}\"")
+    run.end("ok")
+    return response

@@ -32,7 +32,6 @@ __pycache__/
 .venv/
 venv/
 env/
-dspy_service/artifacts/*.json
 
 # VS Code local settings
 .vscode/settings.json
