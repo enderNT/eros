@@ -29,6 +29,21 @@ export class ClinicRoutingService {
     last_assistant_message: string;
     memories: string[];
   }, traceId?: string): Promise<StateRoutingDecision> {
+    const rawInput = {
+      user_message: input.user_message,
+      conversation_summary: input.conversation_summary,
+      active_goal: input.active_goal,
+      stage: input.stage,
+      pending_action: input.pending_action,
+      pending_question: input.pending_question,
+      appointment_slots: input.appointment_slots,
+      last_tool_result: input.last_tool_result,
+      last_user_message: input.last_user_message,
+      last_assistant_message: input.last_assistant_message,
+      memories: input.memories,
+      guard_hint: {}
+    };
+
     const routingPacket: RoutingPacket = {
       user_message: compact(input.user_message, 400),
       conversation_summary: compact(input.conversation_summary, 500),
@@ -50,6 +65,7 @@ export class ClinicRoutingService {
     };
 
     if (traceId) {
+      await this.traceSink?.append(traceId, "clinic.route.raw_input", rawInput);
       await this.traceSink?.append(traceId, "clinic.route.input", signaturePayload);
     }
 

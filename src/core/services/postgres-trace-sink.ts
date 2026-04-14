@@ -97,6 +97,97 @@ function pickBackend(record: TraceRecord, label: string): string | null {
   return typeof provider === "string" ? provider : null;
 }
 
+function withRawInputMetadata(
+  servedInput: Record<string, unknown>,
+  rawInput: Record<string, unknown> | null,
+  metadata: Record<string, unknown>
+): Record<string, unknown> {
+  const effectiveRawInput = rawInput ?? servedInput;
+  return {
+    ...metadata,
+    raw_input: effectiveRawInput,
+    input_was_compacted: JSON.stringify(effectiveRawInput) !== JSON.stringify(servedInput)
+  };
+}
+
+function buildConversationLikeRawInput(
+  record: TraceRecord,
+  nodeName: "conversation" | "rag",
+  servedInput: Record<string, unknown>
+): Record<string, unknown> | null {
+  const state = pickLastEventPayload(record, `langgraph.node.${nodeName}.before`);
+  if (!state) {
+    return null;
+  }
+  const loadContext = pickLastEventPayload(record, "clinic.load_context.output");
+  const rawMemories = Array.isArray(loadContext?.recalled_memories)
+    ? loadContext.recalled_memories
+    : Array.isArray(state.recalled_memories)
+      ? state.recalled_memories
+      : servedInput.memories;
+
+  const rawInput: Record<string, unknown> = {
+    user_message: state.last_user_message ?? servedInput.user_message ?? "",
+    summary: state.summary ?? servedInput.summary ?? "",
+    active_goal: state.active_goal ?? servedInput.active_goal ?? "",
+    stage: state.stage ?? servedInput.stage ?? "",
+    pending_question: state.pending_question ?? servedInput.pending_question ?? "",
+    last_assistant_message: state.last_assistant_message ?? servedInput.last_assistant_message ?? "",
+    recent_turns: state.recent_turns ?? servedInput.recent_turns ?? [],
+    memories: rawMemories ?? servedInput.memories ?? []
+  };
+
+  if (nodeName === "rag" && servedInput.retrieved_context !== undefined) {
+    rawInput.retrieved_context = servedInput.retrieved_context;
+  }
+
+  return rawInput;
+}
+
+function buildAppointmentExtractionRawInput(
+  record: TraceRecord,
+  servedInput: Record<string, unknown>
+): Record<string, unknown> | null {
+  const loadContext = pickLastEventPayload(record, "clinic.load_context.output");
+  const rawMemories = Array.isArray(loadContext?.recalled_memories)
+    ? loadContext.recalled_memories
+    : servedInput.memories;
+
+  return {
+    ...servedInput,
+    memories: rawMemories ?? servedInput.memories ?? []
+  };
+}
+
+function buildAppointmentReplyRawInput(
+  record: TraceRecord,
+  servedInput: Record<string, unknown>
+): Record<string, unknown> | null {
+  const loadContext = pickLastEventPayload(record, "clinic.load_context.output");
+  const rawMemories = Array.isArray(loadContext?.recalled_memories)
+    ? loadContext.recalled_memories
+    : servedInput.memories;
+
+  return {
+    ...servedInput,
+    memories: rawMemories ?? servedInput.memories ?? []
+  };
+}
+
+function buildRouteRawInput(record: TraceRecord, servedInput: Record<string, unknown>): Record<string, unknown> | null {
+  const routeRaw = pickFirstEventPayload(record, "clinic.route.raw_input") ?? {};
+  const loadContext = pickLastEventPayload(record, "clinic.load_context.output");
+  const rawMemories = Array.isArray(loadContext?.recalled_memories)
+    ? loadContext.recalled_memories
+    : routeRaw.memories;
+
+  return {
+    ...servedInput,
+    ...routeRaw,
+    memories: rawMemories ?? routeRaw.memories ?? servedInput.memories ?? []
+  };
+}
+
 function buildTurnInputPayload(inbound: InboundMessage): Record<string, unknown> {
   const raw = toRecord(inbound.rawPayload) ?? {};
   return {
@@ -170,7 +261,8 @@ function buildTraceExamples(record: TraceRecord, projectorVersion: string): Trac
     taskName: string,
     inputLabel: string,
     outputLabel: string,
-    metadata: Record<string, unknown>
+    metadata: Record<string, unknown>,
+    rawInput?: (servedInput: Record<string, unknown>) => Record<string, unknown> | null
   ) => {
     const inputPayload = pickFirstEventPayload(record, inputLabel);
     const outputPayload = pickLastEventPayload(record, outputLabel);
@@ -182,10 +274,14 @@ function buildTraceExamples(record: TraceRecord, projectorVersion: string): Trac
       createdAt: pickFirstEventTimestamp(record, outputLabel) ?? record.completedAt ?? record.startedAt,
       inputPayload,
       targetPayload: outputPayload,
-      metadataPayload: {
-        projector_version: projectorVersion,
-        ...metadata
-      },
+      metadataPayload: withRawInputMetadata(
+        inputPayload,
+        rawInput?.(inputPayload) ?? null,
+        {
+          projector_version: projectorVersion,
+          ...metadata
+        }
+      ),
       eligibilityReason: "captured"
     });
   };
@@ -193,27 +289,27 @@ function buildTraceExamples(record: TraceRecord, projectorVersion: string): Trac
   maybePush("route_decision", "clinic.route.input", "clinic.route.output", {
     node: "route",
     reply_mode: pickBackend(record, "clinic.route.meta") ?? "unknown"
-  });
+  }, (servedInput) => buildRouteRawInput(record, servedInput));
   maybePush("conversation_reply", "clinic.conversation.input", "clinic.conversation.output", {
     node: "conversation",
     reply_mode: pickBackend(record, "clinic.conversation.meta") ?? "unknown"
-  });
+  }, (servedInput) => buildConversationLikeRawInput(record, "conversation", servedInput));
   maybePush("rag_reply", "clinic.rag.input", "clinic.rag.output", {
     node: "rag",
     reply_mode: pickBackend(record, "clinic.rag.meta") ?? "unknown"
-  });
+  }, (servedInput) => buildConversationLikeRawInput(record, "rag", servedInput));
   maybePush("appointment_extraction", "clinic.appointment_extraction.input", "clinic.appointment_extraction.output", {
     node: "appointment_extraction",
     reply_mode: "llm"
-  });
+  }, (servedInput) => buildAppointmentExtractionRawInput(record, servedInput));
   maybePush("appointment_reply", "clinic.appointment_reply.input", "clinic.appointment_reply.output", {
     node: "appointment",
     reply_mode: pickBackend(record, "clinic.appointment_reply.meta") ?? "unknown"
-  });
+  }, (servedInput) => buildAppointmentReplyRawInput(record, servedInput));
   maybePush("state_summary", "clinic.state_summary.input", "clinic.state_summary.output", {
     node: "state_summary",
     reply_mode: "llm"
-  });
+  }, (servedInput) => servedInput);
 
   return rows;
 }

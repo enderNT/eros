@@ -56,10 +56,11 @@ Si no llega un `correlation_id` externo, se reutiliza `session_id` como correlad
 Antes de persistir datos, el logger:
 
 - redacta claves sensibles como `token`, `secret`, `authorization`, `cookie`, `password` y similares
-- trunca strings largos
-- limita profundidad de objetos y arrays
+- no recorta strings por longitud
+- conserva arrays completos
+- mantiene un límite de profundidad solo como protección ante estructuras anómalas
 
-El objetivo es conservar request/response útiles sin convertir el archivo en un volcado bruto del proceso.
+El objetivo es conservar request/response completos para reconstrucción operativa, sin exponer secretos.
 
 ## Variables de entorno
 

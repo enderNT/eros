@@ -29,10 +29,7 @@ const BRIGHT_SEPARATOR_COLORS = [92, 93, 94, 95, 96] as const;
 const RED_COLOR = "\u001b[31m";
 const RESET_COLOR = "\u001b[0m";
 const NO_VALUE = "n/a";
-const MAX_STRING_LENGTH = 600;
-const MAX_SERIALIZED_LENGTH = 3500;
-const MAX_DEPTH = 4;
-const MAX_ARRAY_ITEMS = 8;
+const MAX_DEPTH = 12;
 
 export class OperationalLogger {
   private readonly baseFilePath: string;
@@ -313,7 +310,7 @@ export class ExecutionLogger {
     this.parent.writeConsoleSeparator(this.colorCode, "start");
     this.parent.writeConsoleLine(
       "IN",
-      `run=${shortId(this.runId)} session=${shortId(this.sessionId)} text="${truncate(this.inbound.text, 120)}"`
+      `run=${shortId(this.runId)} session=${shortId(this.sessionId)} text="${this.inbound.text}"`
     );
 
     await this.parent.writeExecutionStart([
@@ -388,7 +385,7 @@ export class ExecutionLogger {
     const capturedError = data.error ? toLogError("route", data.resolver, data.error, "routing_degraded") : undefined;
     const summary = capturedError
       ? `${capturedError.owner} ${capturedError.type}: ${capturedError.detail}`
-      : `${data.resolver} -> ${data.decision?.capability ?? "unknown"} (${truncate(data.decision?.reason ?? "sin razon", 90)})`;
+      : `${data.resolver} -> ${data.decision?.capability ?? "unknown"} (${data.decision?.reason ?? "sin razon"})`;
 
     this.parent.writeConsoleLine("ROUTE", summary, Boolean(capturedError));
     await this.block("03.ROUTE", {
@@ -415,7 +412,7 @@ export class ExecutionLogger {
     usedDspy: boolean;
     knowledgeCount: number;
   }): Promise<void> {
-    this.parent.writeConsoleLine("FLOW", `${data.capability} -> ${truncate(extractConsoleResult(data.result), 110)}`);
+    this.parent.writeConsoleLine("FLOW", `${data.capability} -> ${extractConsoleResult(data.result)}`);
     await this.block("06.FLOW", data);
   }
 
@@ -446,7 +443,7 @@ export class ExecutionLogger {
     response: Record<string, unknown>;
     finalOutput: string;
   }): Promise<void> {
-    this.parent.writeConsoleLine("OUT", truncate(data.finalOutput, 110));
+    this.parent.writeConsoleLine("OUT", data.finalOutput);
     await this.block("07.OUTPUT", data);
   }
 
@@ -497,7 +494,7 @@ function summarizePayload(payload: unknown): Record<string, unknown> {
   const record = payload as Record<string, unknown>;
   return {
     type: "object",
-    keys: Object.keys(record).slice(0, MAX_ARRAY_ITEMS)
+    keys: Object.keys(record)
   };
 }
 
@@ -520,7 +517,7 @@ export function sanitizeForLog(value: unknown, depth = 0): unknown {
   }
 
   if (typeof value === "string") {
-    return truncate(value, MAX_STRING_LENGTH);
+    return value;
   }
 
   if (typeof value === "number" || typeof value === "boolean") {
@@ -530,12 +527,12 @@ export function sanitizeForLog(value: unknown, depth = 0): unknown {
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: truncate(value.message, MAX_STRING_LENGTH)
+      message: value.message
     };
   }
 
   if (Array.isArray(value)) {
-    return value.slice(0, MAX_ARRAY_ITEMS).map((item) => sanitizeForLog(item, depth + 1));
+    return value.map((item) => sanitizeForLog(item, depth + 1));
   }
 
   if (typeof value === "object") {
@@ -556,7 +553,7 @@ function isSensitiveKey(key: string): boolean {
 
 function formatStructuredData(data: Record<string, unknown>): string {
   const serialized = JSON.stringify(sanitizeForLog(data), null, 2) ?? "";
-  return truncate(serialized, MAX_SERIALIZED_LENGTH);
+  return serialized;
 }
 
 function formatKeyValueLines(data: Record<string, unknown>): string {
@@ -570,7 +567,7 @@ function toLogError(stage: string, owner: string, error: unknown, impact: string
     return {
       owner,
       type: error.name || "Error",
-      detail: truncate(error.message, 200),
+      detail: error.message,
       stage,
       impact
     };
@@ -579,7 +576,7 @@ function toLogError(stage: string, owner: string, error: unknown, impact: string
   return {
     owner,
     type: typeof error,
-    detail: truncate(String(error), 200),
+    detail: String(error),
     stage,
     impact
   };
@@ -587,13 +584,6 @@ function toLogError(stage: string, owner: string, error: unknown, impact: string
 
 function shortId(value: string): string {
   return value.slice(0, 8);
-}
-
-function truncate(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 function countLines(value: string): number {
