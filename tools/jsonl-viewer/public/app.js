@@ -256,12 +256,10 @@ function updateEditor(preserveSource = null) {
   if (!record) {
     elements.editorTitle.textContent = "Editor";
     elements.editorSubtitle.textContent = "Selecciona una linea para editarla.";
-    elements.editorTextarea.value = "";
-    elements.editorTextarea.disabled = true;
+    mainJsonEditor.setText("");
     elements.validationLabel.textContent = "Sin seleccion";
     elements.validationLabel.className = "pill neutral";
-    elements.modalEditorTextarea.value = "";
-    elements.modalEditorTextarea.disabled = true;
+    modalJsonEditor.setText("");
     elements.modalValidationLabel.textContent = "Sin seleccion";
     elements.modalValidationLabel.className = "pill neutral";
     return;
@@ -272,16 +270,20 @@ function updateEditor(preserveSource = null) {
   elements.editorSubtitle.textContent = record.valid
     ? "El contenido es JSON valido y esta listo para guardar."
     : `Corrige el JSON antes de guardar. Error: ${record.error}`;
-  elements.editorTextarea.disabled = false;
 
   const editorValue = record.editorValue || record.raw;
-  if (preserveSource !== "main" && elements.editorTextarea.value !== editorValue) {
-    elements.editorTextarea.value = editorValue;
+  if (preserveSource !== "main") {
+    try {
+      if (record.valid) { mainJsonEditor.set(JSON.parse(editorValue)); }
+      else { mainJsonEditor.setText(editorValue); }
+    } catch(e) { mainJsonEditor.setText(editorValue); }
   }
-  if (preserveSource !== "modal" && elements.modalEditorTextarea.value !== editorValue) {
-    elements.modalEditorTextarea.value = editorValue;
+  if (preserveSource !== "modal") {
+    try {
+      if (record.valid) { modalJsonEditor.set(JSON.parse(editorValue)); }
+      else { modalJsonEditor.setText(editorValue); }
+    } catch(e) { modalJsonEditor.setText(editorValue); }
   }
-  elements.modalEditorTextarea.disabled = false;
 
   elements.validationLabel.textContent = record.valid ? "JSON valido" : "JSON invalido";
   elements.validationLabel.className = `pill ${record.valid ? "success" : "danger"}`;
@@ -310,7 +312,7 @@ function openEditorModal() {
   elements.editorModalBackdrop.hidden = false;
   document.body.classList.add("modal-open");
   updateEditor();
-  elements.modalEditorTextarea.focus();
+  modalJsonEditor.focus();
 }
 
 function closeEditorModal() {
@@ -438,14 +440,19 @@ async function saveWorkspaceFile() {
   }
 }
 
-function updateRecordFromTextArea(event) {
+function updateRecordFromEditor(source) {
   const record = getSelectedRecord();
   if (!record) {
     return;
   }
 
-  const source = event?.target === elements.modalEditorTextarea ? "modal" : "main";
-  const userText = source === "modal" ? elements.modalEditorTextarea.value : elements.editorTextarea.value;
+  const editor = source === "modal" ? modalJsonEditor : mainJsonEditor;
+  let userText = "";
+  try {
+     userText = editor.getText();
+  } catch(e) {
+     return;
+  }
 
   if (!userText.trim()) {
     record.raw = "";
@@ -527,13 +534,14 @@ function formatSelectedRecord(source = "main") {
   }
 
   try {
-    const currentValue = source === "modal" ? elements.modalEditorTextarea.value : elements.editorTextarea.value;
+    const editor = source === "modal" ? modalJsonEditor : mainJsonEditor;
+    const currentValue = editor.getText();
     const formatted = JSON.stringify(JSON.parse(currentValue || record.editorValue || record.raw), null, 2);
     record.editorValue = formatted;
     if (source === "modal") {
-      elements.modalEditorTextarea.value = formatted;
+      modalJsonEditor.setText(formatted);
     } else {
-      elements.editorTextarea.value = formatted;
+      mainJsonEditor.setText(formatted);
     }
     updateEditor(source);
     setBanner("JSON formateado en el editor.", "success");
@@ -614,8 +622,6 @@ function bindEvents() {
     state.searchTerm = event.target.value;
     render();
   });
-  elements.editorTextarea.addEventListener("input", updateRecordFromTextArea);
-  elements.modalEditorTextarea.addEventListener("input", updateRecordFromTextArea);
   elements.editorModalBackdrop.addEventListener("click", (event) => {
     if (event.target === elements.editorModalBackdrop) {
       closeEditorModal();
@@ -648,7 +654,26 @@ function bindEvents() {
   });
 }
 
+let mainJsonEditor;
+let modalJsonEditor;
+
 async function init() {
+  const commonOptions = {
+    mode: 'tree',
+    modes: ['tree', 'code', 'text', 'view'],
+    search: true
+  };
+
+  mainJsonEditor = new JSONEditor(elements.editorTextarea, {
+    ...commonOptions,
+    onChange: () => updateRecordFromEditor("main")
+  });
+
+  modalJsonEditor = new JSONEditor(elements.modalEditorTextarea, {
+    ...commonOptions,
+    onChange: () => updateRecordFromEditor("modal")
+  });
+
   bindEvents();
   render();
   await refreshFileList();

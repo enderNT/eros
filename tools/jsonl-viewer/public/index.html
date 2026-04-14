@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JSONL Viewer</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/10.0.2/jsoneditor.min.css" rel="stylesheet" type="text/css">
     <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .jsoneditor { border: 1px solid var(--border-color); border-radius: var(--radius); }
+      .jsoneditor-menu { background-color: var(--surface-hover); border-bottom: 1px solid var(--border-color); }
+      .jsoneditor-menu > button, .jsoneditor-menu > div.jsoneditor-modes > button { background-color: var(--surface); color: var(--text-color); }
+      .jsoneditor-contextmenu .jsoneditor-menu { background-color: white; }
+    </style>
   </head>
   <body>
     <div class="app-shell">
@@ -102,12 +109,7 @@
             <span id="dirty-label" class="pill neutral">Sin cambios</span>
           </div>
 
-          <textarea
-            id="editor-textarea"
-            class="editor-textarea"
-            spellcheck="false"
-            placeholder="{&#10;  &quot;trace_id&quot;: &quot;...&quot;&#10;}"
-          ></textarea>
+          <div id="editor-textarea" class="editor-textarea" style="height: 350px;"></div>
 
           <div id="status-banner" class="status-banner neutral">
             Carga un archivo JSONL para empezar.
@@ -138,15 +140,11 @@
           <span id="modal-dirty-label" class="pill neutral">Sin cambios</span>
         </div>
 
-        <textarea
-          id="modal-editor-textarea"
-          class="editor-textarea editor-textarea-modal"
-          spellcheck="false"
-          placeholder="{&#10;  &quot;trace_id&quot;: &quot;...&quot;&#10;}"
-        ></textarea>
+        <div id="modal-editor-textarea" class="editor-textarea editor-textarea-modal" style="height: 60vh;"></div>
       </section>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/10.0.2/jsoneditor.min.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>
