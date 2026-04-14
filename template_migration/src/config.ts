@@ -107,10 +107,6 @@ export interface AppSettings {
     artifactsDir: string;
     datasetsDir: string;
     optimizationEnabled: boolean;
-    routeDecisionEnabled: boolean;
-    conversationReplyEnabled: boolean;
-    knowledgeReplyEnabled: boolean;
-    actionReplyEnabled: boolean;
   };
 }
 
@@ -141,6 +137,7 @@ function defaultLogRotation(env: string): { maxFiles: number; maxLinesPerFile: n
 export function loadSettings(): AppSettings {
   const env = readString("APP_ENV", "development");
   const logRotation = defaultLogRotation(env);
+  const dspyEnabled = readBoolean("DSPY_ENABLED", false);
 
   return {
     app: {
@@ -244,7 +241,7 @@ export function loadSettings(): AppSettings {
       storePromptDigest: readBoolean("TRACE_STORE_PROMPT_DIGEST", true)
     },
     dspy: {
-      enabled: readBoolean("DSPY_ENABLED", false),
+      enabled: dspyEnabled,
       serviceUrl: readString("DSPY_SERVICE_URL", "http://dspy-service:8001"),
       timeoutMs: readNumber("DSPY_TIMEOUT_MS", 4000),
       retryCount: readNumber("DSPY_RETRY_COUNT", 1),
@@ -253,11 +250,7 @@ export function loadSettings(): AppSettings {
       apiKey: readString("DSPY_API_KEY", ""),
       artifactsDir: readString("DSPY_ARTIFACTS_DIR", "./dspy_service/artifacts"),
       datasetsDir: readString("DSPY_DATASETS_DIR", "./dspy_service/datasets"),
-      optimizationEnabled: readBoolean("DSPY_OPTIMIZATION_ENABLED", false),
-      routeDecisionEnabled: readBoolean("DSPY_ROUTE_DECISION_ENABLED", false),
-      conversationReplyEnabled: readBoolean("DSPY_CONVERSATION_REPLY_ENABLED", false),
-      knowledgeReplyEnabled: readBoolean("DSPY_KNOWLEDGE_REPLY_ENABLED", false),
-      actionReplyEnabled: readBoolean("DSPY_ACTION_REPLY_ENABLED", false)
+      optimizationEnabled: readBoolean("DSPY_OPTIMIZATION_ENABLED", false)
     }
   };
 }

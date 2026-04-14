@@ -185,7 +185,7 @@ export class TurnOrchestrator {
       promptDigest
     };
 
-    if (this.deps.settings.dspy.enabled && this.deps.settings.dspy.routeDecisionEnabled) {
+    if (this.deps.settings.dspy.enabled) {
       const startedAt = Date.now();
       const dspyDecision = await this.deps.dspyBridge.predictRouteDecision?.({ inbound, state, promptDigest });
       await executionLogger.tool("dspy_route_decision", {
@@ -219,7 +219,7 @@ export class TurnOrchestrator {
     await this.deps.traceSink.projectRouteDecision(traceId, decision);
     await this.deps.traceSink.append(traceId, "route", decision);
     await executionLogger.route({
-      resolver: decision ? (fallback ? "generic_llm_provider" : this.deps.settings.dspy.routeDecisionEnabled && this.deps.settings.dspy.enabled ? "dspy_bridge" : "generic_llm_provider") : "unknown",
+      resolver: decision ? (fallback ? "generic_llm_provider" : this.deps.settings.dspy.enabled ? "dspy_bridge" : "generic_llm_provider") : "unknown",
       input: routeInput,
       decision,
       fallback
@@ -279,11 +279,7 @@ export class TurnOrchestrator {
       };
     }
 
-    const dspyEnabled = {
-      conversation: this.deps.settings.dspy.conversationReplyEnabled,
-      knowledge: this.deps.settings.dspy.knowledgeReplyEnabled,
-      action: this.deps.settings.dspy.actionReplyEnabled
-    }[capability] && this.deps.settings.dspy.enabled;
+    const dspyEnabled = this.deps.settings.dspy.enabled;
 
     const capabilityRequest = {
       task: capability,

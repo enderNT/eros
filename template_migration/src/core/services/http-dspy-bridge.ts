@@ -29,7 +29,7 @@ export class HttpDspyBridge implements DspyBridge {
   }
 
   async predictRouteDecision(payload: { inbound: InboundMessage; state: ShortTermState; promptDigest: string }): Promise<RouteDecision | null> {
-    if (!this.settings.enabled || !this.settings.routeDecisionEnabled || this.isCircuitOpen()) {
+    if (!this.settings.enabled || this.isCircuitOpen()) {
       return null;
     }
     return this.post<RouteDecision>("/predict/route-decision", payload);
@@ -37,16 +37,6 @@ export class HttpDspyBridge implements DspyBridge {
 
   async predictReply(capability: Capability, context: ExecutionContext): Promise<CapabilityResult | null> {
     if (!this.settings.enabled || this.isCircuitOpen()) {
-      return null;
-    }
-
-    const enabledByCapability = {
-      conversation: this.settings.conversationReplyEnabled,
-      knowledge: this.settings.knowledgeReplyEnabled,
-      action: this.settings.actionReplyEnabled
-    } satisfies Record<Capability, boolean>;
-
-    if (!enabledByCapability[capability]) {
       return null;
     }
 

@@ -55,11 +55,7 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
       apiKey: "",
       artifactsDir: "./tmp-dspy-artifacts",
       datasetsDir: "./tmp-dspy-datasets",
-      optimizationEnabled: false,
-      routeDecisionEnabled: false,
-      conversationReplyEnabled: false,
-      knowledgeReplyEnabled: false,
-      actionReplyEnabled: false
+      optimizationEnabled: false
     }
   };
 

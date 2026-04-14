@@ -141,15 +141,6 @@ export class LangGraphCapabilityGraph {
       return null;
     }
 
-    const enabledByCapability = {
-      conversation: this.deps.settings.dspy.conversationReplyEnabled,
-      knowledge: this.deps.settings.dspy.knowledgeReplyEnabled
-    } as const;
-
-    if (!enabledByCapability[capability]) {
-      return null;
-    }
-
     return this.deps.dspyBridge.predictReply?.(capability, context) ?? null;
   }
 }

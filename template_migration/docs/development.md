@@ -142,11 +142,9 @@ Para probar el subgrafo LangGraph en la app, envía un turno que el routing resu
 - `conversation`
 - `knowledge`
 
-Si además quieres que los nodos del grafo intenten usar `DSPy` antes del fallback local, activa:
+Si quieres que el runtime use `DSPy` antes del fallback local, basta con:
 
 - `DSPY_ENABLED=true`
-- `DSPY_CONVERSATION_REPLY_ENABLED=true`
-- `DSPY_KNOWLEDGE_REPLY_ENABLED=true`
 
 ## Qué reemplazar en un proyecto real
 

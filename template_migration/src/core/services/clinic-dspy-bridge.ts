@@ -24,28 +24,28 @@ export class ClinicDspyHttpBridge implements ClinicDspyBridge {
   }
 
   async predictStateRouter(payload: RoutingPacket & { guard_hint?: Record<string, unknown> }): Promise<StateRoutingDecision | null> {
-    if (!this.settings.enabled || !this.settings.routeDecisionEnabled || this.isCircuitOpen()) {
+    if (!this.settings.enabled || this.isCircuitOpen()) {
       return null;
     }
     return this.post<StateRoutingDecision>("/predict/state-router", payload);
   }
 
   async predictConversationReply(payload: Record<string, unknown>): Promise<GeneratedReply | null> {
-    if (!this.settings.enabled || !this.settings.conversationReplyEnabled || this.isCircuitOpen()) {
+    if (!this.settings.enabled || this.isCircuitOpen()) {
       return null;
     }
     return this.post<GeneratedReply>("/predict/conversation-reply", payload);
   }
 
   async predictRagReply(payload: Record<string, unknown>): Promise<GeneratedReply | null> {
-    if (!this.settings.enabled || !this.settings.knowledgeReplyEnabled || this.isCircuitOpen()) {
+    if (!this.settings.enabled || this.isCircuitOpen()) {
       return null;
     }
     return this.post<GeneratedReply>("/predict/rag-reply", payload);
   }
 
   async predictAppointmentReply(payload: Record<string, unknown>): Promise<GeneratedReply | null> {
-    if (!this.settings.enabled || !this.settings.actionReplyEnabled || this.isCircuitOpen()) {
+    if (!this.settings.enabled || this.isCircuitOpen()) {
       return null;
     }
     return this.post<GeneratedReply>("/predict/appointment-reply", payload);

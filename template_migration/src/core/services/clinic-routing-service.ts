@@ -49,7 +49,7 @@ export class ClinicRoutingService {
       return guard;
     }
 
-    if (this.settings.dspy.enabled && this.settings.dspy.routeDecisionEnabled) {
+    if (this.settings.dspy.enabled) {
       const decision = await this.dspyBridge.predictStateRouter({ ...routingPacket, guard_hint: {} });
       if (decision) {
         return decision.next_node === "rag" && !decision.needs_retrieval
