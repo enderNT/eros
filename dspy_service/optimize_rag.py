@@ -48,8 +48,15 @@ def main():
     dspy.configure(lm=lm)
     
     # 2. Archivos usando paths de app.py
+    # Si la ruta en .env incluye 'dspy_service/' pero ya estamos dentro de ella, la ajustamos.
     dataset_path = settings.datasets_dir / "rag_reply.jsonl"
-    
+    if not dataset_path.exists() and "dspy_service" in str(settings.datasets_dir):
+        # Intentar fallback local si la ruta de .env asume ejecución desde la raíz
+        fallback_path = Path(__file__).resolve().parent / "datasets" / "rag_reply.jsonl"
+        if fallback_path.exists():
+            dataset_path = fallback_path
+            print(f"[*] Ajustando ruta de dataset a: {dataset_path}")
+
     if not dataset_path.exists():
         print(f"Error: No se encontró el dataset en {dataset_path}")
         return
@@ -92,11 +99,15 @@ def main():
     compiled_rag = optimizer.compile(rag_module, trainset=trainset)
     
     # 5. Guardar Artefactos
-    settings.artifacts_dir.mkdir(exist_ok=True)
-    artifact_path = settings.artifacts_dir / "rag_reply.json"
-    meta_path = settings.artifacts_dir / "rag_reply.meta.json"
+    artifacts_dir = settings.artifacts_dir
+    if not artifacts_dir.exists() and "dspy_service" in str(artifacts_dir):
+         artifacts_dir = Path(__file__).resolve().parent / "artifacts"
     
-    print(f"[*] Guardando artefacto compilado en {artifact_path.name}")
+    artifacts_dir.mkdir(exist_ok=True)
+    artifact_path = artifacts_dir / "rag_reply.json"
+    meta_path = artifacts_dir / "rag_reply.meta.json"
+    
+    print(f"[*] Guardando artefacto compilado en {artifact_path}")
     compiled_rag.save(str(artifact_path))
     
     meta_data = {

@@ -1,0 +1,7 @@
+{
+  "optimizer": "BootstrapFewShot",
+  "compiled_at": "2026-04-14T22:28:09.533705",
+  "examples": 4,
+  "dataset": "rag_reply.jsonl",
+  "model": "gpt-5-mini"
+}
