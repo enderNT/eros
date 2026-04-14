@@ -1,8 +1,10 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /service
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && python -c "import dspy; print('dspy import ok')"
 
 COPY app.py ./
 COPY modules.py ./
