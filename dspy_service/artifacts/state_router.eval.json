@@ -1,14 +1,16 @@
 {
   "task": "state_router",
-  "dataset": "exports/dspy/state_router.jsonl",
-  "dataset_fingerprint": "2db99708f19eac26e93655a158694d00915af219943ae39d6678c9c5d0e68f4e",
+  "dataset": "dspy_service/datasets/state_router.jsonl",
+  "dataset_fingerprint": "9b76e5306ec1d122914327f1d912dbe541a5b509d8eab990e46dab772605d3ad",
   "valid_examples": 6,
   "train_examples": 5,
   "eval_examples": 1,
+  "baseline_score": 0.0,
+  "optimized_score": 0.3333,
   "review_required": true,
   "examples": [
     {
-      "trace_id": "c7cdd0680cfe4436965e67594686fe08",
+      "trace_id": "",
       "input_payload": {
         "user_message": "precio de la terapia de estimulación magnética",
         "conversation_summary": "Usuario saludó y el asistente pidió su nombre. Luego el usuario preguntó \"la terapia de estimulación\" y el asistente ofreció cuatro opciones (estimulación cerebral, estimulación cognitiva, activación conductual o sesión concreta) y preguntó si quiere información breve, precio orientativo o que gestione disponibilidad; conversación abierta (objetivo: conversation, etapa: in_assessment).",
@@ -63,20 +65,20 @@
         "reason": "information-request"
       },
       "baseline_output": {
-        "next_node": "rag",
-        "intent": "rag",
-        "confidence": "0.96",
-        "needs_retrieval": "true",
-        "state_update": "{\"active_goal\":\"information\",\"stage\":\"lookup\",\"pending_action\":\"\",\"pending_question\":\"\",\"last_user_message\":\"precio de la terapia de estimulación magnética\"}",
-        "reason": "El usuario pidió el precio de la terapia de estimulación magnética; se requiere consulta/recuperación de información actualizada sobre tarifas y disponibilidad."
+        "next_node": "provide_price_details",
+        "intent": "ask_price_info",
+        "confidence": "0.93",
+        "needs_retrieval": "false",
+        "state_update": "{\"stage\":\"in_assessment\",\"pending_action\":\"confirm_which_therapy\",\"active_goal\":\"conversation\",\"last_price_quoted\":\"1200 per session\"}",
+        "reason": "User asked \"precio de la terapia de estimulación magnética\". Assistant already provided an approximate price (1200 per session). Next step is to confirm if the user wants that price clarified, a breakdown (package, number of sessions, financiación), or to check availability/book. No external retrieval required."
       },
       "optimized_output": {
         "next_node": "rag",
-        "intent": "ask_pricing_rtms",
-        "confidence": "0.96",
+        "intent": "price_inquiry",
+        "confidence": "0.95",
         "needs_retrieval": "True",
-        "state_update": "{\"stage\": \"lookup\", \"active_goal\": \"information\", \"pending_action\": \"provide_pricing_and_options\", \"pending_question\": \"\", \"last_user_message\": \"precio de la terapia de estimulación magnética\", \"appointment_slots\": {}, \"memories\": [\"Usuario preguntó precio de la terapia de estimulación magnética (rTMS)\"]}",
-        "reason": "El usuario solicita el precio de la terapia de estimulación magnética (rTMS). Para dar una cifra precisa y actualizada debo consultar la base de datos/inventario de servicios (RAG). Mientras tanto, marco la conversación para búsqueda de información y preparación de opciones de agendamiento."
+        "state_update": "{\"active_goal\": \"information\", \"stage\": \"lookup\", \"conversation_summary\": \"Usuario pregunta por el precio de la terapia de estimulación magnética. Previamente usuario informó depresión y mostró interés en terapias; el asistente indicó un precio aproximado de 1200 por sesión de terapia de estimulación (mensaje previo). Se procederá a buscar información actualizada y detalles sobre variaciones de precio según protocolo y número de sesiones.\", \"pending_action\": \"retrieve_price_and_pricing_details_for_rTMS_or_estimulacion_magnetica\", \"last_user_message\": \"precio de la terapia de estimulación magnética\", \"appointment_slots\": {}}",
+        "reason": "User requested specific pricing for a medical intervention (repetitive transcranial magnetic stimulation / estimulación magnética). The guard hint indicates an information lookup (RAG). To give accurate, up-to-date pricing and any caveats (number of sessions, protocol differences, coverage), retrieval from current data sources is required."
       }
     }
   ]

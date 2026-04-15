@@ -240,6 +240,16 @@ def _score_prediction(task_name: str, expected: dict[str, Any], actual: dict[str
     return sum(1.0 for result in checks if result) / len(checks)
 
 
+def _build_metric(task_name: str, output_fields: tuple[str, ...]):
+    def metric(example: dspy.Example, prediction: Any, trace: Any | None = None) -> float:
+        del trace
+        expected = {field: getattr(example, field) for field in output_fields}
+        actual = _to_prediction_dict(prediction)
+        return _score_prediction(task_name, expected, actual)
+
+    return metric
+
+
 def _dataset_fingerprint(dataset_path: Path) -> str:
     return hashlib.sha256(dataset_path.read_bytes()).hexdigest()
 
@@ -385,12 +395,9 @@ def optimize_task(
         valset.append(example)
 
     baseline_module = module_factory()
+    metric = _build_metric(task_name, config["output_fields"])
     optimizer = MIPROv2(
-        metric=lambda example, prediction: _score_prediction(
-            task_name,
-            {field: getattr(example, field) for field in config["output_fields"]},
-            prediction,
-        ),
+        metric=metric,
         max_bootstrapped_demos=min(max_bootstrapped_demos, len(trainset)),
         max_labeled_demos=min(max_labeled_demos, len(trainset)),
         **_build_mipro_kwargs(settings, auto, num_threads),

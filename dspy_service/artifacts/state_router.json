@@ -4,52 +4,24 @@
     "train": [],
     "demos": [
       {
-        "user_message": "la terapia cuanto cuesta",
-        "conversation_summary": "Usuario dijo \"hola\"; asistente (Eros Bot de Clínica Eros Neuronal) se presentó y pidió su nombre, conversación abierta.",
-        "active_goal": "conversation",
-        "stage": "in_assessment",
+        "user_message": "Holas",
+        "conversation_summary": "",
+        "active_goal": "",
+        "stage": "",
         "pending_action": "",
         "pending_question": "",
         "appointment_slots": "{}",
         "last_tool_result": "",
-        "last_user_message": "la terapia cuanto cuesta",
-        "last_assistant_message": "Para orientarte mejor, ¿puedes responder brevemente a estas preguntas? 1. ¿Desde cuándo llevas con poca energía y falta de ganas? 2. ¿Es algo constante o va y viene? 3. ¿Cómo duermes últimamente",
-        "memories": "[\"Conversacion util: soy gabriel, me siento con pocas energías sin ganas de hacer nada -> Para orientarte mejor, ¿puedes responder brevemente a estas preguntas? 1. ¿Desde cuándo llevas con poca energía y falta de ganas? 2. ¿Es algo constante o va y viene? 3. ¿Cómo duermes últimamente\"]",
-        "guard_hint": "{}",
-        "next_node": "rag",
-        "intent": "ask_pricing",
+        "last_user_message": "Holas",
+        "last_assistant_message": "",
+        "memories": "[]",
+        "guard_hint": "{\"confidence\": 0.9, \"intent\": \"conversation\", \"needs_retrieval\": false, \"next_node\": \"conversation\", \"reason\": \"simple-conversation\", \"state_update\": {\"active_goal\": \"conversation\", \"stage\": \"open\"}}",
+        "next_node": "conversation",
+        "intent": "start_conversation",
         "confidence": 0.9,
-        "needs_retrieval": true,
-        "state_update": {
-          "stage": "in_assessment",
-          "active_goal": "conversation",
-          "pending_question": "¿A que tipo de terapia se hace referencia?",
-          "last_user_message": "la terapia cuanto cuesta"
-        },
-        "reason": "El usuario preguntó por el costo de la terapia durante una evaluación en curso. No solicitó una cita ni datos específicos que requieran recuperación de documentos. Al ser un asistente de una clinica psicologica, lo mas logico es que, deba usar herramientas para consultar informacion factual que me estan pidiendo en el momento. Debe atenderse lo que se me esta consultado (siempre y cuando no este dentro de mis restricciones, cosa que jamas le mencionare al usuario). Debo hacerse uso de alguna herramienta para consultar la informacion factual pedida. next_node=rag"
-      },
-      {
-        "user_message": "precio de la terapia de estimulación magnética",
-        "conversation_summary": "Usuario saludó y el asistente pidió su nombre. Luego el usuario preguntó \"la terapia de estimulación\" y el asistente ofreció cuatro opciones (estimulación cerebral, estimulación cognitiva, activación conductual o sesión concreta) y preguntó si quiere información breve, precio orientativo o que gestione disponibilidad; conversación abierta (objetivo: conversation, etapa: in_assessment).",
-        "active_goal": "conversation",
-        "stage": "in_assessment",
-        "pending_action": "",
-        "pending_question": "",
-        "appointment_slots": "{}",
-        "last_tool_result": "",
-        "last_user_message": "precio de la terapia de estimulación magnética",
-        "last_assistant_message": "La terapia de estimulacion tiene un costo aproximado de 1200 por sesion, numero de sesiones depende del diagnostico y el plan que proponemos para atender tu problmatica",
-        "memories": "[\"Conversacion util: la terapia de estimulación -> La terapia de estimulacion tiene un costo aproximado de 1200 por sesion, numero de sesiones depende del diagnostico y el plan que proponemos para atender tu problmatica\", \"Conversacion util: la terapia cuanto cuesta -> ¿Cual es la terapia en la que tienes interes?\", \"Conversacion util: soy gabriel, me siento con pocas energías sin ganas de hacer nada -> Nosotros podemos ayudarte y guiarte, con uno de nuestros profesionales, cuentame poco mas sobre tu problema, o podemos agendarte una cita con un profesional\"]",
-        "guard_hint": "{\"confidence\": 0.96, \"intent\": \"rag\", \"needs_retrieval\": true, \"next_node\": \"rag\", \"reason\": \"information-request\", \"state_update\": {\"active_goal\": \"information\", \"stage\": \"lookup\"}}",
-        "next_node": "rag",
-        "intent": "rag",
-        "confidence": 0.86,
-        "needs_retrieval": true,
-        "state_update": {
-          "stage": "lookup",
-          "active_goal": "information"
-        },
-        "reason": "information-request"
+        "needs_retrieval": false,
+        "state_update": "{\"active_goal\": \"conversation\", \"stage\": \"open\"}",
+        "reason": "No hay historial de ningun tipo, o contexto que indique alguna interaccion. Un saludo sin contexto, ni historial, ni hilo de conversacion, de ahi se infiere el inicio de una nueva conversacion y primer contacto"
       },
       {
         "user_message": "tengo depresión",
@@ -68,103 +40,8 @@
         "intent": "start_conversation",
         "confidence": 0.92,
         "needs_retrieval": false,
-        "state_update": {
-          "stage": "triage_inicial",
-          "memories": [
-            "Usuario reportó depresión (mensaje: 'tengo depresión')"
-          ],
-          "active_goal": "escuchar activamente a usuario y solucion delimitada podemos ofrecerle, sin darle diagnostico en esta conversacion",
-          "pending_action": "guiarlo_para_que_uno_de_nuestros_profesionales_lo_pueda_evaluar_y_apoyar",
-          "last_tool_result": "",
-          "pending_question": "¿Desde cuándo se siente así?, ¿Buscas apoyarte con una evaluacion profesional?",
-          "appointment_slots": {},
-          "last_user_message": "tengo depresión",
-          "conversation_summary": "Usuario informa 'tengo depresión'. No hay historial previo en el paquete de enrutamiento. No hay historial conversacional por el momento",
-          "last_assistant_message": ""
-        },
+        "state_update": "{\"active_goal\": \"escuchar activamente a usuario y solucion delimitada podemos ofrecerle, sin darle diagnostico en esta conversacion\", \"appointment_slots\": {}, \"conversation_summary\": \"Usuario informa 'tengo depresión'. No hay historial previo en el paquete de enrutamiento. No hay historial conversacional por el momento\", \"last_assistant_message\": \"\", \"last_tool_result\": \"\", \"last_user_message\": \"tengo depresión\", \"memories\": [\"Usuario reportó depresión (mensaje: 'tengo depresión')\"], \"pending_action\": \"guiarlo_para_que_uno_de_nuestros_profesionales_lo_pueda_evaluar_y_apoyar\", \"pending_question\": \"¿Desde cuándo se siente así?, ¿Buscas apoyarte con una evaluacion profesional?\", \"stage\": \"triage_inicial\"}",
         "reason": "El usuario declara un problema de salud mental (depresión). No se requiere recuperar información externa ahora. Es prioritario continuar la conversación para evaluar muy superficialmente (un solo dato sobre su sintomatologia y como busca resolverlo), para despues ofrecer agendar cita y poder dirigirlo a una consulta profesional o resolver sus dudas con respecto al topic sobre la depresion, por eso next_node=conversation."
-      },
-      {
-        "user_message": "Holas",
-        "conversation_summary": "",
-        "active_goal": "",
-        "stage": "",
-        "pending_action": "",
-        "pending_question": "",
-        "appointment_slots": "{}",
-        "last_tool_result": "",
-        "last_user_message": "Holas",
-        "last_assistant_message": "",
-        "memories": "[]",
-        "guard_hint": "{\"confidence\": 0.9, \"intent\": \"conversation\", \"needs_retrieval\": false, \"next_node\": \"conversation\", \"reason\": \"simple-conversation\", \"state_update\": {\"active_goal\": \"conversation\", \"stage\": \"open\"}}",
-        "next_node": "conversation",
-        "intent": "start_conversation",
-        "confidence": 0.9,
-        "needs_retrieval": false,
-        "state_update": {
-          "stage": "open",
-          "active_goal": "conversation"
-        },
-        "reason": "No hay historial de ningun tipo, o contexto que indique alguna interaccion. Un saludo sin contexto, ni historial, ni hilo de conversacion, de ahi se infiere el inicio de una nueva conversacion y primer contacto"
-      },
-      {
-        "user_message": "soy gabriel, me siento con pocas energías sin ganas de hacer nada",
-        "conversation_summary": "Usuario dijo \"hola\"; asistente (Eros Bot de Clínica Eros Neuronal) se presentó y pidió su nombre, conversación abierta.",
-        "active_goal": "conversation",
-        "stage": "open",
-        "pending_action": "",
-        "pending_question": "",
-        "appointment_slots": "{}",
-        "last_tool_result": "",
-        "last_user_message": "soy gabriel, me siento con pocas energías sin ganas de hacer nada",
-        "last_assistant_message": "Hola, soy Eros Bot, asistente de Clínica Eros Neuronal. ¿En qué puedo ayudarte hoy? ¿Cómo te llamas?",
-        "memories": "[]",
-        "guard_hint": "{}",
-        "next_node": "conversation",
-        "intent": "follow_thread_conversation_aswering_question_pendigs_by_assitant",
-        "confidence": 0.92,
-        "needs_retrieval": false,
-        "state_update": {
-          "stage": "in_assessment",
-          "memories": [
-            {
-              "type": "name",
-              "value": "Gabriel"
-            }
-          ],
-          "active_goal": "conversation",
-          "pending_action": "",
-          "pending_question": "ask_symptom_followups",
-          "last_user_message": "soy gabriel, me siento con pocas energías sin ganas de hacer nada",
-          "conversation_summary": "Usuario se identificó como Gabriel y reportó pocas energías y falta de motivación."
-        },
-        "reason": "El usuario respondió a la solicitud de nombre y además reportó síntomas (baja energía, anhedonia). Guard conditions: assistant había pedido nombre (pendiente resuelta) y el mensaje contiene un síntoma que requiere evaluación clínica. No hace falta recuperar información externa ni agendar aún; continuar conversación de manera superficial, para guiar al apoyo con un profesional, mediante una cita. Escucha activa, e ir insinuando cita con uno de nuestros profesionales"
-      },
-      {
-        "user_message": "la terapia de estimulación",
-        "conversation_summary": "Usuario dijo \"hola\"; asistente (Eros Bot de Clínica Eros Neuronal) se presentó y pidió su nombre, conversación abierta.",
-        "active_goal": "conversation",
-        "stage": "in_assessment",
-        "pending_action": "",
-        "pending_question": "",
-        "appointment_slots": "{}",
-        "last_tool_result": "",
-        "last_user_message": "la terapia de estimulación",
-        "last_assistant_message": "¿Que terapia es la que te interesa, psicologica, estimulacion magnetica trasncraneal o solamente el precio por diagnostico (evaluación)?",
-        "memories": "[\"Conversacion util: la terapia cuanto cuesta -> ¿Que terapia es la que te interesa, psicologica, estimulacion magnetica trasncraneal o solamente el precio por diagnostico (evaluación)?\", \"Conversacion util: soy gabriel, me siento con pocas energías sin ganas de hacer nada -> Gracias, Gabriel. Siento que te estes sintiendo asi, pero con nuestra ayuda, podemos guiarte, cuentame un poco mas sobre tu problema\"]",
-        "guard_hint": "{}",
-        "next_node": "conversation",
-        "intent": "specify_treatment_type",
-        "confidence": 0.92,
-        "needs_retrieval": false,
-        "state_update": {
-          "stage": "in_assessment",
-          "active_goal": "conversation",
-          "pending_action": "",
-          "pending_question": "",
-          "last_user_message": "la terapia de estimulación"
-        },
-        "reason": "El usuario respondió con 'la terapia de estimulación' tras una pregunta del asistente sobre qué tipo de terapia quería. Esto indica que el usuario está especificando el tratamiento. Se le responde el precio de dicho tratamiento segun sea el caso"
       }
     ],
     "signature": {
