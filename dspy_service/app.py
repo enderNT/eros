@@ -14,6 +14,11 @@ except Exception:  # pragma: no cover - optional dependency bootstrap
     dspy = None
 
 try:
+    import litellm
+except Exception:  # pragma: no cover - optional dependency bootstrap
+    litellm = None
+
+try:
     from modules import MODULE_FACTORIES
     from service_logging import DspyExecutionLogger, DspyOperationalLogger
 except ModuleNotFoundError:  # pragma: no cover - package-style fallback
@@ -27,6 +32,8 @@ TASK_OUTPUT_FIELDS: dict[str, list[str]] = {
     "rag_reply": ["response_text"],
     "appointment_reply": ["response_text"],
 }
+
+VALID_GPT5_REASONING_EFFORTS = {"minimal", "low", "medium", "high"}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -66,6 +73,30 @@ logging_enabled = os.getenv("DSPY_LOG_TO_CONSOLE", "true").strip().lower() != "f
 SERVICE_LOGGER = DspyOperationalLogger(console_enabled=logging_enabled)
 
 app = FastAPI(title="eros-dspy-runtime", version="0.3.0")
+
+
+def _is_gpt5_model(model_name: str) -> bool:
+    normalized = model_name.lower().split("/", 1)[-1]
+    return normalized.startswith("gpt-5")
+
+
+def _resolve_gpt5_reasoning_effort() -> str:
+    configured = os.getenv("DSPY_REASONING_EFFORT", "").strip().lower()
+    if configured in VALID_GPT5_REASONING_EFFORTS:
+        return configured
+    return "minimal"
+
+
+def _build_lm_kwargs(settings: "RuntimeSettings") -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "model": settings.model if "/" in settings.model else f"openai/{settings.model}",
+        "api_base": settings.api_base,
+        "api_key": settings.api_key,
+    }
+    if _is_gpt5_model(settings.model):
+        kwargs["temperature"] = 1.0
+        kwargs["reasoning_effort"] = _resolve_gpt5_reasoning_effort()
+    return kwargs
 
 
 @dataclass(slots=True)
@@ -206,13 +237,10 @@ class DSPyServiceRuntime:
             return "unconfigured"
 
         try:
-            qualified_model = self.settings.model if "/" in self.settings.model else f"openai/{self.settings.model}"
+            if litellm is not None:
+                litellm.drop_params = True
             dspy.configure(
-                lm=dspy.LM(
-                    model=qualified_model,
-                    api_base=self.settings.api_base,
-                    api_key=self.settings.api_key,
-                )
+                lm=dspy.LM(**_build_lm_kwargs(self.settings))
             )
             return "dspy"
         except Exception as exc:  # pragma: no cover - external runtime

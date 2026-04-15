@@ -1,0 +1,54 @@
+{
+  "task": "rag_reply",
+  "dataset": "dspy_service/datasets/rag_reply.jsonl",
+  "dataset_fingerprint": "f4db30a938c760f292cdedfdd084ad18ecddd3798e903ecf0dbcc46909f0c9de",
+  "valid_examples": 4,
+  "train_examples": 3,
+  "eval_examples": 1,
+  "baseline_score": 0.0,
+  "optimized_score": 0.0,
+  "review_required": true,
+  "examples": [
+    {
+      "trace_id": "",
+      "input_payload": {
+        "user_message": "precio de la terapia de estimulación magnética",
+        "summary": "Usuario saludó y el asistente pidió su nombre. Luego el usuario preguntó \"la terapia de estimulación\" y el asistente ofreció cuatro opciones (estimulación cerebral, o sesión concreta) y preguntó si quiere información breve, precio orientativo o que gestione disponibilidad; conversación abierta (objetivo: conversation, etapa: in_assessment).",
+        "active_goal": "information",
+        "stage": "lookup",
+        "pending_question": "",
+        "last_assistant_message": "Estimulación cerebral (p. ej. TMS u otras neuromodulaciones) — técnica médica para ciertas condiciones. ¿Quieres agendar una cita?. \n\n¿Quieres información breve sobre alguna de estas, precio orientativo o que te gestione disponibilidad con recepción?",
+        "recent_turns": [
+          {
+            "user": "soy gabriel, me siento con pocas energías sin ganas de hacer nada",
+            "assistant": "Gracias, Gabriel. Siento que te estés sintiendo así. Para orientarte mejor, ¿puedes responder brevemente a estas preguntas? 1. ¿Desde cuándo llevas con poca energía y falta de ganas? 2. ¿Es algo constante o va y viene..."
+          },
+          {
+            "user": "la terapia cuanto cuesta",
+            "assistant": "Tenemos terapia de psicologia individual, de estimulacion magnetica trasncraneal de alta y baja intensidad."
+          },
+          {
+            "user": "la terapia de estimulación",
+            "assistant": "Estimulación cerebral (p. ej. TMS u otras neuromodulaciones) — técnica médica para ciertas condiciones. Tiene un precio de 2000 por sesion para la de alta intensidad y 900 la de baja intensidad. ¿Quieres agendar una cita?. \n\n¿Quieres información breve sobre alguna de estas, precio orientativo o que te gestione disponibilidad con recepción?"
+          }
+        ],
+        "memories": [],
+        "retrieved_context": "Base de conocimiento de Clinica Eros Neuronal:\nClinica: Eros Neuronal \nServicios: Consulta psiquiatrica inicial: 50 min, 900 MXN\n Se aceptan tarjetas, transferencia y efectivo. text=Oferta de servicios vigente\nLa configuracion actual registra cuatro servicios: psicoterapia individual, consulta psiquiatrica inicial, seguimiento psiquiatrico, estimulacion magnetico transcraneal. Estos son los servicios que si pueden mencionarse con nombre, duracion y precio exactos.\n- [0093be0b-6572-5c26-a693-8e7940e745ea] score=0.504 source=documento_base_conocimiento_clinica_eros.md text=Seguimiento psiquiatrico\nEn el caso de la estimulacion magnetico trasncraneal, siempre va acompañado de de\nun seguimnineto psiquiatrico durante la estimulacion, consiguiendo asi un enfoque mas practico e integral durante la terapia\n- [fa5f3d82-9bc3-5c24-bf4e-af1e3f3019d6] score=0.476 source=documento_base_conocimiento_clinica_eros.md text=Terapia magnetico trasncraneal alta intensidad\nLa Terapia magnetico trasncraneal individual tiene una duracion de 50 minutos y un precio de 2000 MXN por sesion. Este servicio esta alineado con acompanamiento terapeutico para una sola persona y forma parte del componente psicoterapeutico de la clinica. El numero total de sesiones depende de lo que se haya encontrado durante la valoracion\n- [9a55cde0-0158-544c-b9a8-5b8c8e0beeac] score=0.469 source=documento_base_conocimiento_clinica_eros.md text=Terapia magnetico trasncraneal baja intensidad\nLa Terapia magnetico trasncraneal individual tiene una duracion de 50 minutos y un precio de 800 MXN por sesion. Este servicio esta alineado con acompanamiento terapeutico para una sola persona y forma parte del componente psicoterapeutico de la clinica. El numero total de sesiones depende de lo que se haya encontrado durante la valoracion\n- [c6a00d89-07d0-56a6-9502-8e3e9e6ebefb] score=0.425 source=documento_base_conocimiento_clinica_eros.md text=La valoracion inicial\nTiene un costo de 800, tiene una duracion de 50 minutos. Por su propia denominacion, corresponde a una primera valoracion psiquiatrica o a un primer acercamiento formal con el area de psiquiatria."
+      },
+      "serialized_input": {
+        "user_message": "precio de la terapia de estimulación magnética",
+        "summary": "Usuario saludó y el asistente pidió su nombre. Luego el usuario preguntó \"la terapia de estimulación\" y el asistente ofreció cuatro opciones (estimulación cerebral, o sesión concreta) y preguntó si quiere información breve, precio orientativo o que gestione disponibilidad; conversación abierta (objetivo: conversation, etapa: in_assessment).",
+        "active_goal": "information",
+        "stage": "lookup",
+        "pending_question": "",
+        "last_assistant_message": "Estimulación cerebral (p. ej. TMS u otras neuromodulaciones) — técnica médica para ciertas condiciones. ¿Quieres agendar una cita?. \n\n¿Quieres información breve sobre alguna de estas, precio orientativo o que te gestione disponibilidad con recepción?",
+        "recent_turns": "[{\"assistant\": \"Gracias, Gabriel. Siento que te estés sintiendo así. Para orientarte mejor, ¿puedes responder brevemente a estas preguntas? 1. ¿Desde cuándo llevas con poca energía y falta de ganas? 2. ¿Es algo constante o va y viene...\", \"user\": \"soy gabriel, me siento con pocas energías sin ganas de hacer nada\"}, {\"assistant\": \"Tenemos terapia de psicologia individual, de estimulacion magnetica trasncraneal de alta y baja intensidad.\", \"user\": \"la terapia cuanto cuesta\"}, {\"assistant\": \"Estimulación cerebral (p. ej. TMS u otras neuromodulaciones) — técnica médica para ciertas condiciones. Tiene un precio de 2000 por sesion para la de alta intensidad y 900 la de baja intensidad. ¿Quieres agendar una cita?. \\n\\n¿Quieres información breve sobre alguna de estas, precio orientativo o que te gestione disponibilidad con recepción?\", \"user\": \"la terapia de estimulación\"}]",
+        "memories": "[]",
+        "retrieved_context": "Base de conocimiento de Clinica Eros Neuronal:\nClinica: Eros Neuronal \nServicios: Consulta psiquiatrica inicial: 50 min, 900 MXN\n Se aceptan tarjetas, transferencia y efectivo. text=Oferta de servicios vigente\nLa configuracion actual registra cuatro servicios: psicoterapia individual, consulta psiquiatrica inicial, seguimiento psiquiatrico, estimulacion magnetico transcraneal. Estos son los servicios que si pueden mencionarse con nombre, duracion y precio exactos.\n- [0093be0b-6572-5c26-a693-8e7940e745ea] score=0.504 source=documento_base_conocimiento_clinica_eros.md text=Seguimiento psiquiatrico\nEn el caso de la estimulacion magnetico trasncraneal, siempre va acompañado de de\nun seguimnineto psiquiatrico durante la estimulacion, consiguiendo asi un enfoque mas practico e integral durante la terapia\n- [fa5f3d82-9bc3-5c24-bf4e-af1e3f3019d6] score=0.476 source=documento_base_conocimiento_clinica_eros.md text=Terapia magnetico trasncraneal alta intensidad\nLa Terapia magnetico trasncraneal individual tiene una duracion de 50 minutos y un precio de 2000 MXN por sesion. Este servicio esta alineado con acompanamiento terapeutico para una sola persona y forma parte del componente psicoterapeutico de la clinica. El numero total de sesiones depende de lo que se haya encontrado durante la valoracion\n- [9a55cde0-0158-544c-b9a8-5b8c8e0beeac] score=0.469 source=documento_base_conocimiento_clinica_eros.md text=Terapia magnetico trasncraneal baja intensidad\nLa Terapia magnetico trasncraneal individual tiene una duracion de 50 minutos y un precio de 800 MXN por sesion. Este servicio esta alineado con acompanamiento terapeutico para una sola persona y forma parte del componente psicoterapeutico de la clinica. El numero total de sesiones depende de lo que se haya encontrado durante la valoracion\n- [c6a00d89-07d0-56a6-9502-8e3e9e6ebefb] score=0.425 source=documento_base_conocimiento_clinica_eros.md text=La valoracion inicial\nTiene un costo de 800, tiene una duracion de 50 minutos. Por su propia denominacion, corresponde a una primera valoracion psiquiatrica o a un primer acercamiento formal con el area de psiquiatria."
+      },
+      "target_response_text": "Se realiza una evaluacion previa para determinar y diagnosticar, con un costo de 800, se determinan el numero de sesiones. La terapia de estimulacion magnetica trasncraneal tiene un costo de 2000 la de alta intensidad y 900 la de baja intensidad.",
+      "baseline_response_text": "La Terapia de Estimulación Magnética Transcraneal (EMT/TMS) en Clínica Eros Neuronal:\n\n- Alta intensidad: 50 minutos — 2000 MXN por sesión.\n- Baja intensidad: 50 minutos — 800 MXN por sesión.\n\nNotas importantes:\n- La EMT siempre se realiza con seguimiento psiquiátrico durante la terapia.\n- El número total de sesiones se determina después de la valoración inicial.\n- Valoración/consulta psiquiátrica inicial: 50 minutos — 900 MXN.\n\n¿Quieres que te reserve una valoración inicial o que te dé más detalles sobre duración total estimada, efectos secundarios o contraindicaciones?",
+      "optimized_response_text": "La Terapia de Estimulación Magnética Transcraneal (EMT/TMS) en Clínica Eros Neuronal:\n\n- Alta intensidad: 50 minutos — 2000 MXN por sesión.\n- Baja intensidad: 50 minutos — 800 MXN por sesión.\n\nNotas importantes:\n- La EMT siempre se realiza con seguimiento psiquiátrico durante la terapia.\n- El número total de sesiones se determina después de la valoración inicial.\n- Valoración/consulta psiquiátrica inicial: 50 minutos — 900 MXN.\n\n¿Quieres que te reserve una valoración inicial o que te dé más detalles sobre duración total estimada, efectos secundarios o contraindicaciones?"
+    }
+  ]
+}

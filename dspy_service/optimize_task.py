@@ -7,10 +7,12 @@ import os
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+from math import ceil
 from typing import Any
 
 import dspy
-from dspy.teleprompt import LabeledFewShot
+import litellm
+from dspy.teleprompt import MIPROv2
 
 try:
     from app import RuntimeSettings
@@ -82,6 +84,44 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
 
 
 TEXT_REPLY_TASKS = {"conversation_reply", "rag_reply"}
+
+VALID_GPT5_REASONING_EFFORTS = {"minimal", "low", "medium", "high"}
+
+
+def _is_gpt5_model(model_name: str) -> bool:
+    normalized = model_name.lower().split("/", 1)[-1]
+    return normalized.startswith("gpt-5")
+
+
+def _resolve_gpt5_reasoning_effort() -> str:
+    configured = os.getenv("DSPY_REASONING_EFFORT", "").strip().lower()
+    if configured in VALID_GPT5_REASONING_EFFORTS:
+        return configured
+    return "minimal"
+
+
+def _build_lm_kwargs(settings: RuntimeSettings) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "model": settings.model if "/" in settings.model else f"openai/{settings.model}",
+        "api_key": settings.api_key,
+        "api_base": settings.api_base or None,
+    }
+
+    if _is_gpt5_model(settings.model):
+        kwargs["temperature"] = 1.0
+        kwargs["reasoning_effort"] = _resolve_gpt5_reasoning_effort()
+
+    return kwargs
+
+
+def _build_mipro_kwargs(settings: RuntimeSettings, auto: str, num_threads: int | None) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "auto": auto,
+        "num_threads": num_threads,
+    }
+    if _is_gpt5_model(settings.model):
+        kwargs["init_temperature"] = 1.0
+    return kwargs
 
 
 def load_env_file() -> None:
@@ -245,6 +285,36 @@ def _split_rows(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
     return rows[:train_count], rows[train_count:], "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
 
 
+def _split_train_for_mipro(
+    train_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    total = len(train_rows)
+    if total <= 1:
+        return train_rows, train_rows, {
+            "train_examples": total,
+            "val_examples": total,
+            "rule": "trainset too small; reused train rows as valset for MIPROv2",
+        }
+
+    if total <= 4:
+        mipro_train_count = max(1, total - 1)
+        rule = "tiny-train split with last row reserved as valset for MIPROv2"
+    else:
+        mipro_train_count = max(1, total - ceil(total * 0.5))
+        rule = "deterministic 50/50 split of train rows into MIPRO train/val for MIPROv2"
+
+    if mipro_train_count >= total:
+        mipro_train_count = total - 1
+
+    mipro_train_rows = train_rows[:mipro_train_count]
+    mipro_val_rows = train_rows[mipro_train_count:]
+    return mipro_train_rows, mipro_val_rows, {
+        "train_examples": len(mipro_train_rows),
+        "val_examples": len(mipro_val_rows),
+        "rule": rule,
+    }
+
+
 def _build_example(row: dict[str, Any], config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dspy.Example]:
     input_payload: dict[str, Any] = {}
     serialized_input: dict[str, Any] = {}
@@ -273,7 +343,14 @@ def _relative_to_repo(path: Path) -> str:
         return str(path)
 
 
-def optimize_task(task_name: str, *, k: int = 16) -> None:
+def optimize_task(
+    task_name: str,
+    *,
+    auto: str = "light",
+    max_bootstrapped_demos: int = 4,
+    max_labeled_demos: int = 4,
+    num_threads: int | None = None,
+) -> None:
     if task_name not in TASK_CONFIGS:
         raise ValueError(f"Tarea no soportada: {task_name}")
 
@@ -282,13 +359,9 @@ def optimize_task(task_name: str, *, k: int = 16) -> None:
     if not settings.api_key:
         raise RuntimeError("No se encontro DSPY_API_KEY ni OPENAI_API_KEY en el entorno o en .env.")
 
-    qualified_model = settings.model if "/" in settings.model else f"openai/{settings.model}"
+    litellm.drop_params = True
     dspy.configure(
-        lm=dspy.LM(
-            model=qualified_model,
-            api_key=settings.api_key,
-            api_base=settings.api_base or None,
-        )
+        lm=dspy.LM(**_build_lm_kwargs(settings))
     )
 
     config = TASK_CONFIGS[task_name]
@@ -298,16 +371,35 @@ def optimize_task(task_name: str, *, k: int = 16) -> None:
 
     rows = _load_rows(dataset_path)
     train_rows, eval_rows, split_rule = _split_rows(rows)
+    mipro_train_rows, mipro_val_rows, mipro_split = _split_train_for_mipro(train_rows)
     module_factory = MODULE_FACTORIES[task_name]
 
     trainset: list[dspy.Example] = []
-    for row in train_rows:
+    for row in mipro_train_rows:
         _, _, _, example = _build_example(row, config)
         trainset.append(example)
 
+    valset: list[dspy.Example] = []
+    for row in mipro_val_rows:
+        _, _, _, example = _build_example(row, config)
+        valset.append(example)
+
     baseline_module = module_factory()
-    optimizer = LabeledFewShot(k=min(k, len(trainset)))
-    compiled_module = optimizer.compile(module_factory(), trainset=trainset, sample=False)
+    optimizer = MIPROv2(
+        metric=lambda example, prediction: _score_prediction(
+            task_name,
+            {field: getattr(example, field) for field in config["output_fields"]},
+            prediction,
+        ),
+        max_bootstrapped_demos=min(max_bootstrapped_demos, len(trainset)),
+        max_labeled_demos=min(max_labeled_demos, len(trainset)),
+        **_build_mipro_kwargs(settings, auto, num_threads),
+    )
+    compiled_module = optimizer.compile(
+        module_factory(),
+        trainset=trainset,
+        valset=valset,
+    )
 
     eval_examples: list[dict[str, Any]] = []
     baseline_scores: list[float] = []
@@ -360,12 +452,21 @@ def optimize_task(task_name: str, *, k: int = 16) -> None:
         "examples": len(rows),
         "dataset_fingerprint": dataset_fingerprint,
         "compiled_at": compiled_at,
-        "optimizer": "dspy.LabeledFewShot",
+        "optimizer": "dspy.MIPROv2",
+        "optimizer_settings": {
+            "auto": auto,
+            "max_bootstrapped_demos": min(max_bootstrapped_demos, len(trainset)),
+            "max_labeled_demos": min(max_labeled_demos, len(trainset)),
+            "num_threads": num_threads,
+            "mipro_train_examples": len(trainset),
+            "mipro_val_examples": len(valset),
+        },
         "validation_split": {
             "train_examples": len(train_rows),
             "eval_examples": len(eval_rows),
             "rule": split_rule,
         },
+        "optimizer_split": mipro_split,
         "artifact_path": _relative_to_repo(artifact_path),
         "evaluation_report_path": _relative_to_repo(eval_path),
     }
@@ -395,6 +496,7 @@ def optimize_task(task_name: str, *, k: int = 16) -> None:
     print(f"[*] Modelo: {settings.model}")
     print(f"[*] Dataset: {dataset_path} ({len(rows)} ejemplos)")
     print(f"[*] Train/Eval: {len(train_rows)}/{len(eval_rows)}")
+    print(f"[*] MIPRO train/val: {len(trainset)}/{len(valset)}")
     print(f"[*] Artefacto: {artifact_path}")
     print(f"[*] Meta: {meta_path}")
     print(f"[*] Eval: {eval_path}")
@@ -404,11 +506,40 @@ def optimize_task(task_name: str, *, k: int = 16) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Optimiza tareas DSPy con LabeledFewShot.")
+    parser = argparse.ArgumentParser(description="Optimiza tareas DSPy con MIPROv2.")
     parser.add_argument("task", choices=sorted(TASK_CONFIGS))
-    parser.add_argument("--k", type=int, default=16, help="Cantidad maxima de demos etiquetadas.")
+    parser.add_argument(
+        "--auto",
+        choices=("light", "medium", "heavy"),
+        default="light",
+        help="Preset de exploracion para MIPROv2.",
+    )
+    parser.add_argument(
+        "--max-bootstrapped-demos",
+        type=int,
+        default=4,
+        help="Cantidad maxima de demos bootstrap usadas por MIPROv2.",
+    )
+    parser.add_argument(
+        "--max-labeled-demos",
+        type=int,
+        default=4,
+        help="Cantidad maxima de demos etiquetadas usadas por MIPROv2.",
+    )
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=None,
+        help="Cantidad de hilos para evaluacion paralela dentro de MIPROv2.",
+    )
     args = parser.parse_args(argv)
-    optimize_task(args.task, k=args.k)
+    optimize_task(
+        args.task,
+        auto=args.auto,
+        max_bootstrapped_demos=args.max_bootstrapped_demos,
+        max_labeled_demos=args.max_labeled_demos,
+        num_threads=args.num_threads,
+    )
 
 
 if __name__ == "__main__":

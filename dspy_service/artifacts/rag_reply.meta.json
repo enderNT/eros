@@ -1,7 +1,28 @@
 {
-  "optimizer": "BootstrapFewShot",
-  "compiled_at": "2026-04-14T22:28:09.533705",
+  "task": "rag_reply",
+  "dataset": "dspy_service/datasets/rag_reply.jsonl",
   "examples": 4,
-  "dataset": "rag_reply.jsonl",
-  "model": "gpt-5-mini"
+  "dataset_fingerprint": "f4db30a938c760f292cdedfdd084ad18ecddd3798e903ecf0dbcc46909f0c9de",
+  "compiled_at": "2026-04-15T00:04:36.595976+00:00",
+  "optimizer": "dspy.MIPROv2",
+  "optimizer_settings": {
+    "auto": "medium",
+    "max_bootstrapped_demos": 2,
+    "max_labeled_demos": 2,
+    "num_threads": null,
+    "mipro_train_examples": 2,
+    "mipro_val_examples": 1
+  },
+  "validation_split": {
+    "train_examples": 3,
+    "eval_examples": 1,
+    "rule": "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
+  },
+  "optimizer_split": {
+    "train_examples": 2,
+    "val_examples": 1,
+    "rule": "tiny-train split with last row reserved as valset for MIPROv2"
+  },
+  "artifact_path": "dspy_service/artifacts/rag_reply.json",
+  "evaluation_report_path": "dspy_service/artifacts/rag_reply.eval.json"
 }
