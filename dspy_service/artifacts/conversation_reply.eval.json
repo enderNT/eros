@@ -1,14 +1,16 @@
 {
   "task": "conversation_reply",
-  "dataset": "exports/dspy/conversation_reply.jsonl",
-  "dataset_fingerprint": "0957051de65e47d3b3c05b1c149e94bb89dc1eca246a1e7e9345362064cd208b",
+  "dataset": "dspy_service/datasets/conversation_reply.jsonl",
+  "dataset_fingerprint": "9656f573337126bd05eaac8a2e817476044774ed87e2f071bc03f801ab3d21a2",
   "valid_examples": 5,
   "train_examples": 4,
   "eval_examples": 1,
+  "baseline_score": 0.0,
+  "optimized_score": 0.0,
   "review_required": true,
   "examples": [
     {
-      "trace_id": "c670dae3d9db41ffac07d58d8195d3a6",
+      "trace_id": "",
       "input_payload": {
         "user_message": "Holas",
         "summary": "",
@@ -30,8 +32,8 @@
         "memories": "[]"
       },
       "target_response_text": "Hola — soy Eros Bot, asistente de Clínica Eros Neuronal. ¿Con quién tengo el gusto y en qué puedo ayudarte hoy?",
-      "baseline_response_text": "¡Hola! ¿Cómo estás? ¿En qué puedo ayudarte hoy? ¿Prefieres que hablemos en español o en otro idioma?",
-      "optimized_response_text": "¡Hola! Soy Eros Bot, asistente de Clínica Eros Neuronal. ¿Cómo estás? ¿Querés contarme qué te pasa, o preferís que te informe sobre nuestras terapias (acompañamiento psicológico o estimulación magnética), costos o cómo agendar una evaluación?"
+      "baseline_response_text": "¡Hola! ¿Cómo estás? ¿En qué puedo ayudarte hoy?",
+      "optimized_response_text": "¡Hola! ¿Cómo estás? ¿En qué puedo ayudarte hoy?"
     }
   ]
 }
