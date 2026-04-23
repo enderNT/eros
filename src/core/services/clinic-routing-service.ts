@@ -19,26 +19,16 @@ export class ClinicRoutingService {
   async routeState(input: {
     user_message: string;
     conversation_summary: string;
-    active_goal: string;
-    stage: string;
-    pending_action: string;
-    pending_question: string;
-    appointment_slots: Record<string, unknown>;
+    current_mode: string;
     last_tool_result: string;
-    last_user_message: string;
     last_assistant_message: string;
     memories: string[];
   }, traceId?: string): Promise<StateRoutingDecision> {
     const rawInput = {
       user_message: input.user_message,
       conversation_summary: input.conversation_summary,
-      active_goal: input.active_goal,
-      stage: input.stage,
-      pending_action: input.pending_action,
-      pending_question: input.pending_question,
-      appointment_slots: input.appointment_slots,
+      current_mode: input.current_mode,
       last_tool_result: input.last_tool_result,
-      last_user_message: input.last_user_message,
       last_assistant_message: input.last_assistant_message,
       memories: input.memories,
       guard_hint: {}
@@ -47,15 +37,8 @@ export class ClinicRoutingService {
     const routingPacket: RoutingPacket = {
       user_message: compact(input.user_message, 400),
       conversation_summary: compact(input.conversation_summary, 500),
-      active_goal: compact(input.active_goal, 80),
-      stage: compact(input.stage, 80),
-      pending_action: compact(input.pending_action, 120),
-      pending_question: compact(input.pending_question, 200),
-      appointment_slots: Object.fromEntries(
-        Object.entries(input.appointment_slots).map(([key, value]) => [key, compact(String(value), 120)])
-      ),
+      current_mode: compact(this.normalizeMode(input.current_mode), 40),
       last_tool_result: compact(input.last_tool_result, 280),
-      last_user_message: compact(input.last_user_message, 280),
       last_assistant_message: compact(input.last_assistant_message, 280),
       memories: input.memories.slice(0, 3).map((memory) => compact(memory, 160))
     };
@@ -116,124 +99,51 @@ export class ClinicRoutingService {
   private deterministicGuard(routingPacket: RoutingPacket): StateRoutingDecision | null {
     const userMessage = routingPacket.user_message.toLowerCase().trim();
     if (!userMessage) {
-      return {
-        next_node: "conversation",
-        intent: "conversation",
-        confidence: 0.3,
-        needs_retrieval: false,
-        state_update: {},
-        reason: "empty-message"
-      };
+      return this.buildGuardDecision("conversation", 0.3, false, "empty-message");
     }
 
     if (this.isAppointmentInformationRequest(routingPacket, userMessage)) {
-      return {
-        next_node: "rag",
-        intent: "rag",
-        confidence: 0.94,
-        needs_retrieval: true,
-        state_update: {
-          active_goal: "information",
-          stage: "lookup",
-          pending_action: "",
-          pending_question: ""
-        },
-        reason: "appointment-to-information"
-      };
+      return this.buildGuardDecision("rag", 0.94, true, "appointment-to-information");
     }
 
     if (this.isAppointmentFollowUp(routingPacket, userMessage)) {
-      return {
-        next_node: "appointment",
-        intent: "appointment",
-        confidence: 0.95,
-        needs_retrieval: false,
-        state_update: {
-          active_goal: "appointment",
-          stage: "collecting_slots",
-          pending_action: "collecting_slots"
-        },
-        reason: "appointment-follow-up"
-      };
+      return this.buildGuardDecision("appointment", 0.95, false, "appointment-follow-up");
     }
 
     if (this.isExplicitAppointmentRequest(userMessage)) {
-      return {
-        next_node: "appointment",
-        intent: "appointment",
-        confidence: 0.92,
-        needs_retrieval: false,
-        state_update: {
-          active_goal: "appointment",
-          stage: "collecting_slots",
-          pending_action: "collecting_slots"
-        },
-        reason: "appointment-request"
-      };
+      return this.buildGuardDecision("appointment", 0.92, false, "appointment-request");
     }
 
     if (this.isInformationFollowUp(routingPacket, userMessage)) {
-      return {
-        next_node: "rag",
-        intent: "rag",
-        confidence: 0.89,
-        needs_retrieval: true,
-        state_update: {
-          active_goal: "information",
-          stage: "lookup"
-        },
-        reason: "information-follow-up"
-      };
+      return this.buildGuardDecision("rag", 0.89, true, "information-follow-up");
     }
 
     if (this.isExplicitRagRequest(userMessage)) {
-      return {
-        next_node: "rag",
-        intent: "rag",
-        confidence: 0.86,
-        needs_retrieval: true,
-        state_update: {
-          active_goal: "information",
-          stage: "lookup"
-        },
-        reason: "information-request"
-      };
+      return this.buildGuardDecision("rag", 0.86, true, "information-request");
     }
 
     if (this.isSimpleConversation(userMessage)) {
-      return {
-        next_node: "conversation",
-        intent: "conversation",
-        confidence: 0.9,
-        needs_retrieval: false,
-        state_update: {
-          active_goal: routingPacket.active_goal || "conversation",
-          stage: routingPacket.stage || "open"
-        },
-        reason: "simple-conversation"
-      };
+      return this.buildGuardDecision("conversation", 0.9, false, "simple-conversation");
     }
 
     return null;
   }
 
   private isAppointmentFollowUp(routingPacket: RoutingPacket, userMessage: string): boolean {
-    const activeAppointment = routingPacket.active_goal === "appointment" || ["collecting_slots", "ready_for_handoff"].includes(routingPacket.stage);
-    if (!activeAppointment) {
+    if (routingPacket.current_mode !== "appointment") {
       return false;
     }
-    if (routingPacket.pending_question) {
+    if (this.lastAssistantAskedQuestion(routingPacket.last_assistant_message)) {
       return true;
     }
-    if (Object.keys(routingPacket.appointment_slots).length > 0 && userMessage.length <= 40) {
+    if (userMessage.length <= 40 && this.looksLikeSlotAnswer(userMessage)) {
       return true;
     }
     return /\b(si|sí|no|claro|mañana|manana|hoy|tarde|noche|am|pm|\d{1,2}:\d{2}|\d{1,2}\s?am|\d{1,2}\s?pm)\b/i.test(userMessage);
   }
 
   private isAppointmentInformationRequest(routingPacket: RoutingPacket, userMessage: string): boolean {
-    const activeAppointment = routingPacket.active_goal === "appointment" || ["collecting_slots", "ready_for_handoff"].includes(routingPacket.stage);
-    if (!activeAppointment || !this.isExplicitRagRequest(userMessage) || this.looksLikeSlotAnswer(userMessage)) {
+    if (routingPacket.current_mode !== "appointment" || !this.isExplicitRagRequest(userMessage) || this.looksLikeSlotAnswer(userMessage)) {
       return false;
     }
     return true;
@@ -276,10 +186,7 @@ export class ClinicRoutingService {
   }
 
   private isInformationFollowUp(routingPacket: RoutingPacket, userMessage: string): boolean {
-    const hasContext =
-      routingPacket.active_goal === "information" ||
-      routingPacket.stage === "lookup" ||
-      Boolean(routingPacket.last_tool_result.trim());
+    const hasContext = routingPacket.current_mode === "information" || Boolean(routingPacket.last_tool_result.trim());
     if (!hasContext || this.isExplicitAppointmentRequest(userMessage)) {
       return false;
     }
@@ -309,5 +216,36 @@ export class ClinicRoutingService {
       return true;
     }
     return ["hola", "gracias", "perfecto", "entendido"].some((marker) => compactMessage.includes(marker));
+  }
+
+  private normalizeMode(mode: string): string {
+    if (["appointment", "information", "conversation"].includes(mode)) {
+      return mode;
+    }
+    return "conversation";
+  }
+
+  private lastAssistantAskedQuestion(lastAssistantMessage: string): boolean {
+    const normalized = lastAssistantMessage.trim();
+    if (!normalized) {
+      return false;
+    }
+    return normalized.includes("?") || /\b(necesito|comparte|indica|dime|confirmame|confírmame)\b/i.test(normalized);
+  }
+
+  private buildGuardDecision(
+    nextNode: StateRoutingDecision["next_node"],
+    confidence: number,
+    needsRetrieval: boolean,
+    reason: string
+  ): StateRoutingDecision {
+    return {
+      next_node: nextNode,
+      intent: nextNode === "rag" ? "rag" : nextNode,
+      confidence,
+      needs_retrieval: needsRetrieval,
+      state_update: {},
+      reason
+    };
   }
 }

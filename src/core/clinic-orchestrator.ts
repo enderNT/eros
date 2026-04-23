@@ -32,23 +32,22 @@ function buildRouteInput(state: {
   summary: string;
   active_goal: string;
   stage: string;
-  pending_action: string;
-  pending_question: string;
-  appointment_slots: Record<string, unknown>;
   last_tool_result: string;
   last_assistant_message: string;
   recalled_memories: string[];
 }) {
+  const currentMode =
+    state.active_goal === "appointment" || ["collecting_slots", "ready_for_handoff"].includes(state.stage)
+      ? "appointment"
+      : state.active_goal === "information" || state.stage === "lookup" || Boolean(state.last_tool_result.trim())
+        ? "information"
+        : "conversation";
+
   return {
     user_message: state.last_user_message,
     conversation_summary: state.summary,
-    active_goal: state.active_goal,
-    stage: state.stage,
-    pending_action: state.pending_action,
-    pending_question: state.pending_question,
-    appointment_slots: state.appointment_slots,
+    current_mode: currentMode,
     last_tool_result: state.last_tool_result,
-    last_user_message: state.last_user_message,
     last_assistant_message: state.last_assistant_message,
     memories: state.recalled_memories
   };

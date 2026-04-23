@@ -59,16 +59,10 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "input_fields": (
             "user_message",
             "conversation_summary",
-            "active_goal",
-            "stage",
-            "pending_action",
-            "pending_question",
-            "appointment_slots",
+            "current_mode",
             "last_tool_result",
-            "last_user_message",
             "last_assistant_message",
             "memories",
-            "guard_hint",
         ),
         "output_fields": (
             "next_node",
@@ -78,7 +72,7 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "state_update",
             "reason",
         ),
-        "complex_fields": {"appointment_slots", "memories", "guard_hint", "state_update"},
+        "complex_fields": {"memories", "state_update"},
     },
 }
 
@@ -326,6 +320,7 @@ def _split_train_for_mipro(
 
 
 def _build_example(row: dict[str, Any], config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dspy.Example]:
+    row = _normalize_row(row, config)
     input_payload: dict[str, Any] = {}
     serialized_input: dict[str, Any] = {}
     output_payload: dict[str, Any] = {}
@@ -343,6 +338,21 @@ def _build_example(row: dict[str, Any], config: dict[str, Any]) -> tuple[dict[st
     example_kwargs = {**serialized_input, **{field: _serialize_value(output_payload[field]) for field in config["output_fields"]}}
     example = dspy.Example(**example_kwargs).with_inputs(*config["input_fields"])
     return input_payload, serialized_input, output_payload, example
+
+
+def _normalize_row(row: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(row)
+    if "current_mode" in config["input_fields"] and not normalized.get("current_mode"):
+        active_goal = str(normalized.get("active_goal", "")).strip().lower()
+        stage = str(normalized.get("stage", "")).strip().lower()
+        last_tool_result = str(normalized.get("last_tool_result", "")).strip()
+        if active_goal == "appointment" or stage in {"collecting_slots", "ready_for_handoff"}:
+            normalized["current_mode"] = "appointment"
+        elif active_goal == "information" or stage == "lookup" or last_tool_result:
+            normalized["current_mode"] = "information"
+        else:
+            normalized["current_mode"] = "conversation"
+    return normalized
 
 
 def _relative_to_repo(path: Path) -> str:

@@ -125,13 +125,8 @@ export interface ReplyTraceDataset {
 export interface RoutingPacket {
   user_message: string;
   conversation_summary: string;
-  active_goal: string;
-  stage: string;
-  pending_action: string;
-  pending_question: string;
-  appointment_slots: Record<string, unknown>;
+  current_mode: string;
   last_tool_result: string;
-  last_user_message: string;
   last_assistant_message: string;
   memories: string[];
 }

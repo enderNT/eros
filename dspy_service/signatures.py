@@ -15,16 +15,10 @@ if dspy is not None:
 
         user_message = dspy.InputField()
         conversation_summary = dspy.InputField()
-        active_goal = dspy.InputField()
-        stage = dspy.InputField()
-        pending_action = dspy.InputField()
-        pending_question = dspy.InputField()
-        appointment_slots = dspy.InputField()
+        current_mode = dspy.InputField()
         last_tool_result = dspy.InputField()
-        last_user_message = dspy.InputField()
         last_assistant_message = dspy.InputField()
         memories = dspy.InputField()
-        guard_hint = dspy.InputField()
 
         next_node = dspy.OutputField()
         intent = dspy.OutputField()

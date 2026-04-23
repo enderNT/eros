@@ -180,6 +180,39 @@ function buildPendingQuestion(missingFields: string[]): string {
   return `Necesito ${readable.slice(0, -1).join(", ")} y ${readable.at(-1)} para continuar.`;
 }
 
+function deriveRoutingMode(state: GraphState): RoutingPacket["current_mode"] {
+  if (state.active_goal === "appointment" || ["collecting_slots", "ready_for_handoff"].includes(state.stage)) {
+    return "appointment";
+  }
+  if (state.active_goal === "information" || state.stage === "lookup" || Boolean(state.last_tool_result.trim())) {
+    return "information";
+  }
+  return "conversation";
+}
+
+function extractPendingQuestion(replyText: string): string {
+  const normalized = replyText.replace(/\s+/g, " ").trim();
+  if (!normalized.includes("?")) {
+    return "";
+  }
+  const matches = normalized.match(/[^?.!]*\?/g) ?? [];
+  if (matches.length === 0) {
+    return "";
+  }
+  return compact(matches.slice(-2).join(" ").trim(), 220);
+}
+
+function inferConversationStage(state: GraphState): string {
+  const userMessage = state.last_user_message.toLowerCase();
+  if (/(depres|ansiedad|estres|estr[eé]s|triste|sin ganas|insomnio|crisis|terapia|psicolog|psiquiatr)/i.test(userMessage)) {
+    return "in_assessment";
+  }
+  if (state.active_goal === "conversation" && state.stage && !["lookup", "collecting_slots", "ready_for_handoff"].includes(state.stage)) {
+    return state.stage;
+  }
+  return "open";
+}
+
 export class ClinicWorkflow {
   private readonly graph;
 
@@ -257,26 +290,21 @@ export class ClinicWorkflow {
     const decision = await this.routingService.routeState({
       user_message: state.last_user_message,
       conversation_summary: state.summary,
-      active_goal: state.active_goal,
-      stage: state.stage,
-      pending_action: state.pending_action,
-      pending_question: state.pending_question,
-      appointment_slots: state.appointment_slots,
+      current_mode: deriveRoutingMode(state),
       last_tool_result: state.last_tool_result,
-      last_user_message: state.last_user_message,
       last_assistant_message: state.last_assistant_message,
       memories: state.recalled_memories
     }, traceId);
 
     return {
-      ...this.applyStatePatch(state, decision.state_update),
+      ...state,
       next_node: decision.next_node,
       intent: decision.intent,
       confidence: decision.confidence,
       needs_retrieval: decision.needs_retrieval,
       routing_reason: decision.reason,
       state_update: decision.state_update,
-      summary_refresh_requested: state.summary_refresh_requested || state.active_goal !== String(decision.state_update.active_goal ?? state.active_goal)
+      summary_refresh_requested: state.summary_refresh_requested
     };
   }
 
@@ -296,12 +324,17 @@ export class ClinicWorkflow {
       provider: dspyReply ? "dspy" : "llm",
       reply_mode: generatedReply.reply_mode
     });
+    const pendingQuestion = extractPendingQuestion(generatedReply.response_text);
 
     return {
       state: {
         ...state,
         response_text: generatedReply.response_text,
         last_assistant_message: generatedReply.response_text,
+        active_goal: "conversation",
+        stage: inferConversationStage(state),
+        pending_action: pendingQuestion ? "follow_up" : "",
+        pending_question: pendingQuestion,
         last_tool_result: "",
         handoff_required: false,
         appointment_payload: {}
@@ -346,6 +379,7 @@ export class ClinicWorkflow {
       provider: dspyReply ? "dspy" : "llm",
       reply_mode: generatedReply.reply_mode
     });
+    const pendingQuestion = extractPendingQuestion(generatedReply.response_text);
 
     return {
       state: {
@@ -353,6 +387,10 @@ export class ClinicWorkflow {
         last_tool_result: compact(ragContext.text, 240),
         response_text: generatedReply.response_text,
         last_assistant_message: generatedReply.response_text,
+        active_goal: "information",
+        stage: "lookup",
+        pending_action: pendingQuestion ? "clarify_information_need" : "",
+        pending_question: pendingQuestion,
         handoff_required: false,
         appointment_payload: {}
       },
@@ -513,18 +551,6 @@ export class ClinicWorkflow {
       summary_refresh_requested: false,
       recent_turns: appendRecentTurn(state.recent_turns, state.last_user_message, state.response_text)
     };
-  }
-
-  private applyStatePatch(state: GraphState, patch: Record<string, unknown>): GraphState {
-    const merged = structuredClone(state);
-    for (const [key, value] of Object.entries(patch)) {
-      if (key === "appointment_slots" && value && typeof value === "object" && !Array.isArray(value)) {
-        merged.appointment_slots = mergeSlots(merged.appointment_slots, value as Record<string, unknown>);
-        continue;
-      }
-      (merged as unknown as Record<string, unknown>)[key] = value;
-    }
-    return merged;
   }
 
   private buildConversationPayload(state: GraphState): Record<string, unknown> {

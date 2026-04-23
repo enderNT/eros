@@ -5,7 +5,12 @@ import {
   normalizeChatwootInboundMessage,
   normalizeInboundMessage
 } from "./adapters/http/inbound";
-import { createClinicStateStore, createOutboundTransport, createTraceSink } from "./core/factories/runtime";
+import {
+  createClinicStateStore,
+  createDspyTaskTraceRecorder,
+  createOutboundTransport,
+  createTraceSink
+} from "./core/factories/runtime";
 import { ClinicOrchestrator } from "./core/clinic-orchestrator";
 import { ClinicDspyHttpBridge } from "./core/services/clinic-dspy-bridge";
 import { ClinicConfigLoader } from "./core/services/clinic-config-loader";
@@ -19,9 +24,10 @@ import { OperationalLogger } from "./core/services/operational-logger";
 export function buildApp() {
   const settings = loadSettings();
   const traceSink = createTraceSink(settings);
+  const dspyTaskTraceRecorder = createDspyTaskTraceRecorder(settings);
   const logger = new OperationalLogger(settings);
   const llmService = new ClinicLlmService(settings);
-  const dspyBridge = new ClinicDspyHttpBridge(settings.dspy);
+  const dspyBridge = new ClinicDspyHttpBridge(settings.dspy, dspyTaskTraceRecorder);
   const clinicConfigProvider = new ClinicConfigLoader(settings.clinic.configPath);
   const memoryRuntime = new InMemoryConversationMemoryRuntime(llmService, traceSink);
   const routingService = new ClinicRoutingService(settings, llmService, dspyBridge, traceSink);
@@ -83,6 +89,7 @@ export function buildApp() {
     const dspy = settings.dspy.enabled
       ? await dspyBridge.health()
       : true;
+    const dspyTaskTrace = await dspyTaskTraceRecorder.health();
 
     return {
       ok: !shuttingDown,
@@ -96,7 +103,8 @@ export function buildApp() {
             enabled: settings.dspy.enabled,
             service_url: settings.dspy.serviceUrl
           }
-        }
+        },
+        dspyTaskTrace
       },
       timestamp: new Date().toISOString()
     };
@@ -113,6 +121,9 @@ export function buildApp() {
     }
     if (settings.trace.backend === "postgres" && !deps.dependencies.trace.ok) {
       degraded.push("trace");
+    }
+    if (settings.dspy.taskTrace.backend === "postgres" && !deps.dependencies.dspyTaskTrace.ok) {
+      degraded.push("dspy_task_trace");
     }
 
     return {
@@ -185,6 +196,7 @@ export function buildApp() {
       shuttingDown = true;
       await clinicStateStore.close(settings.app.shutdownGraceMs);
       await traceSink.close(settings.app.shutdownGraceMs);
+      await dspyTaskTraceRecorder.close(settings.app.shutdownGraceMs);
     }
   };
 }

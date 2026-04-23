@@ -10,7 +10,6 @@ import {
   extractJsonObject,
   readBooleanValue,
   readNumberValue,
-  readRecord,
   readStringArray,
   readStringValue
 } from "./json-response";
@@ -91,11 +90,7 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
       intent: "appointment",
       confidence: 0.88,
       needs_retrieval: false,
-      state_update: {
-        active_goal: "appointment",
-        stage: "collecting_slots",
-        pending_action: "collecting_slots"
-      },
+      state_update: {},
       reason: "fallback-force-appointment"
     };
   }
@@ -106,11 +101,7 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
       intent: "appointment",
       confidence: 0.8,
       needs_retrieval: false,
-      state_update: {
-        active_goal: "appointment",
-        stage: "collecting_slots",
-        pending_action: "collecting_slots"
-      },
+      state_update: {},
       reason: "fallback-appointment-keyword"
     };
   }
@@ -121,10 +112,7 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
       intent: "rag",
       confidence: 0.76,
       needs_retrieval: true,
-      state_update: {
-        active_goal: "information",
-        stage: "lookup"
-      },
+      state_update: {},
       reason: "fallback-rag-keyword"
     };
   }
@@ -134,10 +122,7 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
     intent: "conversation",
     confidence: 0.7,
     needs_retrieval: false,
-    state_update: {
-      active_goal: routingPacket.active_goal || "conversation",
-      stage: routingPacket.stage || "open"
-    },
+    state_update: {},
     reason: "fallback-conversation"
   };
 }
@@ -147,7 +132,7 @@ export class ClinicLlmService {
 
   async classifyStateRoute(routingPacket: RoutingPacket, guardHint: Record<string, unknown> = {}): Promise<StateRoutingDecision> {
     const payload = await this.requestJson(
-      "Eres un clasificador de estado para un asistente de clinica. Devuelve JSON estricto con next_node, intent, confidence, needs_retrieval, state_update y reason. Los valores permitidos para next_node son conversation, rag y appointment.",
+      "Eres un clasificador de ruta para un asistente de clinica. Devuelve JSON estricto con next_node, intent, confidence, needs_retrieval y reason. Solo enruta; no intentes mantener ni editar el estado conversacional. Los valores permitidos para next_node son conversation, rag y appointment.",
       JSON.stringify({ routing_packet: routingPacket, guard_hint: guardHint }, null, 2),
       0
     );
@@ -163,7 +148,7 @@ export class ClinicLlmService {
       intent: readStringValue(payload.intent, "conversation"),
       confidence: Math.max(0, Math.min(1, readNumberValue(payload.confidence, 0.7))),
       needs_retrieval: readBooleanValue(payload.needs_retrieval, false),
-      state_update: readRecord(payload.state_update) ?? {},
+      state_update: {},
       reason: readStringValue(payload.reason, "remote-json")
     };
   }

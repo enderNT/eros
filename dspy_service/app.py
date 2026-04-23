@@ -348,16 +348,10 @@ def predict_state_router(payload: dict[str, Any]) -> dict[str, Any]:
         {
             "user_message": payload.get("user_message", ""),
             "conversation_summary": payload.get("conversation_summary", ""),
-            "active_goal": payload.get("active_goal", ""),
-            "stage": payload.get("stage", ""),
-            "pending_action": payload.get("pending_action", ""),
-            "pending_question": payload.get("pending_question", ""),
-            "appointment_slots": payload.get("appointment_slots", {}),
+            "current_mode": payload.get("current_mode", "conversation"),
             "last_tool_result": payload.get("last_tool_result", ""),
-            "last_user_message": payload.get("last_user_message", ""),
             "last_assistant_message": payload.get("last_assistant_message", ""),
             "memories": payload.get("memories", []),
-            "guard_hint": payload.get("guard_hint", {}),
         },
     )
     if not prediction:

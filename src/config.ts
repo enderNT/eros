@@ -112,6 +112,16 @@ export interface AppSettings {
     artifactsDir: string;
     datasetsDir: string;
     optimizationEnabled: boolean;
+    taskTrace: {
+      backend: string;
+      postgres: {
+        connectionString: string;
+        schema: string;
+        connectTimeoutMs: number;
+        queryTimeoutMs: number;
+        healthTimeoutMs: number;
+      };
+    };
   };
 }
 
@@ -260,7 +270,17 @@ export function loadSettings(): AppSettings {
       apiKey: readString("DSPY_API_KEY", ""),
       artifactsDir: readString("DSPY_ARTIFACTS_DIR", "./dspy_service/artifacts"),
       datasetsDir: readString("DSPY_DATASETS_DIR", "./dspy_service/datasets"),
-      optimizationEnabled: readBoolean("DSPY_OPTIMIZATION_ENABLED", false)
+      optimizationEnabled: readBoolean("DSPY_OPTIMIZATION_ENABLED", false),
+      taskTrace: {
+        backend: readString("DSPY_TASK_TRACE_BACKEND", "disabled"),
+        postgres: {
+          connectionString: readString("DSPY_TASK_TRACE_POSTGRES_URL", readString("TRACE_POSTGRES_URL", "")),
+          schema: readString("DSPY_TASK_TRACE_POSTGRES_SCHEMA", "dspy_task_traces"),
+          connectTimeoutMs: readNumber("DSPY_TASK_TRACE_POSTGRES_CONNECT_TIMEOUT_MS", 3000),
+          queryTimeoutMs: readNumber("DSPY_TASK_TRACE_POSTGRES_QUERY_TIMEOUT_MS", 5000),
+          healthTimeoutMs: readNumber("DSPY_TASK_TRACE_POSTGRES_HEALTH_TIMEOUT_MS", 2000)
+        }
+      }
     }
   };
 }

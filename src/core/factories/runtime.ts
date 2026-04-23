@@ -10,6 +10,8 @@ import { Mem0MemoryProvider } from "../services/mem0-memory-provider";
 import { NoopKnowledgeProvider } from "../services/noop-knowledge-provider";
 import { OpenAiCompatibleLlmProvider } from "../services/openai-compatible-llm-provider";
 import { PostgresClinicStateStore } from "../services/postgres-clinic-state-store";
+import type { DspyTaskTraceRecorder } from "../services/dspy-task-trace-recorder";
+import { NoopDspyTaskTraceRecorder, PostgresDspyTaskTraceRecorder } from "../services/dspy-task-trace-recorder";
 import { PostgresTraceSink } from "../services/postgres-trace-sink";
 
 export function createLlmProvider(settings: AppSettings): LlmProvider {
@@ -49,6 +51,14 @@ export function createTraceSink(settings: AppSettings): TraceSink {
   }
 
   return new InMemoryTraceSink();
+}
+
+export function createDspyTaskTraceRecorder(settings: AppSettings): DspyTaskTraceRecorder {
+  if (settings.dspy.taskTrace.backend === "postgres") {
+    return new PostgresDspyTaskTraceRecorder(settings.dspy.taskTrace, settings.app.name);
+  }
+
+  return new NoopDspyTaskTraceRecorder();
 }
 
 export function createClinicStateStore(settings: AppSettings): ClinicStateStore {

@@ -94,7 +94,17 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
       apiKey: "",
       artifactsDir: "./tmp-dspy-artifacts",
       datasetsDir: "./tmp-dspy-datasets",
-      optimizationEnabled: false
+      optimizationEnabled: false,
+      taskTrace: {
+        backend: "disabled",
+        postgres: {
+          connectionString: "",
+          schema: "dspy_task_traces",
+          connectTimeoutMs: 100,
+          queryTimeoutMs: 100,
+          healthTimeoutMs: 100
+        }
+      }
     }
   };
 
@@ -135,7 +145,15 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
     },
     dspy: {
       ...base.dspy,
-      ...overrides.dspy
+      ...overrides.dspy,
+      taskTrace: {
+        ...base.dspy.taskTrace,
+        ...overrides.dspy?.taskTrace,
+        postgres: {
+          ...base.dspy.taskTrace.postgres,
+          ...overrides.dspy?.taskTrace?.postgres
+        }
+      }
     }
   };
 }

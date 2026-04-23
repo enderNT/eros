@@ -110,6 +110,14 @@ La configuración está centralizada en [`.env.example`](./.env.example) y separ
 - `CHATWOOT_*`
 - `DOCKER_*`
 
+Si quieres guardar datasets crudos por tarea de DSPy en Postgres, usa:
+
+- `DSPY_TASK_TRACE_BACKEND=postgres`
+- `DSPY_TASK_TRACE_POSTGRES_URL=...`
+- `DSPY_TASK_TRACE_POSTGRES_SCHEMA=dspy_task_traces`
+
+Ese modo crea tablas por tarea (`state_router_calls`, `conversation_reply_calls`, `rag_reply_calls`, `appointment_reply_calls`) y guarda `request_json` y `response_json` exactamente como se enviaron y recibieron.
+
 Regla de diseño:
 
 - Sí van en variables de entorno: URLs, llaves, toggles, budgets, thresholds y selección de proveedor.

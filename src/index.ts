@@ -13,7 +13,8 @@ const server = app.listen({
 
 await logger.logStartup({
   dspy_enabled: settings.dspy.enabled,
-  trace_backend: settings.trace.backend
+  trace_backend: settings.trace.backend,
+  dspy_task_trace_backend: settings.dspy.taskTrace.backend
 });
 
 let stopping = false;
