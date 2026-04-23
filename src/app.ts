@@ -2,8 +2,10 @@ import { Elysia } from "elysia";
 import { loadSettings } from "./config";
 import {
   assessChatwootWebhook,
+  assessWebhookAsyncRequest,
   normalizeChatwootInboundMessage,
-  normalizeInboundMessage
+  normalizeInboundMessage,
+  normalizeWebhookAsyncInboundMessage
 } from "./adapters/http/inbound";
 import {
   createClinicStateStore,
@@ -49,17 +51,30 @@ export function buildApp() {
     try {
       const payload = body as Record<string, unknown>;
       const assessment = assessChatwootWebhook(payload);
-      if (!assessment.shouldProcess) {
+      const webhookAsyncAssessment = assessment.isChatwoot
+        ? { isWebhookAsync: false, shouldProcess: true }
+        : assessWebhookAsyncRequest(payload);
+
+      const ignoredReason = !assessment.shouldProcess
+        ? assessment.reason
+        : !webhookAsyncAssessment.shouldProcess
+          ? webhookAsyncAssessment.reason
+          : undefined;
+
+      if (ignoredReason) {
         set.status = 202;
         return {
           accepted: true,
           mode: "ignored",
-          reason: assessment.reason ?? "ignored_event"
+          reason: ignoredReason
         };
       }
 
+      const integrationRequestId = webhookAsyncAssessment.isWebhookAsync ? crypto.randomUUID() : undefined;
       const inbound = assessment.isChatwoot
         ? normalizeChatwootInboundMessage(payload)
+        : webhookAsyncAssessment.isWebhookAsync
+          ? normalizeWebhookAsyncInboundMessage(payload, { integrationRequestId })
         : normalizeInboundMessage(payload);
       void orchestrator.processTurn(inbound).catch((error) => {
         void logger.logSystemError("async_turn", "http.webhook", error, {
@@ -68,11 +83,17 @@ export function buildApp() {
         });
       });
       set.status = 202;
-      return {
-        accepted: true,
-        mode: "async",
-        sessionId: inbound.sessionId
-      };
+      return webhookAsyncAssessment.isWebhookAsync
+        ? {
+            accepted: true,
+            integrationRequestId,
+            mode: "async"
+          }
+        : {
+          accepted: true,
+          mode: "async",
+          sessionId: inbound.sessionId
+        };
     } catch (error) {
       await logger.logSystemError("normalize_inbound", "http.webhook", error);
       set.status = 400;
@@ -166,6 +187,7 @@ export function buildApp() {
     })
     .post("/webhooks/messages", async ({ body, set }) => handleWebhook(body, set))
     .post("/webhooks/chatwoot", async ({ body, set }) => handleWebhook(body, set))
+    .post("/webhooks/webhook-async", async ({ body, set }) => handleWebhook(body, set))
     .post("/turns/execute", async ({ body, set }) => {
       try {
         const inbound = normalizeInboundMessage(body as Record<string, unknown>);

@@ -17,6 +17,17 @@ export interface InboundMessage {
     conversationId?: string;
     inboxId?: string;
     contactId?: string;
+    callbackUrl?: string;
+    chatRequestId?: string;
+    userMessageId?: string;
+    integrationId?: string;
+    integrationTransport?: string;
+    integrationRequestId?: string;
+    systemPrompt?: string | null;
+    history?: Array<{
+      role: "user" | "assistant";
+      text: string;
+    }>;
   };
   rawPayload: unknown;
   receivedAt: string;

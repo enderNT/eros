@@ -89,6 +89,17 @@ export interface OutboundTransport {
         response?: Record<string, unknown>;
       }
   >;
+  emitFailure?(
+    error: unknown,
+    inbound: InboundMessage
+  ): Promise<
+    | void
+    | {
+        status: string;
+        destination?: string;
+        response?: Record<string, unknown>;
+      }
+  >;
 }
 
 export interface StateStore {

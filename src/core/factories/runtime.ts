@@ -2,6 +2,7 @@ import type { AppSettings } from "../../config";
 import type { ClinicStateStore, KnowledgeProvider, LlmProvider, MemoryProvider, OutboundTransport, TraceSink } from "../../domain/ports";
 import { ChatwootTransport } from "../../adapters/channels/chatwoot-transport";
 import { NoopTransport } from "../../adapters/channels/noop-transport";
+import { WebhookAsyncTransport } from "../../adapters/channels/webhook-async-transport";
 import { GenericLlmProvider } from "../services/generic-llm-provider";
 import { InMemoryClinicStateStore } from "../services/in-memory-clinic-state-store";
 import { InMemoryMemoryProvider } from "../services/in-memory-memory-provider";
@@ -36,6 +37,9 @@ export function createKnowledgeProvider(): KnowledgeProvider {
 export function createOutboundTransport(settings: AppSettings): OutboundTransport {
   if (settings.channel.provider === "chatwoot" && settings.channel.replyEnabled) {
     return new ChatwootTransport(settings.channel);
+  }
+  if (settings.channel.provider === "webhook_async" && settings.channel.replyEnabled) {
+    return new WebhookAsyncTransport(settings.channel, settings.app.name);
   }
   return new NoopTransport();
 }

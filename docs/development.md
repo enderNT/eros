@@ -90,6 +90,14 @@ CHATWOOT_BASE_URL=https://tu-chatwoot.example.com
 CHATWOOT_API_ACCESS_TOKEN=tu_token
 ```
 
+Configurar `webhook_async` en local:
+
+```bash
+CHANNEL_PROVIDER=webhook_async
+CHANNEL_REPLY_ENABLED=true
+CHAT_WEBHOOK_CALLBACK_SECRET=tu_secreto_compartido
+```
+
 Configurar provider remoto OpenAI-compatible:
 
 ```bash
@@ -117,6 +125,8 @@ MEM0_AUTH_MODE=auto
 Pensado para canales externos que necesitan acuse temprano.
 
 Con Chatwoot, este endpoint filtra automáticamente mensajes salientes o privados para evitar loops.
+
+Con `webhook_async`, también acepta payloads con `sessionId`, `chatRequestId`, `message`, `history` y `callbackUrl`, responde `202` con `integrationRequestId` y publica el resultado final por callback.
 
 Ejemplo:
 

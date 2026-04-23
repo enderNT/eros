@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createLlmProvider, createMemoryProvider, createOutboundTransport } from "../src/core/factories/runtime";
 import { NoopTransport } from "../src/adapters/channels/noop-transport";
 import { ChatwootTransport } from "../src/adapters/channels/chatwoot-transport";
+import { WebhookAsyncTransport } from "../src/adapters/channels/webhook-async-transport";
 import { InMemoryMemoryProvider } from "../src/core/services/in-memory-memory-provider";
 import { Mem0MemoryProvider } from "../src/core/services/mem0-memory-provider";
 import { OpenAiCompatibleLlmProvider } from "../src/core/services/openai-compatible-llm-provider";
@@ -53,5 +54,23 @@ describe("runtime factories", () => {
     expect(createLlmProvider(remoteSettings)).toBeInstanceOf(OpenAiCompatibleLlmProvider);
     expect(createMemoryProvider(remoteSettings)).toBeInstanceOf(Mem0MemoryProvider);
     expect(createOutboundTransport(remoteSettings)).toBeInstanceOf(ChatwootTransport);
+  });
+
+  it("creates the webhook_async outbound transport when configured", () => {
+    const settings = buildTestSettings({
+      channel: {
+        provider: "webhook_async",
+        replyEnabled: true,
+        chatwoot: {
+          baseUrl: "",
+          apiAccessToken: ""
+        },
+        webhookAsync: {
+          callbackSecret: "shared-secret"
+        }
+      }
+    });
+
+    expect(createOutboundTransport(settings)).toBeInstanceOf(WebhookAsyncTransport);
   });
 });

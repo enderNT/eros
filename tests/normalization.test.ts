@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
   assessChatwootWebhook,
+  assessWebhookAsyncRequest,
   normalizeChatwootInboundMessage,
-  normalizeInboundMessage
+  normalizeInboundMessage,
+  normalizeWebhookAsyncInboundMessage
 } from "../src/adapters/http/inbound";
 
 describe("normalizeInboundMessage", () => {
@@ -70,5 +72,76 @@ describe("normalizeInboundMessage", () => {
     expect(assessment.isChatwoot).toBe(true);
     expect(assessment.shouldProcess).toBe(false);
     expect(assessment.reason).toContain("ignored_message_type");
+  });
+
+  it("maps a webhook_async payload to the internal contract", () => {
+    const assessment = assessWebhookAsyncRequest({
+      sessionId: "sess_123",
+      userMessageId: "msg_user_123",
+      chatRequestId: "chatreq_123",
+      integration: {
+        id: "mi-integracion",
+        transport: "webhook_async"
+      },
+      message: {
+        id: "msg_user_123",
+        role: "user",
+        text: "Hola, necesito ayuda"
+      },
+      history: [
+        { role: "user", text: "Mensaje previo" },
+        { role: "assistant", text: "Respuesta previa" }
+      ],
+      systemPrompt: "Eres un asistente util",
+      callbackUrl: "https://tu-app.com/api/chat/webhook/callback"
+    });
+
+    expect(assessment.isWebhookAsync).toBe(true);
+    expect(assessment.shouldProcess).toBe(true);
+
+    const inbound = normalizeWebhookAsyncInboundMessage(
+      {
+        sessionId: "sess_123",
+        userMessageId: "msg_user_123",
+        chatRequestId: "chatreq_123",
+        integration: {
+          id: "mi-integracion",
+          transport: "webhook_async"
+        },
+        message: {
+          id: "msg_user_123",
+          role: "user",
+          text: "Hola, necesito ayuda"
+        },
+        history: [
+          { role: "user", text: "Mensaje previo" },
+          { role: "assistant", text: "Respuesta previa" }
+        ],
+        systemPrompt: "Eres un asistente util",
+        callbackUrl: "https://tu-app.com/api/chat/webhook/callback"
+      },
+      {
+        integrationRequestId: "ext_abc_123"
+      }
+    );
+
+    expect(inbound.channel).toBe("webhook_async");
+    expect(inbound.sessionId).toBe("sess_123");
+    expect(inbound.actorId).toBe("sess_123");
+    expect(inbound.correlationId).toBe("chatreq_123");
+    expect(inbound.deliveryContext).toEqual({
+      provider: "webhook_async",
+      callbackUrl: "https://tu-app.com/api/chat/webhook/callback",
+      chatRequestId: "chatreq_123",
+      userMessageId: "msg_user_123",
+      integrationId: "mi-integracion",
+      integrationTransport: "webhook_async",
+      integrationRequestId: "ext_abc_123",
+      systemPrompt: "Eres un asistente util",
+      history: [
+        { role: "user", text: "Mensaje previo" },
+        { role: "assistant", text: "Respuesta previa" }
+      ]
+    });
   });
 });

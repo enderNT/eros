@@ -65,6 +65,9 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
       chatwoot: {
         baseUrl: "",
         apiAccessToken: ""
+      },
+      webhookAsync: {
+        callbackSecret: ""
       }
     },
     trace: {
@@ -137,6 +140,10 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
       chatwoot: {
         ...base.channel.chatwoot,
         ...overrides.channel?.chatwoot
+      },
+      webhookAsync: {
+        ...base.channel.webhookAsync,
+        ...overrides.channel?.webhookAsync
       }
     },
     trace: {

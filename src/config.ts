@@ -83,6 +83,9 @@ export interface AppSettings {
       baseUrl: string;
       apiAccessToken?: string;
     };
+    webhookAsync: {
+      callbackSecret?: string;
+    };
   };
   trace: {
     backend: string;
@@ -241,6 +244,9 @@ export function loadSettings(): AppSettings {
       chatwoot: {
         baseUrl: readString("CHATWOOT_BASE_URL", ""),
         apiAccessToken: readString("CHATWOOT_API_ACCESS_TOKEN", "")
+      },
+      webhookAsync: {
+        callbackSecret: readString("CHAT_WEBHOOK_CALLBACK_SECRET", "")
       }
     },
     trace: {

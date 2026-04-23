@@ -74,6 +74,7 @@ Documentación ampliada:
 - `GET /health`: alias compatible de readiness.
 - `POST /webhooks/messages`: recibe eventos y responde `202 Accepted`; el turno se procesa de forma asíncrona.
 - `POST /webhooks/chatwoot`: endpoint equivalente al webhook de la app Python original.
+- `POST /webhooks/webhook-async`: endpoint específico para integraciones con contrato `webhook_async`.
 - `POST /turns/execute`: ejecuta el turno de forma síncrona; útil para pruebas locales e integración.
 - `GET /debug/traces`: expone el snapshot reciente del sink de trazas activo.
 
@@ -82,6 +83,12 @@ Con `Chatwoot`, el webhook principal ya puede:
 - aceptar mensajes entrantes reales
 - ignorar salientes/privados para evitar loops
 - responder por la API oficial de conversaciones si `CHANNEL_PROVIDER=chatwoot`
+
+Con `webhook_async`, ese flujo también puede:
+
+- responder rápido con `accepted: true` e `integrationRequestId`
+- sembrar el contexto inicial del hilo desde `history`
+- enviar el resultado final por `callbackUrl` con `Authorization: Bearer <CHAT_WEBHOOK_CALLBACK_SECRET>`
 
 ## Ejemplo de payload
 
@@ -108,6 +115,7 @@ La configuración está centralizada en [`.env.example`](./.env.example) y separ
 - `DSPY_*`
 - `CHANNEL_*`
 - `CHATWOOT_*`
+- `CHAT_WEBHOOK_*`
 - `DOCKER_*`
 
 Si quieres guardar datasets crudos por tarea de DSPy en Postgres, usa:

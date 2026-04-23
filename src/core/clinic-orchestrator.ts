@@ -92,6 +92,89 @@ function buildConsoleFlowSummary(
   return parts.length > 0 ? `${capability} [${parts.join(", ")}]` : capability;
 }
 
+function compact(value: string, limit: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
+}
+
+function buildRecentTurnsFromHistory(
+  history: Array<{ role: "user" | "assistant"; text: string }>
+): Array<Record<string, string>> {
+  const recentTurns: Array<Record<string, string>> = [];
+  let pendingUser = "";
+
+  for (const entry of history) {
+    if (entry.role === "user") {
+      if (pendingUser) {
+        recentTurns.push({ user: compact(pendingUser, 220), assistant: "" });
+      }
+      pendingUser = entry.text;
+      continue;
+    }
+
+    if (!pendingUser) {
+      continue;
+    }
+
+    recentTurns.push({
+      user: compact(pendingUser, 220),
+      assistant: compact(entry.text, 220)
+    });
+    pendingUser = "";
+  }
+
+  if (pendingUser) {
+    recentTurns.push({ user: compact(pendingUser, 220), assistant: "" });
+  }
+
+  return recentTurns.slice(-3);
+}
+
+function buildSummaryFromHistory(history: Array<{ role: "user" | "assistant"; text: string }>): string {
+  if (history.length === 0) {
+    return "";
+  }
+
+  const summary = history
+    .slice(-6)
+    .map((entry) => `${entry.role === "user" ? "Usuario" : "Asistente"}: ${entry.text}`)
+    .join(" | ");
+  return compact(summary, 700);
+}
+
+function buildInitialGraphState(inbound: InboundMessage) {
+  const history = inbound.deliveryContext?.history ?? [];
+  const lastAssistantMessage = [...history].reverse().find((entry) => entry.role === "assistant")?.text ?? "";
+
+  return {
+    session_id: inbound.sessionId,
+    actor_id: inbound.actorId,
+    contact_name: inbound.contactName ?? "Paciente",
+    last_user_message: "",
+    last_assistant_message: lastAssistantMessage,
+    summary: buildSummaryFromHistory(history),
+    active_goal: "",
+    stage: "",
+    pending_action: "",
+    pending_question: "",
+    appointment_slots: {},
+    last_tool_result: "",
+    recalled_memories: [],
+    next_node: "conversation" as const,
+    intent: "conversation",
+    confidence: 0,
+    needs_retrieval: false,
+    routing_reason: "",
+    state_update: {},
+    response_text: "",
+    appointment_payload: {},
+    handoff_required: false,
+    turn_count: history.filter((entry) => entry.role === "user").length,
+    summary_refresh_requested: false,
+    recent_turns: buildRecentTurnsFromHistory(history)
+  };
+}
+
 export class ClinicOrchestrator {
   constructor(
     private readonly stateStore: ClinicStateStore,
@@ -104,37 +187,12 @@ export class ClinicOrchestrator {
   async processTurn(inbound: InboundMessage) {
     const traceId = await this.traceSink.startTurn(inbound);
     const executionLogger = await this.logger.startRun(inbound);
+    let finalDeliveryAttempted = false;
     try {
       const previous = await this.stateStore.load(inbound.sessionId);
       await this.logStateLoad(executionLogger, inbound, previous);
       const initialState = {
-        ...(previous ?? {
-          session_id: inbound.sessionId,
-          actor_id: inbound.actorId,
-          contact_name: inbound.contactName ?? "Paciente",
-          last_user_message: "",
-          last_assistant_message: "",
-          summary: "",
-          active_goal: "",
-          stage: "",
-          pending_action: "",
-          pending_question: "",
-          appointment_slots: {},
-          last_tool_result: "",
-          recalled_memories: [],
-          next_node: "conversation",
-          intent: "conversation",
-          confidence: 0,
-          needs_retrieval: false,
-          routing_reason: "",
-          state_update: {},
-          response_text: "",
-          appointment_payload: {},
-          handoff_required: false,
-          turn_count: 0,
-          summary_refresh_requested: false,
-          recent_turns: []
-        }),
+        ...(previous ?? buildInitialGraphState(inbound)),
         session_id: inbound.sessionId,
         actor_id: inbound.actorId,
         contact_name: inbound.contactName ?? previous?.contact_name ?? "Paciente",
@@ -207,6 +265,7 @@ export class ClinicOrchestrator {
             appointment_payload: result.appointment_payload
           }
         };
+        finalDeliveryAttempted = true;
         const outboundResult = await this.outboundTransport.emit(outcome, inbound);
         await this.traceSink.append(traceId, "outbound.emit.result", {
           destination: outboundResult?.destination ?? inbound.channel,
@@ -235,6 +294,19 @@ export class ClinicOrchestrator {
         return result;
       }
 
+      if (inbound.deliveryContext?.provider === "webhook_async" && typeof this.outboundTransport.emitFailure === "function") {
+        finalDeliveryAttempted = true;
+        const outboundResult = await this.outboundTransport.emitFailure(
+          new Error("Turn completed without response_text"),
+          inbound
+        );
+        await this.traceSink.append(traceId, "outbound.emit.result", {
+          destination: outboundResult?.destination ?? inbound.channel,
+          status: outboundResult?.status ?? "failed",
+          response: outboundResult?.response ?? {}
+        });
+      }
+
       await executionLogger.end({
         status: "ok",
         summary: `${mapCapability(result.next_node)}:${result.intent}`,
@@ -244,6 +316,27 @@ export class ClinicOrchestrator {
     } catch (error) {
       await this.traceSink.failTurn(traceId, error);
       await executionLogger.fail(error);
+      if (
+        !finalDeliveryAttempted &&
+        inbound.deliveryContext?.provider === "webhook_async" &&
+        typeof this.outboundTransport.emitFailure === "function"
+      ) {
+        try {
+          finalDeliveryAttempted = true;
+          const outboundResult = await this.outboundTransport.emitFailure(error, inbound);
+          await this.traceSink.append(traceId, "outbound.emit.result", {
+            destination: outboundResult?.destination ?? inbound.channel,
+            status: outboundResult?.status ?? "failed",
+            response: outboundResult?.response ?? {}
+          });
+        } catch (callbackError) {
+          await this.logger.logSystemError("webhook_async_failure_callback", "clinic_orchestrator", callbackError, {
+            session_id: inbound.sessionId,
+            correlation_id: inbound.correlationId ?? inbound.sessionId,
+            trace_id: traceId
+          });
+        }
+      }
       void this.flushTrace(traceId, inbound);
       throw error;
     }
