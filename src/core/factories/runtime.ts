@@ -59,10 +59,13 @@ export function createTraceSink(settings: AppSettings): TraceSink {
 
 export function createDspyTaskTraceRecorder(settings: AppSettings): DspyTaskTraceRecorder {
   if (settings.dspy.taskTrace.backend === "postgres") {
-    return new PostgresDspyTaskTraceRecorder(settings.dspy.taskTrace, settings.app.name);
+    return new PostgresDspyTaskTraceRecorder(settings.dspy.taskTrace, settings.app.name, settings.logging.consoleEnabled);
   }
 
-  return new NoopDspyTaskTraceRecorder();
+  return new NoopDspyTaskTraceRecorder(
+    settings.logging.consoleEnabled,
+    settings.dspy.taskTrace.backend ? `backend=${settings.dspy.taskTrace.backend}` : "backend=disabled"
+  );
 }
 
 export function createClinicStateStore(settings: AppSettings): ClinicStateStore {

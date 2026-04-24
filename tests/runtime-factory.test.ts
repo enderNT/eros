@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createLlmProvider, createMemoryProvider, createOutboundTransport } from "../src/core/factories/runtime";
+import { createDspyTaskTraceRecorder, createLlmProvider, createMemoryProvider, createOutboundTransport } from "../src/core/factories/runtime";
 import { NoopTransport } from "../src/adapters/channels/noop-transport";
 import { ChatwootTransport } from "../src/adapters/channels/chatwoot-transport";
 import { WebhookAsyncTransport } from "../src/adapters/channels/webhook-async-transport";
@@ -7,6 +7,7 @@ import { InMemoryMemoryProvider } from "../src/core/services/in-memory-memory-pr
 import { Mem0MemoryProvider } from "../src/core/services/mem0-memory-provider";
 import { OpenAiCompatibleLlmProvider } from "../src/core/services/openai-compatible-llm-provider";
 import { GenericLlmProvider } from "../src/core/services/generic-llm-provider";
+import { NoopDspyTaskTraceRecorder, PostgresDspyTaskTraceRecorder } from "../src/core/services/dspy-task-trace-recorder";
 import { buildTestSettings } from "./test-settings";
 
 describe("runtime factories", () => {
@@ -72,5 +73,26 @@ describe("runtime factories", () => {
     });
 
     expect(createOutboundTransport(settings)).toBeInstanceOf(WebhookAsyncTransport);
+  });
+
+  it("creates the dspy task trace recorder according to backend settings", () => {
+    const disabledSettings = buildTestSettings();
+    expect(createDspyTaskTraceRecorder(disabledSettings)).toBeInstanceOf(NoopDspyTaskTraceRecorder);
+
+    const postgresSettings = buildTestSettings({
+      dspy: {
+        taskTrace: {
+          backend: "postgres",
+          postgres: {
+            connectionString: "postgres://example",
+            schema: "dspy_task_traces",
+            connectTimeoutMs: 100,
+            queryTimeoutMs: 100,
+            healthTimeoutMs: 100
+          }
+        }
+      }
+    });
+    expect(createDspyTaskTraceRecorder(postgresSettings)).toBeInstanceOf(PostgresDspyTaskTraceRecorder);
   });
 });
