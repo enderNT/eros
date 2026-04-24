@@ -13,6 +13,10 @@ const server = app.listen({
 
 await logger.logStartup({
   dspy_enabled: settings.dspy.enabled,
+  memory_enabled: settings.memory.enabled,
+  memory_provider: settings.memory.provider,
+  state_backend: settings.state.backend,
+  state_checkpoint_namespace: settings.state.checkpointNamespace,
   trace_backend: settings.trace.backend,
   dspy_task_trace_backend: settings.dspy.taskTrace.backend
 });

@@ -10,6 +10,7 @@ import {
 import {
   createClinicStateStore,
   createDspyTaskTraceRecorder,
+  createMemoryProvider,
   createOutboundTransport,
   createTraceSink
 } from "./core/factories/runtime";
@@ -19,7 +20,7 @@ import { ClinicConfigLoader } from "./core/services/clinic-config-loader";
 import { ClinicLlmService } from "./core/services/clinic-llm-service";
 import { ClinicRoutingService } from "./core/services/clinic-routing-service";
 import { ClinicWorkflow } from "./core/services/clinic-workflow";
-import { InMemoryConversationMemoryRuntime } from "./core/services/in-memory-conversation-memory-runtime";
+import { ProviderBackedClinicMemoryRuntime } from "./core/services/provider-backed-clinic-memory-runtime";
 import { QdrantRetrievalService } from "./core/services/qdrant-retrieval-service";
 import { OperationalLogger } from "./core/services/operational-logger";
 
@@ -31,7 +32,8 @@ export function buildApp() {
   const llmService = new ClinicLlmService(settings);
   const dspyBridge = new ClinicDspyHttpBridge(settings.dspy, dspyTaskTraceRecorder);
   const clinicConfigProvider = new ClinicConfigLoader(settings.clinic.configPath);
-  const memoryRuntime = new InMemoryConversationMemoryRuntime(llmService, traceSink);
+  const memoryProvider = createMemoryProvider(settings);
+  const memoryRuntime = new ProviderBackedClinicMemoryRuntime(settings.memory, memoryProvider, llmService, traceSink);
   const routingService = new ClinicRoutingService(settings, llmService, dspyBridge, traceSink);
   const clinicStateStore = createClinicStateStore(settings);
   const workflow = new ClinicWorkflow(
