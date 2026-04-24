@@ -3,7 +3,10 @@ import type { AddMemoryResult, MemoryHit, TurnRecord } from "../../domain/contra
 import type { MemoryProvider } from "../../domain/ports";
 
 export class Mem0MemoryProvider implements MemoryProvider {
-  constructor(private readonly settings: AppSettings["memory"]) {}
+  constructor(
+    private readonly settings: AppSettings["memory"],
+    private readonly consoleEnabled = true
+  ) {}
 
   async addTurn(
     messages: TurnRecord[],
@@ -14,10 +17,29 @@ export class Mem0MemoryProvider implements MemoryProvider {
   ): Promise<AddMemoryResult> {
     const url = resolveMem0Url(this.settings.mem0.baseUrl, this.settings.mem0.addPath);
     if (!url || !this.settings.mem0.apiKey) {
+      this.log("save_skip", {
+        reason: !url ? "missing_base_url" : "missing_api_key",
+        user_id: actorId,
+        agent_id: agentId,
+        session_id: sessionId
+      }, true);
       return { stored: false, count: 0 };
     }
 
     const pairText = messages.map((message) => `${message.role}: ${message.text}`).join("\n");
+    const authMode = this.settings.mem0.authMode === "auto"
+      ? inferAuthMode(this.settings.mem0.baseUrl)
+      : this.settings.mem0.authMode;
+    this.log("save_request", {
+      user_id: actorId,
+      agent_id: agentId,
+      session_id: sessionId,
+      messages: messages.length,
+      auth_mode: authMode,
+      url,
+      pair_preview: compact(pairText, 160)
+    });
+
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -37,12 +59,50 @@ export class Mem0MemoryProvider implements MemoryProvider {
         })
       });
 
+      const responseText = await response.text();
+      const payload = parseJsonText(responseText);
+      const ids = extractMem0Ids(payload);
+      const reportedCount = extractMem0Count(payload);
+
       if (!response.ok) {
+        this.log("save_response", {
+          user_id: actorId,
+          agent_id: agentId,
+          session_id: sessionId,
+          status: response.status,
+          stored: false,
+          ids: ids.join(",") || "none",
+          reported_count: reportedCount ?? "unknown",
+          preview: compact(responseText, 220)
+        }, true);
         return { stored: false, count: 0 };
       }
 
-      return { stored: true, count: messages.length };
-    } catch {
+      const count = ids.length > 0
+        ? ids.length
+        : reportedCount !== null
+          ? reportedCount
+          : messages.length;
+      const stored = count > 0;
+      this.log("save_response", {
+        user_id: actorId,
+        agent_id: agentId,
+        session_id: sessionId,
+        status: response.status,
+        stored,
+        ids: ids.join(",") || "none",
+        reported_count: reportedCount ?? "unknown",
+        preview: compact(responseText, 220)
+      }, !stored);
+
+      return { stored, count };
+    } catch (error) {
+      this.log("save_error", {
+        user_id: actorId,
+        agent_id: agentId,
+        session_id: sessionId,
+        error: error instanceof Error ? error.message : "unknown_mem0_save_error"
+      }, true);
       return { stored: false, count: 0 };
     }
   }
@@ -50,8 +110,22 @@ export class Mem0MemoryProvider implements MemoryProvider {
   async search(query: string, actorId: string, agentId: string, topK: number, threshold: number): Promise<MemoryHit[]> {
     const url = resolveMem0Url(this.settings.mem0.baseUrl, this.settings.mem0.searchPath);
     if (!url || !this.settings.mem0.apiKey) {
+      this.log("search_skip", {
+        reason: !url ? "missing_base_url" : "missing_api_key",
+        user_id: actorId,
+        agent_id: agentId
+      }, true);
       return [];
     }
+
+    this.log("search_request", {
+      user_id: actorId,
+      agent_id: agentId,
+      top_k: topK,
+      threshold,
+      url,
+      query: compact(query, 120)
+    });
 
     try {
       const response = await fetch(url, {
@@ -69,25 +143,65 @@ export class Mem0MemoryProvider implements MemoryProvider {
         })
       });
 
+      const responseText = await response.text();
       if (!response.ok) {
+        this.log("search_response", {
+          user_id: actorId,
+          agent_id: agentId,
+          status: response.status,
+          hits: 0,
+          ids: "none",
+          preview: compact(responseText, 220)
+        }, true);
         return [];
       }
 
-      const payload = (await response.json()) as { memories?: unknown[]; results?: unknown[] };
-      const candidates = Array.isArray(payload.memories)
+      const payload = parseJsonText(responseText) as { memories?: unknown[]; results?: unknown[] } | null;
+      const candidates = Array.isArray(payload?.memories)
         ? payload.memories
-        : Array.isArray(payload.results)
+        : Array.isArray(payload?.results)
           ? payload.results
           : [];
 
-      return candidates
+      const results = candidates
         .map((item) => normalizeMemoryHit(item))
         .filter((item): item is MemoryHit => Boolean(item))
         .filter((item) => item.score >= threshold)
         .slice(0, topK);
-    } catch {
+      this.log("search_response", {
+        user_id: actorId,
+        agent_id: agentId,
+        status: response.status,
+        hits: results.length,
+        ids: results.map((item) => item.id).join(",") || "none",
+        memories: results.map((item) => compact(item.memory, 80)).join(" | ") || "none"
+      });
+      return results;
+    } catch (error) {
+      this.log("search_error", {
+        user_id: actorId,
+        agent_id: agentId,
+        error: error instanceof Error ? error.message : "unknown_mem0_search_error"
+      }, true);
       return [];
     }
+  }
+
+  private log(event: string, details: Record<string, unknown>, isError = false): void {
+    if (!this.consoleEnabled) {
+      return;
+    }
+
+    const formatted = Object.entries(details)
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "")
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ");
+    const line = formatted ? `[MEM0] ${event} ${formatted}` : `[MEM0] ${event}`;
+    if (isError) {
+      console.error(line);
+      return;
+    }
+    console.info(line);
   }
 }
 
@@ -124,6 +238,91 @@ function resolveMem0Url(baseUrl: string, path: string): string | null {
     return null;
   }
   return `${baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+}
+
+function parseJsonText(value: string): Record<string, unknown> | null {
+  if (!value.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractMem0Ids(payload: Record<string, unknown> | null): string[] {
+  if (!payload) {
+    return [];
+  }
+
+  const buckets = [
+    payload.memories,
+    payload.results,
+    payload.data,
+    payload.items
+  ];
+  const ids: string[] = [];
+
+  for (const bucket of buckets) {
+    if (!Array.isArray(bucket)) {
+      continue;
+    }
+    for (const item of bucket) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        continue;
+      }
+      const record = item as Record<string, unknown>;
+      const id = record.id ?? record.memory_id ?? record.uuid;
+      if (id !== undefined && id !== null && String(id).trim()) {
+        ids.push(String(id));
+      }
+    }
+  }
+
+  return ids;
+}
+
+function extractMem0Count(payload: Record<string, unknown> | null): number | null {
+  if (!payload) {
+    return null;
+  }
+
+  const numericCandidates = [
+    payload.count,
+    payload.memory_count,
+    payload.memories_added,
+    payload.added,
+    payload.inserted
+  ];
+  for (const candidate of numericCandidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+
+  const arrayCandidates = [
+    payload.memories,
+    payload.results,
+    payload.data,
+    payload.items
+  ];
+  for (const candidate of arrayCandidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.length;
+    }
+  }
+
+  return null;
+}
+
+function compact(value: string, limit: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
 }
 
 function normalizeMemoryHit(value: unknown): MemoryHit | null {

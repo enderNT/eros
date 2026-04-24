@@ -68,4 +68,55 @@ describe("Mem0MemoryProvider", () => {
     expect(results[0]?.id).toBe("memory-1");
     expect(results[0]?.metadata.channel).toBe("chatwoot");
   });
+
+  it("uses the mem0 response body to determine whether addTurn really stored something", async () => {
+    const settings = buildTestSettings({
+      memory: {
+        provider: "mem0",
+        enabled: true,
+        agentId: "agent-1",
+        topK: 5,
+        scoreThreshold: 0.5,
+        mem0: {
+          baseUrl: "https://mem0.example.com",
+          apiKey: "secret",
+          authMode: "x-api-key",
+          orgId: "",
+          projectId: "",
+          searchPath: "/v1/search",
+          addPath: "/v1/add"
+        }
+      }
+    });
+    const provider = new Mem0MemoryProvider(settings.memory, false);
+
+    global.fetch = ((async () =>
+      new Response(
+        JSON.stringify({
+          memories: [
+            {
+              id: "memory-42",
+              memory: "prefiere horarios vespertinos"
+            }
+          ]
+        }),
+        { status: 200 }
+      )) as unknown) as typeof fetch;
+
+    const result = await provider.addTurn(
+      [
+        { role: "user", text: "Prefiero citas por la tarde", timestamp: "2026-01-01T00:00:00.000Z" },
+        { role: "assistant", text: "Perfecto, lo tomo en cuenta", timestamp: "2026-01-01T00:00:01.000Z" }
+      ],
+      "user-1",
+      "agent-1",
+      "session-1",
+      { route: "conversation" }
+    );
+
+    expect(result).toEqual({
+      stored: true,
+      count: 1
+    });
+  });
 });

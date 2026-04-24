@@ -25,7 +25,7 @@ export function createLlmProvider(settings: AppSettings): LlmProvider {
 
 export function createMemoryProvider(settings: AppSettings): MemoryProvider {
   if (settings.memory.provider === "mem0") {
-    return new Mem0MemoryProvider(settings.memory);
+    return new Mem0MemoryProvider(settings.memory, settings.logging.consoleEnabled);
   }
   return new InMemoryMemoryProvider();
 }
