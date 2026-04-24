@@ -124,7 +124,10 @@ export function buildApp() {
           ok: dspy,
           details: {
             enabled: settings.dspy.enabled,
-            service_url: settings.dspy.serviceUrl
+            service_url: settings.dspy.serviceUrl,
+            service_url_fallbacks: settings.dspy.serviceUrlFallbacks,
+            timeout_ms: settings.dspy.timeoutMs,
+            health_timeout_ms: settings.dspy.healthTimeoutMs
           }
         },
         dspyTaskTrace

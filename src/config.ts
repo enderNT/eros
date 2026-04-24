@@ -107,7 +107,9 @@ export interface AppSettings {
   dspy: {
     enabled: boolean;
     serviceUrl: string;
+    serviceUrlFallbacks: string[];
     timeoutMs: number;
+    healthTimeoutMs: number;
     retryCount: number;
     model: string;
     apiBase?: string;
@@ -145,6 +147,76 @@ function readBoolean(name: string, fallback: boolean): boolean {
   return fallback;
 }
 
+function readStringList(name: string): string[] {
+  const rawValue = globalThis.Bun?.env[name] ?? process.env[name] ?? "";
+  return rawValue
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function normalizeServiceUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/g, "");
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)) {
+    return trimmed;
+  }
+  return `http://${trimmed}`;
+}
+
+function isGpt5Model(model: string): boolean {
+  const normalized = (model.toLowerCase().split("/").at(-1) ?? model.toLowerCase()).trim();
+  return normalized.startsWith("gpt-5");
+}
+
+function normalizeTimeoutMs(configuredTimeoutMs: number, model: string): number {
+  const safeTimeoutMs = configuredTimeoutMs > 0 ? configuredTimeoutMs : 4000;
+  if (!isGpt5Model(model)) {
+    return safeTimeoutMs;
+  }
+  return Math.max(safeTimeoutMs, 12000);
+}
+
+function buildDspyServiceUrlFallbacks(primaryServiceUrl: string, configuredFallbacks: string[], dockerDspyPort: string): string[] {
+  const normalizedPrimary = normalizeServiceUrl(primaryServiceUrl);
+  const fallbacks = new Set<string>(
+    configuredFallbacks
+      .map((value) => normalizeServiceUrl(value))
+      .filter((value) => value && value !== normalizedPrimary)
+  );
+
+  try {
+    const parsed = new URL(normalizedPrimary);
+    const protocol = parsed.protocol || "http:";
+    const port =
+      dockerDspyPort.trim()
+      || parsed.port
+      || (protocol === "https:" ? "443" : "80");
+
+    if (parsed.hostname === "dspy-service") {
+      for (const host of ["127.0.0.1", "localhost", "host.docker.internal"]) {
+        const candidate = `${protocol}//${host}:${port}`;
+        if (candidate !== normalizedPrimary) {
+          fallbacks.add(candidate);
+        }
+      }
+    }
+
+    if (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost") {
+      const candidate = `${protocol}//dspy-service:${parsed.port || port}`;
+      if (candidate !== normalizedPrimary) {
+        fallbacks.add(candidate);
+      }
+    }
+  } catch {
+    return [...fallbacks];
+  }
+
+  return [...fallbacks];
+}
+
 function defaultLogRotation(env: string): { maxFiles: number; maxLinesPerFile: number } {
   if (env === "production") {
     return { maxFiles: 10, maxLinesPerFile: 500 };
@@ -156,6 +228,9 @@ export function loadSettings(): AppSettings {
   const env = readString("APP_ENV", "development");
   const logRotation = defaultLogRotation(env);
   const dspyEnabled = readBoolean("DSPY_ENABLED", false);
+  const dspyModel = readString("DSPY_MODEL", "gpt-4o-mini");
+  const dspyServiceUrl = normalizeServiceUrl(readString("DSPY_SERVICE_URL", "http://dspy-service:8001"));
+  const dspyTimeoutMs = normalizeTimeoutMs(readNumber("DSPY_TIMEOUT_MS", 4000), dspyModel);
 
   return {
     app: {
@@ -268,10 +343,16 @@ export function loadSettings(): AppSettings {
     },
     dspy: {
       enabled: dspyEnabled,
-      serviceUrl: readString("DSPY_SERVICE_URL", "http://dspy-service:8001"),
-      timeoutMs: readNumber("DSPY_TIMEOUT_MS", 4000),
+      serviceUrl: dspyServiceUrl,
+      serviceUrlFallbacks: buildDspyServiceUrlFallbacks(
+        dspyServiceUrl,
+        readStringList("DSPY_SERVICE_URL_FALLBACKS"),
+        readString("DOCKER_DSPY_PORT", "")
+      ),
+      timeoutMs: dspyTimeoutMs,
+      healthTimeoutMs: readNumber("DSPY_HEALTH_TIMEOUT_MS", Math.min(dspyTimeoutMs, 2000)),
       retryCount: readNumber("DSPY_RETRY_COUNT", 1),
-      model: readString("DSPY_MODEL", "gpt-4o-mini"),
+      model: dspyModel,
       apiBase: readString("DSPY_API_BASE", ""),
       apiKey: readString("DSPY_API_KEY", ""),
       artifactsDir: readString("DSPY_ARTIFACTS_DIR", "./dspy_service/artifacts"),

@@ -69,4 +69,57 @@ describe("clinic dspy task trace recorder", () => {
       errorText: null
     });
   });
+
+  test("falls back to an alternate DSPy service URL and remembers it", async () => {
+    const recorder = new InMemoryDspyTaskTraceRecorder();
+    const settings = buildTestSettings({
+      dspy: {
+        enabled: true,
+        serviceUrl: "https://dspy-primary.example.com",
+        serviceUrlFallbacks: ["https://dspy-fallback.example.com"],
+        timeoutMs: 1000,
+        healthTimeoutMs: 200,
+        retryCount: 0
+      }
+    });
+    const bridge = new ClinicDspyHttpBridge(settings.dspy, recorder);
+    const payload = { user_message: "hola" };
+    const calls: string[] = [];
+
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      calls.push(url);
+
+      if (url.startsWith("https://dspy-primary.example.com")) {
+        throw new Error("The operation timed out.");
+      }
+
+      return new Response(JSON.stringify({
+        response_text: "Hola desde fallback",
+        reply_mode: "llm"
+      }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json"
+        }
+      });
+    }) as typeof fetch;
+
+    const firstResult = await bridge.predictConversationReply(payload);
+    const secondResult = await bridge.predictConversationReply(payload);
+
+    expect(firstResult?.response_text).toBe("Hola desde fallback");
+    expect(secondResult?.response_text).toBe("Hola desde fallback");
+    expect(calls).toEqual([
+      "https://dspy-primary.example.com/predict/conversation-reply",
+      "https://dspy-fallback.example.com/predict/conversation-reply",
+      "https://dspy-fallback.example.com/predict/conversation-reply"
+    ]);
+    expect(recorder.entries).toHaveLength(2);
+    expect(recorder.entries[0]).toMatchObject({
+      responseStatus: 200,
+      ok: true,
+      errorText: null
+    });
+  });
 });

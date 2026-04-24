@@ -90,7 +90,9 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
     dspy: {
       enabled: false,
       serviceUrl: "http://localhost:8001",
+      serviceUrlFallbacks: [],
       timeoutMs: 100,
+      healthTimeoutMs: 100,
       retryCount: 0,
       model: "test-model",
       apiBase: "",
