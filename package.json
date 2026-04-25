@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "dev:with-dspy": "sh ./scripts/dev-with-dspy.sh",
+    "export:dspy-datasets": "sh ./scripts/export-dspy-task-traces.sh",
     "start": "bun src/index.ts",
     "test": "bun test tests/clinic-*.test.ts",
     "check": "bun x tsc --noEmit",

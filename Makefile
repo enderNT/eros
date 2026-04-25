@@ -36,3 +36,5 @@ dspy-optimize-conversation: dspy-compile-conversation
 dspy-optimize-rag: dspy-compile-rag
 
 dspy-optimize-state-router: dspy-compile-state-router
+
+run_export_and_norm: bun run export:dspy-datasets

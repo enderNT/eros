@@ -22,6 +22,8 @@ coverage/
 logs/
 var/log/
 
+exports/*
+
 # Python
 __pycache__/
 *.py[cod]
