@@ -25,7 +25,7 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
     },
     llm: { provider: "local", apiKey: "", baseUrl: "", model: "test-model", timeoutMs: 1000, temperature: 0 },
     router: { confidenceThreshold: 0.62, knowledgeThreshold: 0.58 },
-    prompt: { memoryMaxItems: 3, memoryBudgetChars: 1200, recentTurnsLimit: 4, summarizeOnOverflow: true },
+    prompt: { memoryMaxItems: 3, memoryBudgetChars: 1200, recentTurnsLimit: 5, summarizeOnOverflow: true },
     state: {
       backend: "in_memory",
       refreshTurnThreshold: 2,

@@ -272,7 +272,7 @@ export function loadSettings(): AppSettings {
     prompt: {
       memoryMaxItems: readNumber("PROMPT_MEMORY_MAX_ITEMS", 3),
       memoryBudgetChars: readNumber("PROMPT_MEMORY_BUDGET_CHARS", 1200),
-      recentTurnsLimit: readNumber("PROMPT_RECENT_TURNS_LIMIT", 3),
+      recentTurnsLimit: readNumber("PROMPT_RECENT_TURNS_LIMIT", 5),
       summarizeOnOverflow: readBoolean("PROMPT_SUMMARIZE_ON_OVERFLOW", true)
     },
     state: {

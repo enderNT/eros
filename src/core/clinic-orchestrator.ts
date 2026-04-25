@@ -97,7 +97,9 @@ function compact(value: string, limit: number): string {
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
 }
 
-function buildRecentTurnsFromHistory(
+const RECENT_TURN_LIMIT = 5;
+
+function buildTurnPairsFromHistory(
   history: Array<{ role: "user" | "assistant"; text: string }>
 ): Array<Record<string, string>> {
   const recentTurns: Array<Record<string, string>> = [];
@@ -127,22 +129,35 @@ function buildRecentTurnsFromHistory(
     recentTurns.push({ user: compact(pendingUser, 220), assistant: "" });
   }
 
-  return recentTurns.slice(-3);
+  return recentTurns;
 }
 
-function buildSummaryFromHistory(history: Array<{ role: "user" | "assistant"; text: string }>): string {
-  if (history.length === 0) {
+function buildRecentTurnsFromHistory(
+  history: Array<{ role: "user" | "assistant"; text: string }>,
+  limit: number
+): Array<Record<string, string>> {
+  return buildTurnPairsFromHistory(history).slice(-limit);
+}
+
+function buildSummaryFromHistory(
+  history: Array<{ role: "user" | "assistant"; text: string }>,
+  limit: number
+): string {
+  const archivedTurns = buildTurnPairsFromHistory(history).slice(0, -limit);
+  if (archivedTurns.length === 0) {
     return "";
   }
 
-  const summary = history
-    .slice(-6)
-    .map((entry) => `${entry.role === "user" ? "Usuario" : "Asistente"}: ${entry.text}`)
+  const summary = archivedTurns
+    .map((turn) => `Usuario: ${turn.user}${turn.assistant ? ` Asistente: ${turn.assistant}` : ""}`)
     .join(" | ");
   return compact(summary, 700);
 }
 
-function buildInitialGraphState(inbound: InboundMessage) {
+function buildInitialGraphState(
+  inbound: InboundMessage,
+  recentTurnLimit: number
+) {
   const history = inbound.deliveryContext?.history ?? [];
   const lastAssistantMessage = [...history].reverse().find((entry) => entry.role === "assistant")?.text ?? "";
 
@@ -152,7 +167,7 @@ function buildInitialGraphState(inbound: InboundMessage) {
     contact_name: inbound.contactName ?? "Paciente",
     last_user_message: "",
     last_assistant_message: lastAssistantMessage,
-    summary: buildSummaryFromHistory(history),
+    summary: buildSummaryFromHistory(history, recentTurnLimit),
     active_goal: "",
     stage: "",
     pending_action: "",
@@ -171,7 +186,7 @@ function buildInitialGraphState(inbound: InboundMessage) {
     handoff_required: false,
     turn_count: history.filter((entry) => entry.role === "user").length,
     summary_refresh_requested: false,
-    recent_turns: buildRecentTurnsFromHistory(history)
+    recent_turns: buildRecentTurnsFromHistory(history, recentTurnLimit)
   };
 }
 
@@ -192,7 +207,7 @@ export class ClinicOrchestrator {
       const previous = await this.stateStore.load(inbound.sessionId);
       await this.logStateLoad(executionLogger, inbound, previous);
       const initialState = {
-        ...(previous ?? buildInitialGraphState(inbound)),
+        ...(previous ?? buildInitialGraphState(inbound, RECENT_TURN_LIMIT)),
         session_id: inbound.sessionId,
         actor_id: inbound.actorId,
         contact_name: inbound.contactName ?? previous?.contact_name ?? "Paciente",
@@ -399,6 +414,21 @@ export class ClinicOrchestrator {
     state: Awaited<ReturnType<ClinicWorkflow["run"]>>["state"],
     diagnostics: ClinicWorkflowDiagnostics
   ): Promise<void> {
+    if (diagnostics.shortTermMemory) {
+      await executionLogger.memoryWrite("clinic_state_window", {
+        scope: "short_term",
+        component: "clinic_state_store",
+        request: {
+          session_id: inbound.sessionId,
+          policy: "summary_plus_recent_window",
+          max_recent_turns: state.recent_turns.length
+        },
+        response: diagnostics.shortTermMemory,
+        status: "ok",
+        summary: `clinic_state window_overflow summarized=${diagnostics.shortTermMemory.summarizedTurns} retained=${diagnostics.shortTermMemory.retainedTurns}`
+      });
+    }
+
     if (diagnostics.retrieval) {
       await executionLogger.tool("knowledge_provider", {
         component: diagnostics.retrieval.backend === "clinic_config"

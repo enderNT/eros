@@ -26,6 +26,11 @@ export interface ClinicWorkflowDiagnostics {
     resultCount: number;
     fallbackUsed: boolean;
   };
+  shortTermMemory?: {
+    summarizedTurns: number;
+    retainedTurns: number;
+    summaryUpdated: boolean;
+  };
   reply?: {
     node: ClinicGraphNode;
     provider: "dspy_service" | "llm_service";
@@ -50,6 +55,7 @@ function mergeDiagnostics(
     ...left,
     ...right,
     retrieval: right.retrieval ?? left.retrieval,
+    shortTermMemory: right.shortTermMemory ?? left.shortTermMemory,
     reply: right.reply ?? left.reply,
     appointmentExtraction: right.appointmentExtraction ?? left.appointmentExtraction
   };
@@ -143,8 +149,16 @@ function buildReplyContext(state: GraphState): ReplyContextState {
   };
 }
 
-function appendRecentTurn(recentTurns: Array<Record<string, string>>, userMessage: string, assistantMessage: string, limit = 3) {
-  return [...recentTurns, { user: compact(userMessage, 220), assistant: compact(assistantMessage, 220) }].slice(-limit);
+function getRecentTurnLimit(settings: AppSettings): number {
+  return Math.max(1, Math.min(settings.prompt.recentTurnsLimit, 5));
+}
+
+function appendRecentTurn(
+  recentTurns: Array<Record<string, string>>,
+  userMessage: string,
+  assistantMessage: string
+) {
+  return [...recentTurns, { user: compact(userMessage, 220), assistant: compact(assistantMessage, 220) }];
 }
 
 function mergeSlots(existing: Record<string, unknown>, incoming: Record<string, unknown>) {
@@ -510,21 +524,29 @@ export class ClinicWorkflow {
       cleaned.last_tool_result = "";
     }
 
-    cleaned.summary_refresh_requested =
-      cleaned.summary_refresh_requested ||
-      cleaned.summary.length >= this.settings.state.refreshCharThreshold ||
-      (cleaned.turn_count > 0 && cleaned.turn_count % this.settings.state.refreshTurnThreshold === 0) ||
-      (cleaned.next_node === "appointment" && cleaned.stage === "ready_for_handoff");
+    cleaned.summary_refresh_requested = cleaned.recent_turns.length >= getRecentTurnLimit(this.settings);
 
     return cleaned;
   }
 
-  private async storeMemory(state: GraphState, traceId?: string): Promise<GraphState> {
+  private async storeMemory(
+    state: GraphState,
+    traceId?: string
+  ): Promise<GraphState | { state: GraphState; diagnostics: ClinicWorkflowDiagnostics }> {
     if (!state.response_text || !state.last_user_message || !state.actor_id || !state.session_id) {
       return state;
     }
 
-    const shortTerm = toShortTermState(state);
+    const recentTurnsWithCurrent = appendRecentTurn(state.recent_turns, state.last_user_message, state.response_text);
+    const recentTurnLimit = getRecentTurnLimit(this.settings);
+    const overflowTurns = recentTurnsWithCurrent.slice(0, Math.max(0, recentTurnsWithCurrent.length - recentTurnLimit));
+    const retainedRecentTurns = recentTurnsWithCurrent.slice(-recentTurnLimit);
+    const updatedSummary = await this.foldSummary(state, overflowTurns, traceId);
+    const shortTerm = toShortTermState({
+      ...state,
+      summary: updatedSummary,
+      recent_turns: retainedRecentTurns
+    });
     const commitResult = await this.memoryRuntime.commitTurn(
       state.session_id,
       state.actor_id,
@@ -539,18 +561,64 @@ export class ClinicWorkflow {
         handoff_required: state.handoff_required,
         contact_name: state.contact_name,
         response_text: state.response_text,
-        refresh_summary: state.summary_refresh_requested
+        refresh_summary: false
       },
       traceId
     );
     await this.trace(traceId, "clinic.store_memory.output", commitResult as unknown as Record<string, unknown>);
 
-    return {
+    const nextState = {
       ...state,
-      summary: state.summary_refresh_requested ? compact(commitResult.summary, 700) : state.summary,
+      summary: compact(updatedSummary, 700),
       summary_refresh_requested: false,
-      recent_turns: appendRecentTurn(state.recent_turns, state.last_user_message, state.response_text)
+      recent_turns: retainedRecentTurns
     };
+
+    if (overflowTurns.length === 0) {
+      return nextState;
+    }
+
+    return {
+      state: nextState,
+      diagnostics: {
+        shortTermMemory: {
+          summarizedTurns: overflowTurns.length,
+          retainedTurns: retainedRecentTurns.length,
+          summaryUpdated: updatedSummary !== state.summary
+        }
+      }
+    };
+  }
+
+  private async foldSummary(
+    state: GraphState,
+    overflowTurns: Array<Record<string, string>>,
+    traceId?: string
+  ): Promise<string> {
+    let summary = state.summary;
+
+    for (const turn of overflowTurns) {
+      const userMessage = String(turn.user ?? "").trim();
+      const assistantMessage = String(turn.assistant ?? "").trim();
+      if (!userMessage && !assistantMessage) {
+        continue;
+      }
+
+      const signaturePayload = {
+        current_summary: summary,
+        user_message: userMessage,
+        assistant_message: assistantMessage,
+        active_goal: state.active_goal,
+        stage: state.stage
+      };
+      await this.trace(traceId, "clinic.state_summary.input", signaturePayload);
+      summary = await this.llmService.buildStateSummary(signaturePayload);
+      await this.trace(traceId, "clinic.state_summary.output", {
+        updated_summary: summary
+      });
+    }
+
+    return summary;
   }
 
   private buildConversationPayload(state: GraphState): Record<string, unknown> {
