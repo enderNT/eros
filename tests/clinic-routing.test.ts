@@ -75,7 +75,7 @@ describe("clinic routing deterministic guards", () => {
     });
   });
 
-  test("preserves raw next_node metadata from dspy decisions", async () => {
+  test("normalizes invalid dspy next_node values to conversation", async () => {
     const settings = buildTestSettings({
       dspy: {
         enabled: true
@@ -102,11 +102,12 @@ describe("clinic routing deterministic guards", () => {
       memories: []
     });
 
+    expect(decision.next_node).toBe("conversation");
     expect(decision.debug).toEqual({
       provider: "dspy",
       raw_next_node: "information",
-      final_next_node: "information",
-      validation_applied: false
+      final_next_node: "conversation",
+      validation_applied: true
     });
   });
 

@@ -1,7 +1,9 @@
 import type { AppSettings } from "../../config";
-import type { RoutingPacket, StateRoutingDecision, StateRoutingDecisionDebug } from "../../domain/contracts";
+import type { ClinicGraphNode, RoutingPacket, StateRoutingDecision, StateRoutingDecisionDebug } from "../../domain/contracts";
 import type { ClinicDspyBridge, TraceSink } from "../../domain/ports";
 import { ClinicLlmService } from "./clinic-llm-service";
+
+const ALLOWED_ROUTE_DESTINATIONS: ClinicGraphNode[] = ["conversation", "rag", "appointment"];
 
 function compact(value: string, limit: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -20,6 +22,12 @@ function buildRoutingDebug(
     final_next_node: finalNextNode,
     validation_applied: validationApplied
   };
+}
+
+function normalizeRouteDestination(value: string): ClinicGraphNode {
+  return ALLOWED_ROUTE_DESTINATIONS.includes(value as ClinicGraphNode)
+    ? (value as ClinicGraphNode)
+    : "conversation";
 }
 
 export class ClinicRoutingService {
@@ -84,12 +92,18 @@ export class ClinicRoutingService {
     if (this.settings.dspy.enabled) {
       const decision = await this.dspyBridge.predictStateRouter(signaturePayload);
       if (decision) {
-        const normalized = decision.next_node === "rag" && !decision.needs_retrieval
-          ? { ...decision, needs_retrieval: true }
-          : decision;
+        const rawNextNode = String(decision.next_node ?? "");
+        const finalNextNode = normalizeRouteDestination(rawNextNode);
+        const normalizedDecision = {
+          ...decision,
+          next_node: finalNextNode
+        };
+        const normalized = normalizedDecision.next_node === "rag" && !normalizedDecision.needs_retrieval
+          ? { ...normalizedDecision, needs_retrieval: true }
+          : normalizedDecision;
         const tracedDecision = {
           ...normalized,
-          debug: buildRoutingDebug("dspy", String(decision.next_node ?? ""), String(normalized.next_node ?? ""))
+          debug: buildRoutingDebug("dspy", rawNextNode, String(normalized.next_node ?? ""), rawNextNode !== finalNextNode)
         };
         if (traceId) {
           await this.traceSink?.append(traceId, "clinic.route.output", tracedDecision);

@@ -236,7 +236,7 @@ function buildInbound() {
 }
 
 describe("clinic operational route logging", () => {
-  test("logs route metadata before failing on an invalid branch", async () => {
+  test("logs route metadata and falls back to conversation on an invalid branch", async () => {
     const { logger, queries, settings } = createLoggerHarness();
     const orchestrator = buildOrchestrator(logger, settings, {
       next_node: "information" as never,
@@ -253,39 +253,24 @@ describe("clinic operational route logging", () => {
       }
     });
 
-    await expect(orchestrator.processTurn(buildInbound())).rejects.toThrow("Invalid clinic route destination");
+    await orchestrator.processTurn(buildInbound());
     await logger.close();
 
     const entries = extractEntries(queries).filter((entry) => entry.runId !== null);
     const routeEntry = entries.find((entry) => entry.title === "03.ROUTE");
-    const endEntry = entries.find((entry) => entry.title === "08.END");
+    const flowEntry = entries.find((entry) => entry.title === "06.FLOW");
 
     expect(routeEntry).toBeDefined();
     expect(routeEntry?.payload.debug).toEqual({
       provider: "dspy",
       raw_next_node: "information",
-      final_next_node: "information",
+      final_next_node: "conversation",
       validation_applied: true,
       allowed_destinations: ["conversation", "rag", "appointment"]
     });
 
-    expect(endEntry).toBeDefined();
-    expect(endEntry?.payload.debug).toEqual({
-      provider: "dspy",
-      raw_next_node: "information",
-      final_next_node: "information",
-      validation_applied: true,
-      allowed_destinations: ["conversation", "rag", "appointment"],
-      input_summary: {
-        current_mode: "conversation",
-        user_message_preview: "Necesito ayuda con una cita",
-        conversation_summary_present: false,
-        memory_count: 0,
-        has_last_tool_result: false,
-        has_last_assistant_message: false
-      }
-    });
-    expect((routeEntry?.seq ?? 0) < (endEntry?.seq ?? 0)).toBe(true);
+    expect(flowEntry?.payload.result?.nextNode).toBe("conversation");
+    expect(flowEntry?.payload.capability).toBe("conversation");
   });
 
   test("persists 03.ROUTE before later success blocks", async () => {

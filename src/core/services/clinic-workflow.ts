@@ -284,13 +284,15 @@ function buildObservedRouteDecision(
 
 function buildValidatedRouteDebug(
   debug: StateRoutingDecisionDebug | undefined,
-  candidateNextNode: string
+  candidateNextNode: string,
+  finalNextNode: ClinicGraphNode
 ): ClinicWorkflowRouteObservation["debug"] {
+  const validationApplied = (debug?.validation_applied ?? false) || candidateNextNode !== finalNextNode;
   return {
     provider: debug?.provider ?? "llm",
     raw_next_node: debug?.raw_next_node ?? candidateNextNode,
-    final_next_node: debug?.final_next_node ?? candidateNextNode,
-    validation_applied: true,
+    final_next_node: finalNextNode,
+    validation_applied: validationApplied,
     allowed_destinations: [...ALLOWED_ROUTE_DESTINATIONS]
   };
 }
@@ -418,29 +420,25 @@ export class ClinicWorkflow {
     const routingInput = buildRoutingPacket(state);
     const decision = await this.routingService.routeState(routingInput, traceId);
     const candidateNextNode = String(decision.next_node ?? "").trim();
-    const routeDebug = buildValidatedRouteDebug(decision.debug, candidateNextNode);
+    const finalNextNode = isAllowedRouteDestination(candidateNextNode) ? candidateNextNode : "conversation";
+    const routeDebug = buildValidatedRouteDebug(decision.debug, candidateNextNode, finalNextNode);
 
     await this.notifyRouteObserver(observerId, {
       resolver: "clinic_routing_service",
       input: routingInput,
-      decision: buildObservedRouteDecision(decision, candidateNextNode),
+      decision: buildObservedRouteDecision(
+        {
+          ...decision,
+          next_node: finalNextNode
+        },
+        finalNextNode
+      ),
       debug: routeDebug
     });
 
-    if (!isAllowedRouteDestination(candidateNextNode)) {
-      throw new InvalidClinicRouteError({
-        provider: routeDebug.provider,
-        raw_next_node: routeDebug.raw_next_node,
-        final_next_node: routeDebug.final_next_node,
-        validation_applied: routeDebug.validation_applied,
-        allowed_destinations: routeDebug.allowed_destinations,
-        input_summary: buildRouteInputSummary(routingInput)
-      });
-    }
-
     return {
       ...state,
-      next_node: candidateNextNode,
+      next_node: finalNextNode,
       intent: decision.intent,
       confidence: decision.confidence,
       needs_retrieval: decision.needs_retrieval,
