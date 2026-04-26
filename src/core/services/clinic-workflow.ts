@@ -7,6 +7,8 @@ import type {
   GraphState,
   ReplyContextState,
   RoutingPacket,
+  StateRoutingDecision,
+  StateRoutingDecisionDebug,
   ShortTermState
 } from "../../domain/contracts";
 import type {
@@ -47,6 +49,42 @@ export interface ClinicWorkflowRunResult {
   diagnostics: ClinicWorkflowDiagnostics;
 }
 
+interface ClinicWorkflowObservedRouteDecision {
+  capability: string;
+  intent: string;
+  confidence: number;
+  needsKnowledge: boolean;
+  statePatch: Record<string, unknown>;
+  reason: string;
+}
+
+export interface ClinicWorkflowRouteObservation {
+  resolver: "clinic_routing_service";
+  input: RoutingPacket;
+  decision: ClinicWorkflowObservedRouteDecision;
+  debug: StateRoutingDecisionDebug & {
+    allowed_destinations: ClinicGraphNode[];
+  };
+}
+
+export interface ClinicWorkflowObserver {
+  onRoute?(event: ClinicWorkflowRouteObservation): Promise<void> | void;
+}
+
+const ALLOWED_ROUTE_DESTINATIONS: ClinicGraphNode[] = ["conversation", "rag", "appointment"];
+
+class InvalidClinicRouteError extends Error {
+  readonly debug: Record<string, unknown>;
+
+  constructor(debug: Record<string, unknown>) {
+    super(
+      `Invalid clinic route destination "${String(debug.final_next_node ?? "")}" from ${String(debug.provider ?? "unknown_provider")}`
+    );
+    this.name = "InvalidClinicRouteError";
+    this.debug = debug;
+  }
+}
+
 function mergeDiagnostics(
   left: ClinicWorkflowDiagnostics,
   right: ClinicWorkflowDiagnostics
@@ -67,6 +105,10 @@ const GraphAnnotation = Annotation.Root({
     default: () => createEmptyGraphState()
   }),
   traceId: Annotation<string>({
+    reducer: (_left, right) => right,
+    default: () => ""
+  }),
+  observerId: Annotation<string>({
     reducer: (_left, right) => right,
     default: () => ""
   }),
@@ -204,6 +246,66 @@ function deriveRoutingMode(state: GraphState): RoutingPacket["current_mode"] {
   return "conversation";
 }
 
+function buildRoutingPacket(state: GraphState): RoutingPacket {
+  return {
+    user_message: state.last_user_message,
+    conversation_summary: state.summary,
+    current_mode: deriveRoutingMode(state),
+    last_tool_result: state.last_tool_result,
+    last_assistant_message: state.last_assistant_message,
+    memories: state.recalled_memories
+  };
+}
+
+function isAllowedRouteDestination(value: string): value is ClinicGraphNode {
+  return ALLOWED_ROUTE_DESTINATIONS.includes(value as ClinicGraphNode);
+}
+
+function mapObservedCapability(nextNode: string): string {
+  if (nextNode === "rag") return "knowledge";
+  if (nextNode === "appointment") return "action";
+  if (nextNode === "conversation") return "conversation";
+  return "unknown";
+}
+
+function buildObservedRouteDecision(
+  decision: StateRoutingDecision,
+  candidateNextNode: string
+): ClinicWorkflowObservedRouteDecision {
+  return {
+    capability: mapObservedCapability(candidateNextNode),
+    intent: decision.intent,
+    confidence: decision.confidence,
+    needsKnowledge: decision.needs_retrieval,
+    statePatch: decision.state_update,
+    reason: decision.reason
+  };
+}
+
+function buildValidatedRouteDebug(
+  debug: StateRoutingDecisionDebug | undefined,
+  candidateNextNode: string
+): ClinicWorkflowRouteObservation["debug"] {
+  return {
+    provider: debug?.provider ?? "llm",
+    raw_next_node: debug?.raw_next_node ?? candidateNextNode,
+    final_next_node: debug?.final_next_node ?? candidateNextNode,
+    validation_applied: true,
+    allowed_destinations: [...ALLOWED_ROUTE_DESTINATIONS]
+  };
+}
+
+function buildRouteInputSummary(input: RoutingPacket): Record<string, unknown> {
+  return {
+    current_mode: input.current_mode,
+    user_message_preview: compact(input.user_message, 160),
+    conversation_summary_present: Boolean(input.conversation_summary.trim()),
+    memory_count: input.memories.length,
+    has_last_tool_result: Boolean(input.last_tool_result.trim()),
+    has_last_assistant_message: Boolean(input.last_assistant_message.trim())
+  };
+}
+
 function extractPendingQuestion(replyText: string): string {
   const normalized = replyText.replace(/\s+/g, " ").trim();
   if (!normalized.includes("?")) {
@@ -229,6 +331,7 @@ function inferConversationStage(state: GraphState): string {
 
 export class ClinicWorkflow {
   private readonly graph;
+  private readonly observers = new Map<string, ClinicWorkflowObserver>();
 
   constructor(
     private readonly routingService: ClinicRoutingService,
@@ -243,8 +346,8 @@ export class ClinicWorkflow {
       .addNode("load_context", async ({ state, traceId }) =>
         this.traceNode("load_context", traceId, state, (current) => this.loadContext(current, traceId))
       )
-      .addNode("route", async ({ state, traceId }) =>
-        this.traceNode("route", traceId, state, (current) => this.route(current, traceId))
+      .addNode("route", async ({ state, traceId, observerId }) =>
+        this.traceNode("route", traceId, state, (current) => this.route(current, traceId, observerId))
       )
       .addNode("conversation", async ({ state, traceId }) =>
         this.traceNode("conversation", traceId, state, (current) => this.conversation(current, traceId))
@@ -276,12 +379,23 @@ export class ClinicWorkflow {
       .compile();
   }
 
-  async run(initialState: GraphState, traceId = ""): Promise<ClinicWorkflowRunResult> {
-    const result = await this.graph.invoke({ state: initialState, traceId, diagnostics: {} });
-    return {
-      state: result.state,
-      diagnostics: result.diagnostics
-    };
+  async run(initialState: GraphState, traceId = "", observer?: ClinicWorkflowObserver): Promise<ClinicWorkflowRunResult> {
+    const observerId = observer ? crypto.randomUUID() : "";
+    if (observer && observerId) {
+      this.observers.set(observerId, observer);
+    }
+
+    try {
+      const result = await this.graph.invoke({ state: initialState, traceId, observerId, diagnostics: {} });
+      return {
+        state: result.state,
+        diagnostics: result.diagnostics
+      };
+    } finally {
+      if (observerId) {
+        this.observers.delete(observerId);
+      }
+    }
   }
 
   private async loadContext(state: GraphState, traceId?: string): Promise<GraphState> {
@@ -300,19 +414,33 @@ export class ClinicWorkflow {
     };
   }
 
-  private async route(state: GraphState, traceId?: string): Promise<GraphState> {
-    const decision = await this.routingService.routeState({
-      user_message: state.last_user_message,
-      conversation_summary: state.summary,
-      current_mode: deriveRoutingMode(state),
-      last_tool_result: state.last_tool_result,
-      last_assistant_message: state.last_assistant_message,
-      memories: state.recalled_memories
-    }, traceId);
+  private async route(state: GraphState, traceId?: string, observerId?: string): Promise<GraphState> {
+    const routingInput = buildRoutingPacket(state);
+    const decision = await this.routingService.routeState(routingInput, traceId);
+    const candidateNextNode = String(decision.next_node ?? "").trim();
+    const routeDebug = buildValidatedRouteDebug(decision.debug, candidateNextNode);
+
+    await this.notifyRouteObserver(observerId, {
+      resolver: "clinic_routing_service",
+      input: routingInput,
+      decision: buildObservedRouteDecision(decision, candidateNextNode),
+      debug: routeDebug
+    });
+
+    if (!isAllowedRouteDestination(candidateNextNode)) {
+      throw new InvalidClinicRouteError({
+        provider: routeDebug.provider,
+        raw_next_node: routeDebug.raw_next_node,
+        final_next_node: routeDebug.final_next_node,
+        validation_applied: routeDebug.validation_applied,
+        allowed_destinations: routeDebug.allowed_destinations,
+        input_summary: buildRouteInputSummary(routingInput)
+      });
+    }
 
     return {
       ...state,
-      next_node: decision.next_node,
+      next_node: candidateNextNode,
       intent: decision.intent,
       confidence: decision.confidence,
       needs_retrieval: decision.needs_retrieval,
@@ -656,5 +784,19 @@ export class ClinicWorkflow {
       return;
     }
     await this.traceSink?.append(traceId, event, payload);
+  }
+
+  private async notifyRouteObserver(
+    observerId: string | undefined,
+    event: ClinicWorkflowRouteObservation
+  ): Promise<void> {
+    if (!observerId) {
+      return;
+    }
+    const observer = this.observers.get(observerId);
+    if (!observer?.onRoute) {
+      return;
+    }
+    await observer.onRoute(event);
   }
 }

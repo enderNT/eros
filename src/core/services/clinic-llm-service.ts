@@ -4,6 +4,7 @@ import type {
   GeneratedReply,
   ReplyContextState,
   RoutingPacket,
+  StateRoutingDecisionDebug,
   StateRoutingDecision
 } from "../../domain/contracts";
 import {
@@ -82,6 +83,20 @@ function formatReplyContext(context?: ReplyContextState, options?: { include_too
   return lines.join("\n");
 }
 
+function buildRoutingDebug(
+  provider: StateRoutingDecisionDebug["provider"],
+  rawNextNode: string,
+  finalNextNode: string,
+  validationApplied: boolean
+): StateRoutingDecisionDebug {
+  return {
+    provider,
+    raw_next_node: rawNextNode,
+    final_next_node: finalNextNode,
+    validation_applied: validationApplied
+  };
+}
+
 function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<string, unknown>): StateRoutingDecision {
   const userMessage = routingPacket.user_message.toLowerCase();
   if (guardHint?.force_node === "appointment") {
@@ -91,7 +106,8 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
       confidence: 0.88,
       needs_retrieval: false,
       state_update: {},
-      reason: "fallback-force-appointment"
+      reason: "fallback-force-appointment",
+      debug: buildRoutingDebug("llm", "appointment", "appointment", false)
     };
   }
 
@@ -102,7 +118,8 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
       confidence: 0.8,
       needs_retrieval: false,
       state_update: {},
-      reason: "fallback-appointment-keyword"
+      reason: "fallback-appointment-keyword",
+      debug: buildRoutingDebug("llm", "appointment", "appointment", false)
     };
   }
 
@@ -113,7 +130,8 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
       confidence: 0.76,
       needs_retrieval: true,
       state_update: {},
-      reason: "fallback-rag-keyword"
+      reason: "fallback-rag-keyword",
+      debug: buildRoutingDebug("llm", "rag", "rag", false)
     };
   }
 
@@ -123,7 +141,8 @@ function fallbackStateRoute(routingPacket: RoutingPacket, guardHint?: Record<str
     confidence: 0.7,
     needs_retrieval: false,
     state_update: {},
-    reason: "fallback-conversation"
+    reason: "fallback-conversation",
+    debug: buildRoutingDebug("llm", "conversation", "conversation", false)
   };
 }
 
@@ -141,15 +160,19 @@ export class ClinicLlmService {
       return fallbackStateRoute(routingPacket, guardHint);
     }
 
+    const rawNextNode = readStringValue(payload.next_node, "conversation");
+    const finalNextNode = ["conversation", "rag", "appointment"].includes(rawNextNode)
+      ? (rawNextNode as StateRoutingDecision["next_node"])
+      : "conversation";
+
     return {
-      next_node: ["conversation", "rag", "appointment"].includes(String(payload.next_node))
-        ? (payload.next_node as StateRoutingDecision["next_node"])
-        : "conversation",
+      next_node: finalNextNode,
       intent: readStringValue(payload.intent, "conversation"),
       confidence: Math.max(0, Math.min(1, readNumberValue(payload.confidence, 0.7))),
       needs_retrieval: readBooleanValue(payload.needs_retrieval, false),
       state_update: {},
-      reason: readStringValue(payload.reason, "remote-json")
+      reason: readStringValue(payload.reason, "remote-json"),
+      debug: buildRoutingDebug("llm", rawNextNode, finalNextNode, rawNextNode !== finalNextNode)
     };
   }
 

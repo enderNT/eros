@@ -142,6 +142,13 @@ export interface RoutingPacket {
   memories: string[];
 }
 
+export interface StateRoutingDecisionDebug {
+  provider: "guard" | "dspy" | "llm";
+  raw_next_node: string;
+  final_next_node: string;
+  validation_applied: boolean;
+}
+
 export interface StateRoutingDecision {
   next_node: ClinicGraphNode;
   intent: string;
@@ -149,6 +156,7 @@ export interface StateRoutingDecision {
   needs_retrieval: boolean;
   state_update: Record<string, unknown>;
   reason: string;
+  debug?: StateRoutingDecisionDebug;
 }
 
 export interface AppointmentIntentPayload {

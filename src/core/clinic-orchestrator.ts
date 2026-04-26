@@ -1,7 +1,7 @@
 import type { InboundMessage, TurnOutcome } from "../domain/contracts";
 import type { ClinicStateStore, OutboundTransport, TraceSink } from "../domain/ports";
 import { ExecutionLogger, OperationalLogger } from "./services/operational-logger";
-import { ClinicWorkflow, ClinicWorkflowDiagnostics } from "./services/clinic-workflow";
+import { ClinicWorkflow, ClinicWorkflowDiagnostics, type ClinicWorkflowObserver } from "./services/clinic-workflow";
 
 function mapCapability(nextNode: string): "conversation" | "knowledge" | "action" {
   if (nextNode === "rag") return "knowledge";
@@ -24,50 +24,6 @@ function summarizeGraphState(state: {
     intent: state.intent,
     stage: state.stage,
     activeGoal: state.active_goal
-  };
-}
-
-function buildRouteInput(state: {
-  last_user_message: string;
-  summary: string;
-  active_goal: string;
-  stage: string;
-  last_tool_result: string;
-  last_assistant_message: string;
-  recalled_memories: string[];
-}) {
-  const currentMode =
-    state.active_goal === "appointment" || ["collecting_slots", "ready_for_handoff"].includes(state.stage)
-      ? "appointment"
-      : state.active_goal === "information" || state.stage === "lookup" || Boolean(state.last_tool_result.trim())
-        ? "information"
-        : "conversation";
-
-  return {
-    user_message: state.last_user_message,
-    conversation_summary: state.summary,
-    current_mode: currentMode,
-    last_tool_result: state.last_tool_result,
-    last_assistant_message: state.last_assistant_message,
-    memories: state.recalled_memories
-  };
-}
-
-function buildRouteDecision(state: {
-  next_node: string;
-  intent: string;
-  confidence: number;
-  needs_retrieval: boolean;
-  state_update: Record<string, unknown>;
-  routing_reason: string;
-}) {
-  return {
-    capability: mapCapability(state.next_node),
-    intent: state.intent,
-    confidence: state.confidence,
-    needsKnowledge: state.needs_retrieval,
-    statePatch: state.state_update,
-    reason: state.routing_reason
   };
 }
 
@@ -202,6 +158,16 @@ export class ClinicOrchestrator {
   async processTurn(inbound: InboundMessage) {
     const traceId = await this.traceSink.startTurn(inbound);
     const executionLogger = await this.logger.startRun(inbound);
+    const workflowObserver: ClinicWorkflowObserver = {
+      onRoute: async (event) => {
+        await executionLogger.route({
+          resolver: event.resolver,
+          input: event.input,
+          decision: event.decision,
+          debug: event.debug
+        });
+      }
+    };
     let finalDeliveryAttempted = false;
     try {
       const previous = await this.stateStore.load(inbound.sessionId);
@@ -227,17 +193,12 @@ export class ClinicOrchestrator {
           promptDigest: initialState.summary
         }
       });
-      const workflowResult = await this.workflow.run(initialState, traceId);
+      const workflowResult = await this.workflow.run(initialState, traceId, workflowObserver);
       const result = workflowResult.state;
       await this.stateStore.save(inbound.sessionId, result);
       await this.logStateSave(executionLogger, inbound, result);
       await this.traceSink.append(traceId, "workflow_result", result);
       await this.logWorkflowDiagnostics(executionLogger, inbound, result, workflowResult.diagnostics);
-      await executionLogger.route({
-        resolver: "clinic_routing_service",
-        input: buildRouteInput(initialState),
-        decision: buildRouteDecision(result)
-      });
       await executionLogger.flow({
         selectedFlow: result.intent,
         capability: mapCapability(result.next_node),

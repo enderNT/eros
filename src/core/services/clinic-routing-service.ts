@@ -1,11 +1,25 @@
 import type { AppSettings } from "../../config";
-import type { RoutingPacket, StateRoutingDecision } from "../../domain/contracts";
+import type { RoutingPacket, StateRoutingDecision, StateRoutingDecisionDebug } from "../../domain/contracts";
 import type { ClinicDspyBridge, TraceSink } from "../../domain/ports";
 import { ClinicLlmService } from "./clinic-llm-service";
 
 function compact(value: string, limit: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
+}
+
+function buildRoutingDebug(
+  provider: StateRoutingDecisionDebug["provider"],
+  rawNextNode: string,
+  finalNextNode: string,
+  validationApplied = false
+): StateRoutingDecisionDebug {
+  return {
+    provider,
+    raw_next_node: rawNextNode,
+    final_next_node: finalNextNode,
+    validation_applied: validationApplied
+  };
 }
 
 export class ClinicRoutingService {
@@ -54,13 +68,17 @@ export class ClinicRoutingService {
 
     const guard = this.deterministicGuard(routingPacket);
     if (guard) {
+      const guardedDecision = {
+        ...guard,
+        debug: buildRoutingDebug("guard", guard.next_node, guard.next_node)
+      };
       if (traceId) {
-        await this.traceSink?.append(traceId, "clinic.route.output", guard);
+        await this.traceSink?.append(traceId, "clinic.route.output", guardedDecision);
         await this.traceSink?.append(traceId, "clinic.route.meta", {
           provider: "guard"
         });
       }
-      return guard;
+      return guardedDecision;
     }
 
     if (this.settings.dspy.enabled) {
@@ -69,13 +87,17 @@ export class ClinicRoutingService {
         const normalized = decision.next_node === "rag" && !decision.needs_retrieval
           ? { ...decision, needs_retrieval: true }
           : decision;
+        const tracedDecision = {
+          ...normalized,
+          debug: buildRoutingDebug("dspy", String(decision.next_node ?? ""), String(normalized.next_node ?? ""))
+        };
         if (traceId) {
-          await this.traceSink?.append(traceId, "clinic.route.output", normalized);
+          await this.traceSink?.append(traceId, "clinic.route.output", tracedDecision);
           await this.traceSink?.append(traceId, "clinic.route.meta", {
             provider: "dspy"
           });
         }
-        return normalized;
+        return tracedDecision;
       }
     }
 
@@ -83,13 +105,23 @@ export class ClinicRoutingService {
     const normalized = decision.next_node === "rag" && !decision.needs_retrieval
       ? { ...decision, needs_retrieval: true }
       : decision;
+    const tracedDecision = {
+      ...normalized,
+      debug: {
+        ...normalized.debug,
+        provider: "llm",
+        raw_next_node: normalized.debug?.raw_next_node ?? normalized.next_node,
+        final_next_node: normalized.debug?.final_next_node ?? normalized.next_node,
+        validation_applied: normalized.debug?.validation_applied ?? false
+      } satisfies StateRoutingDecisionDebug
+    };
     if (traceId) {
-      await this.traceSink?.append(traceId, "clinic.route.output", normalized);
+      await this.traceSink?.append(traceId, "clinic.route.output", tracedDecision);
       await this.traceSink?.append(traceId, "clinic.route.meta", {
         provider: "llm"
       });
     }
-    return normalized;
+    return tracedDecision;
   }
 
   summarizeMemories(memories: string[]): string[] {

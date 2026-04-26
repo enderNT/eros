@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { Client } from "pg";
 import type { AppSettings } from "../../config";
-import type { InboundMessage, RouteDecision } from "../../domain/contracts";
+import type { InboundMessage } from "../../domain/contracts";
 
 type TerminalPhase = "IN" | "MEM" | "ROUTE" | "FLOW" | "OUT" | "END";
 
@@ -65,6 +65,7 @@ interface RunEndEntry {
   result: string;
   elapsedMs: number;
   error?: LogError;
+  debug?: Record<string, unknown>;
 }
 
 interface SystemEntry {
@@ -73,6 +74,15 @@ interface SystemEntry {
   timestamp: string;
   payload: Record<string, unknown>;
   isError: boolean;
+}
+
+interface OperationalRouteDecision {
+  capability: string;
+  intent: string;
+  confidence: number;
+  needsKnowledge: boolean;
+  statePatch: Record<string, unknown>;
+  reason: string;
 }
 
 const BRIGHT_SEPARATOR_COLORS = [92, 93, 94, 95, 96] as const;
@@ -499,7 +509,8 @@ export class OperationalLogger {
         elapsed_ms: entry.elapsedMs,
         summary: entry.summary,
         result: entry.result,
-        error: entry.error ?? null
+        error: entry.error ?? null,
+        debug: entry.debug ?? null
       }) as Record<string, unknown>;
 
       await client.connect();
@@ -865,7 +876,8 @@ export class ExecutionLogger {
   async route(data: {
     resolver: string;
     input: Record<string, unknown>;
-    decision?: RouteDecision;
+    decision?: OperationalRouteDecision;
+    debug?: Record<string, unknown>;
     error?: unknown;
     fallback?: string;
   }): Promise<void> {
@@ -879,6 +891,7 @@ export class ExecutionLogger {
       resolver: data.resolver,
       input: data.input,
       decision: data.decision ?? NO_VALUE,
+      debug: data.debug ?? NO_VALUE,
       fallback: data.fallback ?? NO_VALUE,
       error: capturedError ?? NO_VALUE
     }, Boolean(capturedError));
@@ -964,6 +977,7 @@ export class ExecutionLogger {
   async fail(error: unknown): Promise<void> {
     const elapsedMs = Date.now() - Date.parse(this.startedAt);
     const capturedError = toLogError("execution", "orchestrator", error, "turn_failed");
+    const debug = extractErrorDebug(error);
     this.parent.writeConsoleLine("FLOW", `${capturedError.owner} ${capturedError.type}: ${capturedError.detail}`, true);
     this.parent.writeConsoleLine("END", `error elapsed=${elapsedMs}ms`, true);
     this.parent.writeConsoleSeparator(this.colorCode, "end");
@@ -973,7 +987,8 @@ export class ExecutionLogger {
       elapsed_ms: elapsedMs,
       summary: "captured_error",
       result: "execution_failed",
-      error: capturedError
+      error: capturedError,
+      debug: debug ?? NO_VALUE
     }, true);
 
     await this.parent.writeExecutionEnd({
@@ -984,7 +999,8 @@ export class ExecutionLogger {
       summary: "captured_error",
       result: "execution_failed",
       elapsedMs,
-      error: capturedError
+      error: capturedError,
+      debug
     });
   }
 
@@ -1103,6 +1119,19 @@ function toLogError(stage: string, owner: string, error: unknown, impact: string
     stage,
     impact
   };
+}
+
+function extractErrorDebug(error: unknown): Record<string, unknown> | null {
+  if (!error || typeof error !== "object" || !("debug" in error)) {
+    return null;
+  }
+
+  const value = (error as { debug?: unknown }).debug;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
 }
 
 function shortId(value: string): string {
