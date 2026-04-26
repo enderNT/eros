@@ -9,6 +9,7 @@ export interface AppSettings {
     shutdownGraceMs: number;
   };
   logging: {
+    backend: "file" | "postgres" | "disabled";
     consoleEnabled: boolean;
     fileEnabled: boolean;
     directory: string;
@@ -130,6 +131,15 @@ export interface AppSettings {
   };
 }
 
+function readLoggingBackend(): AppSettings["logging"]["backend"] {
+  const configured = readString("APP_LOG_BACKEND", "").trim().toLowerCase();
+  if (configured === "file" || configured === "postgres" || configured === "disabled") {
+    return configured;
+  }
+
+  return readBoolean("APP_LOG_TO_FILE", true) ? "file" : "disabled";
+}
+
 function readString(name: string, fallback: string): string {
   return globalThis.Bun?.env[name] ?? process.env[name] ?? fallback;
 }
@@ -227,6 +237,7 @@ function defaultLogRotation(env: string): { maxFiles: number; maxLinesPerFile: n
 export function loadSettings(): AppSettings {
   const env = readString("APP_ENV", "development");
   const logRotation = defaultLogRotation(env);
+  const loggingBackend = readLoggingBackend();
   const dspyEnabled = readBoolean("DSPY_ENABLED", false);
   const dspyModel = readString("DSPY_MODEL", "gpt-4o-mini");
   const dspyServiceUrl = normalizeServiceUrl(readString("DSPY_SERVICE_URL", "http://dspy-service:8001"));
@@ -243,8 +254,9 @@ export function loadSettings(): AppSettings {
       shutdownGraceMs: readNumber("APP_SHUTDOWN_GRACE_MS", 5000)
     },
     logging: {
+      backend: loggingBackend,
       consoleEnabled: readBoolean("APP_LOG_TO_CONSOLE", true),
-      fileEnabled: readBoolean("APP_LOG_TO_FILE", true),
+      fileEnabled: loggingBackend === "file",
       directory: readString("APP_LOG_DIR", "./var/log/stateful-assistant"),
       fileName: readString("APP_LOG_FILE", "app.log"),
       maxFiles: readNumber("APP_LOG_MAX_FILES", logRotation.maxFiles),

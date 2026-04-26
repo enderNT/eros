@@ -221,6 +221,7 @@ export function buildApp() {
     app,
     shutdown: async () => {
       shuttingDown = true;
+      await logger.close(settings.app.shutdownGraceMs);
       await clinicStateStore.close(settings.app.shutdownGraceMs);
       await traceSink.close(settings.app.shutdownGraceMs);
       await dspyTaskTraceRecorder.close(settings.app.shutdownGraceMs);

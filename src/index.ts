@@ -34,6 +34,7 @@ async function stop(signal: string): Promise<void> {
   });
 
   await shutdown();
+  await logger.close(settings.app.shutdownGraceMs);
   if (typeof (server as { stop?: () => void }).stop === "function") {
     (server as { stop: () => void }).stop();
   }

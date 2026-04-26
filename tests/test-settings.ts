@@ -12,6 +12,7 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
       shutdownGraceMs: 200
     },
     logging: {
+      backend: "disabled",
       consoleEnabled: false,
       fileEnabled: false,
       directory: "./tmp-test-logs",
@@ -118,7 +119,8 @@ export function buildTestSettings(overrides: Partial<AppSettings> = {}): AppSett
     ...overrides,
     logging: {
       ...base.logging,
-      ...overrides.logging
+      ...overrides.logging,
+      fileEnabled: (overrides.logging?.backend ?? base.logging.backend) === "file"
     },
     llm: {
       ...base.llm,
