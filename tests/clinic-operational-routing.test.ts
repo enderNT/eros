@@ -105,7 +105,21 @@ class StubClinicMemoryRuntime implements ClinicMemoryRuntime {
     return {
       summary: shortTerm.summary,
       stored_records: [],
-      turn_count: shortTerm.turnCount
+      turn_count: shortTerm.turnCount,
+      memory_persistence: {
+        decision: {
+          shouldStore: false,
+          shouldStoreProfile: false,
+          shouldStoreEpisode: false,
+          reasons: ["informational_only"],
+          source: "llm"
+        },
+        llmEvaluated: true,
+        providerWriteAttempted: false,
+        providerWriteStored: false,
+        storedRecordCount: 0,
+        provider: "mem0"
+      }
     };
   }
 }
@@ -304,13 +318,18 @@ describe("clinic operational route logging", () => {
       .map((entry) => entry.title);
 
     const routeIndex = orderedTitles.indexOf("03.ROUTE");
+    const memoryModelIndex = orderedTitles.indexOf("05.MODEL.memory_persistence");
     const stateWriteIndex = orderedTitles.indexOf("07.MEMORY.WRITE.clinic_state");
+    const longTermWriteIndex = orderedTitles.indexOf("07.MEMORY.WRITE.long_term_memory");
     const toolIndex = orderedTitles.indexOf("04.TOOL.conversation_reply");
     const flowIndex = orderedTitles.indexOf("06.FLOW");
     const outputIndex = orderedTitles.indexOf("07.OUTPUT");
 
     expect(routeIndex).toBeGreaterThan(-1);
+    expect(memoryModelIndex).toBeGreaterThan(-1);
     expect(routeIndex).toBeLessThan(stateWriteIndex);
+    expect(routeIndex).toBeLessThan(memoryModelIndex);
+    expect(routeIndex).toBeLessThan(longTermWriteIndex);
     expect(routeIndex).toBeLessThan(toolIndex);
     expect(routeIndex).toBeLessThan(flowIndex);
     expect(routeIndex).toBeLessThan(outputIndex);

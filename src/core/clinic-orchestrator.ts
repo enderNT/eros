@@ -385,6 +385,40 @@ export class ClinicOrchestrator {
       });
     }
 
+    if (diagnostics.longTermMemory) {
+      if (diagnostics.longTermMemory.llmEvaluated) {
+        await executionLogger.model("memory_persistence", {
+          component: "llm_service",
+          request: {
+            user_message: inbound.text,
+            route: state.next_node,
+            handoff_required: state.handoff_required
+          },
+          response: diagnostics.longTermMemory.decision,
+          status: diagnostics.longTermMemory.decision.source === "llm" ? "ok" : "fallback"
+        });
+      }
+
+      await executionLogger.memoryWrite("long_term_memory", {
+        scope: "long_term",
+        component: diagnostics.longTermMemory.provider,
+        request: {
+          actor_id: inbound.actorId,
+          session_id: inbound.sessionId,
+          route: state.next_node
+        },
+        response: diagnostics.longTermMemory,
+        status: diagnostics.longTermMemory.providerWriteAttempted
+          ? diagnostics.longTermMemory.providerWriteStored
+            ? "ok"
+            : "noop"
+          : "skipped",
+        summary: diagnostics.longTermMemory.providerWriteAttempted
+          ? `long_term ${diagnostics.longTermMemory.provider} stored=${diagnostics.longTermMemory.providerWriteStored} count=${diagnostics.longTermMemory.storedRecordCount} source=${diagnostics.longTermMemory.decision.source ?? "unknown"}`
+          : `long_term ${diagnostics.longTermMemory.provider} skipped reasons=${diagnostics.longTermMemory.decision.reasons.join(",") || "none"} source=${diagnostics.longTermMemory.decision.source ?? "unknown"}`
+      });
+    }
+
     if (diagnostics.retrieval) {
       await executionLogger.tool("knowledge_provider", {
         component: diagnostics.retrieval.backend === "clinic_config"

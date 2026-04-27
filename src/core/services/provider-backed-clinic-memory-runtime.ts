@@ -156,19 +156,49 @@ export class ProviderBackedClinicMemoryRuntime implements ClinicMemoryRuntime {
     }
 
     const heuristicDecision = decideClinicMemoryPersistenceHeuristic(turn, shortTerm, domainState);
-    const persistenceDecision = shouldEvaluateClinicMemoryWithLlm(turn, shortTerm, domainState)
-      ? (await this.llmService.decideMemoryPersistence({
+    const shouldEvaluateWithLlm = shouldEvaluateClinicMemoryWithLlm(turn, shortTerm, domainState);
+    if (traceId) {
+      await this.traceSink?.append(traceId, "clinic.memory_persistence.input", {
+        provider: this.settings.provider,
+        turn,
+        handoff_required: domainState.handoff_required === true,
+        heuristic_decision: heuristicDecision,
+        llm_requested: shouldEvaluateWithLlm
+      });
+    }
+    const llmDecision = shouldEvaluateWithLlm
+      ? await this.llmService.decideMemoryPersistence({
           turn,
           short_term: shortTerm,
           handoff_required: domainState.handoff_required === true,
           heuristic_decision: heuristicDecision
-        })) ?? heuristicDecision
-      : heuristicDecision;
+        })
+      : null;
+    const persistenceDecision = llmDecision ?? (
+      shouldEvaluateWithLlm
+        ? { ...heuristicDecision, source: "heuristic_fallback" as const }
+        : heuristicDecision
+    );
+    if (traceId) {
+      await this.traceSink?.append(traceId, "clinic.memory_persistence.output", {
+        provider: this.settings.provider,
+        llm_evaluated: shouldEvaluateWithLlm,
+        decision: persistenceDecision
+      });
+    }
     if (!persistenceDecision.shouldStore) {
       return {
         summary,
         stored_records: [],
-        turn_count: shortTerm.turnCount
+        turn_count: shortTerm.turnCount,
+        memory_persistence: {
+          decision: persistenceDecision,
+          llmEvaluated: shouldEvaluateWithLlm,
+          providerWriteAttempted: false,
+          providerWriteStored: false,
+          storedRecordCount: 0,
+          provider: this.settings.provider
+        }
       };
     }
 
@@ -212,7 +242,15 @@ export class ProviderBackedClinicMemoryRuntime implements ClinicMemoryRuntime {
         addResult.stored,
         addResult.count
       ),
-      turn_count: shortTerm.turnCount
+      turn_count: shortTerm.turnCount,
+      memory_persistence: {
+        decision: persistenceDecision,
+        llmEvaluated: shouldEvaluateWithLlm,
+        providerWriteAttempted: true,
+        providerWriteStored: addResult.stored,
+        storedRecordCount: addResult.count,
+        provider: this.settings.provider
+      }
     };
   }
 }

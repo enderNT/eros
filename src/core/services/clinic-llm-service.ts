@@ -390,7 +390,8 @@ export class ClinicLlmService {
       shouldStore: shouldStoreProfile || shouldStoreEpisode,
       shouldStoreProfile,
       shouldStoreEpisode,
-      reasons: readStringArray(payload.reasons).slice(0, 5)
+      reasons: readStringArray(payload.reasons).slice(0, 5),
+      source: "llm"
     };
   }
 

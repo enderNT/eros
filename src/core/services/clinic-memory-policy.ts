@@ -168,6 +168,7 @@ export function decideClinicMemoryPersistenceHeuristic(
     shouldStore: shouldStoreProfile || shouldStoreEpisode,
     shouldStoreProfile,
     shouldStoreEpisode,
-    reasons: Array.from(new Set(reasons))
+    reasons: Array.from(new Set(reasons)),
+    source: "heuristic"
   };
 }

@@ -33,6 +33,20 @@ export interface ClinicWorkflowDiagnostics {
     retainedTurns: number;
     summaryUpdated: boolean;
   };
+  longTermMemory?: {
+    provider: string;
+    llmEvaluated: boolean;
+    providerWriteAttempted: boolean;
+    providerWriteStored: boolean;
+    storedRecordCount: number;
+    decision: {
+      shouldStore: boolean;
+      shouldStoreProfile: boolean;
+      shouldStoreEpisode: boolean;
+      reasons: string[];
+      source?: string;
+    };
+  };
   reply?: {
     node: ClinicGraphNode;
     provider: "dspy_service" | "llm_service";
@@ -94,6 +108,7 @@ function mergeDiagnostics(
     ...right,
     retrieval: right.retrieval ?? left.retrieval,
     shortTermMemory: right.shortTermMemory ?? left.shortTermMemory,
+    longTermMemory: right.longTermMemory ?? left.longTermMemory,
     reply: right.reply ?? left.reply,
     appointmentExtraction: right.appointmentExtraction ?? left.appointmentExtraction
   };
@@ -701,7 +716,16 @@ export class ClinicWorkflow {
     };
 
     if (overflowTurns.length === 0) {
-      return nextState;
+      return commitResult.memory_persistence
+        ? {
+            state: nextState,
+            diagnostics: {
+              longTermMemory: {
+                ...commitResult.memory_persistence
+              }
+            }
+          }
+        : nextState;
     }
 
     return {
@@ -711,7 +735,14 @@ export class ClinicWorkflow {
           summarizedTurns: overflowTurns.length,
           retainedTurns: retainedRecentTurns.length,
           summaryUpdated: updatedSummary !== state.summary
-        }
+        },
+        ...(commitResult.memory_persistence
+          ? {
+              longTermMemory: {
+                ...commitResult.memory_persistence
+              }
+            }
+          : {})
       }
     };
   }

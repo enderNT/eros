@@ -220,6 +220,7 @@ export interface MemoryCommitResult {
   summary: string;
   stored_records: ClinicMemoryRecord[];
   turn_count: number;
+  memory_persistence?: ClinicLongTermMemoryPersistenceResult;
 }
 
 export interface ClinicMemoryPersistenceDecision {
@@ -227,6 +228,16 @@ export interface ClinicMemoryPersistenceDecision {
   shouldStoreProfile: boolean;
   shouldStoreEpisode: boolean;
   reasons: string[];
+  source?: "heuristic" | "llm" | "heuristic_fallback";
+}
+
+export interface ClinicLongTermMemoryPersistenceResult {
+  decision: ClinicMemoryPersistenceDecision;
+  llmEvaluated: boolean;
+  providerWriteAttempted: boolean;
+  providerWriteStored: boolean;
+  storedRecordCount: number;
+  provider: string;
 }
 
 export interface GraphState {
