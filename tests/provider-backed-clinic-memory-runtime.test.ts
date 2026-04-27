@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   AddMemoryResult,
+  ClinicMemoryPersistenceDecision,
   ClinicMemoryRecord,
   GeneratedReply,
   MemoryHit,
@@ -32,6 +33,12 @@ class StubMemoryProvider implements MemoryProvider {
 }
 
 class StubClinicLlmService implements ClinicLlmService {
+  readonly memoryDecisionCalls: Array<Record<string, unknown>> = [];
+
+  constructor(
+    private readonly memoryDecision: ClinicMemoryPersistenceDecision | null = null
+  ) {}
+
   async classifyStateRoute(): Promise<StateRoutingDecision> {
     throw new Error("not_implemented");
   }
@@ -57,6 +64,15 @@ class StubClinicLlmService implements ClinicLlmService {
   }
   async buildStateSummary(): Promise<string> {
     return "summary-from-llm";
+  }
+  async decideMemoryPersistence(input: {
+    turn: { user_message: string; assistant_message: string; route: "conversation" | "rag" | "appointment" };
+    short_term: { summary: string };
+    handoff_required: boolean;
+    heuristic_decision: ClinicMemoryPersistenceDecision;
+  }): Promise<ClinicMemoryPersistenceDecision | null> {
+    this.memoryDecisionCalls.push(input);
+    return this.memoryDecision;
   }
 }
 
@@ -90,7 +106,8 @@ describe("ProviderBackedClinicMemoryRuntime", () => {
         updatedAt: "2026-01-01T00:00:00.000Z"
       }
     ]);
-    const runtime = new ProviderBackedClinicMemoryRuntime(settings.memory, provider, new StubClinicLlmService());
+    const llmService = new StubClinicLlmService();
+    const runtime = new ProviderBackedClinicMemoryRuntime(settings.memory, provider, llmService);
 
     const result = await runtime.loadContext(
       "session-1",
@@ -143,7 +160,8 @@ describe("ProviderBackedClinicMemoryRuntime", () => {
       }
     });
     const provider = new StubMemoryProvider([], { stored: true, count: 2 });
-    const runtime = new ProviderBackedClinicMemoryRuntime(settings.memory, provider, new StubClinicLlmService());
+    const llmService = new StubClinicLlmService();
+    const runtime = new ProviderBackedClinicMemoryRuntime(settings.memory, provider, llmService);
 
     const result = await runtime.commitTurn(
       "session-1",
@@ -180,8 +198,120 @@ describe("ProviderBackedClinicMemoryRuntime", () => {
         timestamp: expect.any(String)
       }
     ]);
+    expect(llmService.memoryDecisionCalls).toHaveLength(1);
     expect(result.stored_records.map((record) => record.source)).toEqual(["mem0", "mem0"]);
     expect(result.stored_records.map((record) => record.kind)).toEqual(["profile", "episode"]);
     expect(result.turn_count).toBe(2);
+  });
+
+  test("skips Mem0 writes for generic turns without persistent user data", async () => {
+    const settings = buildTestSettings({
+      memory: {
+        provider: "mem0",
+        enabled: true,
+        agentId: "eros-assistant",
+        topK: 5,
+        scoreThreshold: 0,
+        mem0: {
+          baseUrl: "https://mem0.example.com",
+          apiKey: "secret",
+          authMode: "token",
+          orgId: "",
+          projectId: "",
+          searchPath: "/v1/memories/search",
+          addPath: "/v1/memories"
+        }
+      }
+    });
+    const provider = new StubMemoryProvider([], { stored: true, count: 1 });
+    const llmService = new StubClinicLlmService();
+    const runtime = new ProviderBackedClinicMemoryRuntime(settings.memory, provider, llmService);
+
+    const result = await runtime.commitTurn(
+      "session-1",
+      "actor-1",
+      {
+        user_message: "Cuanto cuesta la terapia?",
+        assistant_message: "La valoracion inicial cuesta 800 MXN.",
+        route: "rag"
+      },
+      {
+        summary: "Resumen previo",
+        recentTurns: [],
+        activeGoal: "information",
+        stage: "lookup",
+        continuitySignals: [],
+        turnCount: 2
+      },
+      {
+        handoff_required: false,
+        refresh_summary: false
+      }
+    );
+
+    expect(llmService.memoryDecisionCalls).toHaveLength(1);
+    expect(provider.addCalls).toHaveLength(0);
+    expect(result.stored_records).toEqual([]);
+    expect(result.turn_count).toBe(2);
+  });
+
+  test("stores preference-bearing turns before calling Mem0", async () => {
+    const settings = buildTestSettings({
+      memory: {
+        provider: "mem0",
+        enabled: true,
+        agentId: "eros-assistant",
+        topK: 5,
+        scoreThreshold: 0,
+        mem0: {
+          baseUrl: "https://mem0.example.com",
+          apiKey: "secret",
+          authMode: "token",
+          orgId: "",
+          projectId: "",
+          searchPath: "/v1/memories/search",
+          addPath: "/v1/memories"
+        }
+      }
+    });
+    const provider = new StubMemoryProvider([], { stored: true, count: 1 });
+    const llmService = new StubClinicLlmService({
+      shouldStore: true,
+      shouldStoreProfile: true,
+      shouldStoreEpisode: false,
+      reasons: ["llm_preference"]
+    });
+    const runtime = new ProviderBackedClinicMemoryRuntime(settings.memory, provider, llmService);
+
+    const result = await runtime.commitTurn(
+      "session-1",
+      "actor-1",
+      {
+        user_message: "Prefiero citas por la tarde y pagar con transferencia",
+        assistant_message: "Perfecto, lo tomo en cuenta para tus siguientes citas.",
+        route: "conversation"
+      },
+      {
+        summary: "Resumen previo",
+        recentTurns: [],
+        activeGoal: "conversation",
+        stage: "open",
+        continuitySignals: [],
+        turnCount: 2
+      },
+      {
+        handoff_required: false,
+        refresh_summary: false
+      }
+    );
+
+    expect(llmService.memoryDecisionCalls).toHaveLength(1);
+    expect(provider.addCalls).toHaveLength(1);
+    expect(provider.addCalls[0]?.metadata).toMatchObject({
+      memory_profile: true,
+      memory_episode: false,
+      memory_reasons: ["llm_preference"]
+    });
+    expect(result.stored_records.map((record) => record.kind)).toEqual(["profile"]);
   });
 });

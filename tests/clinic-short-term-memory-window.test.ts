@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  ClinicMemoryPersistenceDecision,
   ClinicGraphNode,
   GeneratedReply,
   GraphState,
@@ -99,6 +100,10 @@ class StubClinicLlmService implements ClinicLlmService {
     this.summaryCalls.push(input);
     const fragment = `Usuario: ${input.user_message} Asistente: ${input.assistant_message}`.trim();
     return [input.current_summary, fragment].filter(Boolean).join(" | ");
+  }
+
+  async decideMemoryPersistence(): Promise<ClinicMemoryPersistenceDecision | null> {
+    return null;
   }
 }
 

@@ -1,11 +1,14 @@
 import type { AppSettings } from "../../config";
 import type {
   AppointmentIntentPayload,
+  ClinicMemoryPersistenceDecision,
   GeneratedReply,
   ReplyContextState,
   RoutingPacket,
+  ShortTermState,
   StateRoutingDecisionDebug,
-  StateRoutingDecision
+  StateRoutingDecision,
+  TurnMemoryInput
 } from "../../domain/contracts";
 import {
   extractJsonObject,
@@ -338,6 +341,57 @@ export class ClinicLlmService {
     }
 
     return text.trim();
+  }
+
+  async decideMemoryPersistence(input: {
+    turn: TurnMemoryInput;
+    short_term: ShortTermState;
+    handoff_required: boolean;
+    heuristic_decision: ClinicMemoryPersistenceDecision;
+  }): Promise<ClinicMemoryPersistenceDecision | null> {
+    const payload = await this.requestJson(
+      [
+        "Evalua si un turno conversacional debe guardarse como memoria de largo plazo para Clinica Eros Neuronal.",
+        "Debes ser conservador: solo guarda informacion estable, reutilizable en futuros turnos o sesiones, o eventos operativos importantes.",
+        "No guardes saludos, agradecimientos, small talk, preguntas informativas aisladas, reformulaciones, ni datos que solo sirven para este turno.",
+        "Devuelve JSON estricto con llaves: should_store, should_store_profile, should_store_episode, reasons.",
+        "should_store_profile aplica para preferencias, identidad, contexto clinico o datos persistentes del usuario.",
+        "should_store_episode aplica solo si el turno deja un evento operativo que debe sobrevivir, como handoff o seguimiento pendiente."
+      ].join(" "),
+      JSON.stringify({
+        turn: input.turn,
+        handoff_required: input.handoff_required,
+        short_term: {
+          summary: input.short_term.summary,
+          active_goal: input.short_term.activeGoal ?? "",
+          stage: input.short_term.stage ?? "",
+          pending_action: input.short_term.pendingAction ?? "",
+          pending_question: input.short_term.pendingQuestion ?? "",
+          appointment_slots: input.short_term.appointmentSlots ?? {},
+          recent_turns: input.short_term.recentTurns.slice(-5).map((turn) => ({
+            role: turn.role,
+            text: turn.text
+          }))
+        },
+        heuristic_decision: input.heuristic_decision
+      }, null, 2),
+      0
+    );
+
+    if (!payload) {
+      return null;
+    }
+
+    const shouldStore = readBooleanValue(payload.should_store, false);
+    const shouldStoreProfile = shouldStore && readBooleanValue(payload.should_store_profile, false);
+    const shouldStoreEpisode = shouldStore && input.handoff_required && readBooleanValue(payload.should_store_episode, false);
+
+    return {
+      shouldStore: shouldStoreProfile || shouldStoreEpisode,
+      shouldStoreProfile,
+      shouldStoreEpisode,
+      reasons: readStringArray(payload.reasons).slice(0, 5)
+    };
   }
 
   private fallbackAppointment(

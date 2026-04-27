@@ -5,6 +5,7 @@ import type {
   ClinicConfig,
   GeneratedReply,
   GraphState,
+  ClinicMemoryPersistenceDecision,
   ExecutionContext,
   InboundMessage,
   KnowledgeDocument,
@@ -167,6 +168,12 @@ export interface ClinicLlmService {
     active_goal: string;
     stage: string;
   }): Promise<string>;
+  decideMemoryPersistence(input: {
+    turn: TurnMemoryInput;
+    short_term: ShortTermState;
+    handoff_required: boolean;
+    heuristic_decision: ClinicMemoryPersistenceDecision;
+  }): Promise<ClinicMemoryPersistenceDecision | null>;
 }
 
 export interface ClinicRoutingService {

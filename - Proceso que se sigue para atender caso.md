@@ -2,3 +2,4 @@
 - Metodos de pago
 - Horarios por "terapia" (segun disponibilidad en calendario)
 - Tabla de precios
+- Se realiza el pago durante la asistencia a la clinica, no antes

@@ -222,6 +222,13 @@ export interface MemoryCommitResult {
   turn_count: number;
 }
 
+export interface ClinicMemoryPersistenceDecision {
+  shouldStore: boolean;
+  shouldStoreProfile: boolean;
+  shouldStoreEpisode: boolean;
+  reasons: string[];
+}
+
 export interface GraphState {
   session_id: string;
   actor_id: string;

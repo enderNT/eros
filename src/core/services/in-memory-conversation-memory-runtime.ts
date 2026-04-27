@@ -6,6 +6,10 @@ import type {
   TurnMemoryInput
 } from "../../domain/contracts";
 import type { ClinicLlmService, ClinicMemoryRuntime, TraceSink } from "../../domain/ports";
+import {
+  decideClinicMemoryPersistenceHeuristic,
+  shouldEvaluateClinicMemoryWithLlm
+} from "./clinic-memory-policy";
 
 interface StoredMemory extends ClinicMemoryRecord {
   actor_id: string;
@@ -100,11 +104,28 @@ export class InMemoryConversationMemoryRuntime implements ClinicMemoryRuntime {
     }
 
     const stored_records: ClinicMemoryRecord[] = [];
+    const heuristicDecision = decideClinicMemoryPersistenceHeuristic(turn, shortTerm, domainState);
+    const persistenceDecision = shouldEvaluateClinicMemoryWithLlm(turn, shortTerm, domainState)
+      ? (await this.llmService.decideMemoryPersistence({
+          turn,
+          short_term: shortTerm,
+          handoff_required: domainState.handoff_required === true,
+          heuristic_decision: heuristicDecision
+        })) ?? heuristicDecision
+      : heuristicDecision;
+    if (!persistenceDecision.shouldStore) {
+      return {
+        summary,
+        stored_records,
+        turn_count: shortTerm.turnCount
+      };
+    }
+
     const created_at = new Date().toISOString();
     const profileCandidate = compact(turn.user_message, 220);
     const episodeCandidate = compact(`${turn.user_message} | ${turn.assistant_message}`, 320);
 
-    if (profileCandidate.length >= 12) {
+    if (persistenceDecision.shouldStoreProfile && profileCandidate.length >= 12) {
       const record: StoredMemory = {
         actor_id: actorId,
         kind: "profile",
@@ -112,14 +133,15 @@ export class InMemoryConversationMemoryRuntime implements ClinicMemoryRuntime {
         source: "stateful-flow",
         created_at,
         metadata: {
-          route: turn.route
+          route: turn.route,
+          memory_reasons: persistenceDecision.reasons
         }
       };
       this.memories.push(record);
       stored_records.push(record);
     }
 
-    if (domainState.handoff_required === true && episodeCandidate.length >= 18) {
+    if (persistenceDecision.shouldStoreEpisode && episodeCandidate.length >= 18) {
       const record: StoredMemory = {
         actor_id: actorId,
         kind: "episode",
@@ -127,7 +149,8 @@ export class InMemoryConversationMemoryRuntime implements ClinicMemoryRuntime {
         source: "stateful-flow",
         created_at,
         metadata: {
-          route: turn.route
+          route: turn.route,
+          memory_reasons: persistenceDecision.reasons
         }
       };
       this.memories.push(record);

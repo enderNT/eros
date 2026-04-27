@@ -9,6 +9,10 @@ import type {
   TurnRecord
 } from "../../domain/contracts";
 import type { ClinicLlmService, ClinicMemoryRuntime, MemoryProvider, TraceSink } from "../../domain/ports";
+import {
+  decideClinicMemoryPersistenceHeuristic,
+  shouldEvaluateClinicMemoryWithLlm
+} from "./clinic-memory-policy";
 
 function compact(value: string, limit: number): string {
   const normalized = value.trim().replace(/\s+/g, " ");
@@ -35,7 +39,7 @@ function buildStoredRecords(
   actorId: string,
   sessionId: string,
   turn: TurnMemoryInput,
-  domainState: Record<string, unknown>,
+  decision: ClinicMemoryPersistenceDecision,
   stored: boolean,
   count: number
 ): ClinicMemoryRecord[] {
@@ -54,7 +58,7 @@ function buildStoredRecords(
   };
 
   const records: ClinicMemoryRecord[] = [];
-  if (profileText) {
+  if (decision.shouldStoreProfile && profileText) {
     records.push({
       kind: "profile",
       text: profileText,
@@ -64,7 +68,7 @@ function buildStoredRecords(
     });
   }
 
-  if (domainState.handoff_required === true && episodeText) {
+  if (decision.shouldStoreEpisode && episodeText) {
     records.push({
       kind: "episode",
       text: episodeText,
@@ -151,6 +155,23 @@ export class ProviderBackedClinicMemoryRuntime implements ClinicMemoryRuntime {
       };
     }
 
+    const heuristicDecision = decideClinicMemoryPersistenceHeuristic(turn, shortTerm, domainState);
+    const persistenceDecision = shouldEvaluateClinicMemoryWithLlm(turn, shortTerm, domainState)
+      ? (await this.llmService.decideMemoryPersistence({
+          turn,
+          short_term: shortTerm,
+          handoff_required: domainState.handoff_required === true,
+          heuristic_decision: heuristicDecision
+        })) ?? heuristicDecision
+      : heuristicDecision;
+    if (!persistenceDecision.shouldStore) {
+      return {
+        summary,
+        stored_records: [],
+        turn_count: shortTerm.turnCount
+      };
+    }
+
     const messages = [
       {
         role: "user" as const,
@@ -173,7 +194,10 @@ export class ProviderBackedClinicMemoryRuntime implements ClinicMemoryRuntime {
       {
         route: turn.route,
         handoff_required: domainState.handoff_required === true,
-        source: "clinic_workflow"
+        source: "clinic_workflow",
+        memory_reasons: persistenceDecision.reasons,
+        memory_profile: persistenceDecision.shouldStoreProfile,
+        memory_episode: persistenceDecision.shouldStoreEpisode
       }
     );
 
@@ -184,7 +208,7 @@ export class ProviderBackedClinicMemoryRuntime implements ClinicMemoryRuntime {
         actorId,
         sessionId,
         turn,
-        domainState,
+        persistenceDecision,
         addResult.stored,
         addResult.count
       ),

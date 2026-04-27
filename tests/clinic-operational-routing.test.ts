@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  ClinicMemoryPersistenceDecision,
   ClinicGraphNode,
   GeneratedReply,
   MemoryCommitResult,
@@ -67,6 +68,10 @@ class StubClinicLlmService implements ClinicLlmService {
 
   async buildStateSummary(): Promise<string> {
     return "summary";
+  }
+
+  async decideMemoryPersistence(): Promise<ClinicMemoryPersistenceDecision | null> {
+    return null;
   }
 }
 
