@@ -7,7 +7,6 @@ import os
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from math import ceil
 from typing import Any
 
 import dspy
@@ -16,9 +15,11 @@ from dspy.teleprompt import MIPROv2
 
 try:
     from app import RuntimeSettings
+    from metric_profiles import TEXT_REPLY_TASKS, describe_metric_profile, score_prediction_with_details
     from modules import MODULE_FACTORIES
 except ModuleNotFoundError:  # pragma: no cover - package-style fallback
     from .app import RuntimeSettings  # type: ignore
+    from .metric_profiles import TEXT_REPLY_TASKS, describe_metric_profile, score_prediction_with_details  # type: ignore
     from .modules import MODULE_FACTORIES  # type: ignore
 
 
@@ -75,9 +76,6 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "complex_fields": {"memories", "state_update"},
     },
 }
-
-
-TEXT_REPLY_TASKS = {"conversation_reply", "rag_reply"}
 
 VALID_GPT5_REASONING_EFFORTS = {"minimal", "low", "medium", "high"}
 
@@ -160,86 +158,13 @@ def _serialize_value(value: Any) -> Any:
     return value
 
 
-def _coerce_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes"}:
-            return True
-        if lowered in {"false", "0", "no", ""}:
-            return False
-    return bool(value)
-
-
-def _coerce_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_object(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return {}
-        return parsed if isinstance(parsed, dict) else {}
-    return {}
-
-
-def _normalize_for_metric(task_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-    if task_name in TEXT_REPLY_TASKS:
-        return {
-            "response_text": str(payload.get("response_text", "")).strip(),
-        }
-
-    return {
-        "next_node": str(payload.get("next_node", "")).strip(),
-        "intent": str(payload.get("intent", "")).strip(),
-        "confidence": _coerce_float(payload.get("confidence")),
-        "needs_retrieval": _coerce_bool(payload.get("needs_retrieval")),
-        "state_update": _coerce_object(payload.get("state_update")),
-        "reason": str(payload.get("reason", "")).strip(),
-    }
-
-
-def _score_prediction(task_name: str, expected: dict[str, Any], actual: dict[str, Any]) -> float:
-    normalized_expected = _normalize_for_metric(task_name, expected)
-    normalized_actual = _normalize_for_metric(task_name, actual)
-
-    if task_name in TEXT_REPLY_TASKS:
-        return 1.0 if normalized_expected["response_text"] == normalized_actual["response_text"] else 0.0
-
-    checks = [
-        normalized_expected["next_node"] == normalized_actual["next_node"],
-        normalized_expected["intent"] == normalized_actual["intent"],
-        normalized_expected["needs_retrieval"] == normalized_actual["needs_retrieval"],
-        normalized_expected["state_update"] == normalized_actual["state_update"],
-        normalized_expected["reason"] == normalized_actual["reason"],
-    ]
-
-    expected_confidence = normalized_expected["confidence"]
-    actual_confidence = normalized_actual["confidence"]
-    if expected_confidence is None or actual_confidence is None:
-        checks.append(expected_confidence == actual_confidence)
-    else:
-        checks.append(abs(expected_confidence - actual_confidence) <= 0.05)
-
-    return sum(1.0 for result in checks if result) / len(checks)
-
-
 def _build_metric(task_name: str, output_fields: tuple[str, ...]):
     def metric(example: dspy.Example, prediction: Any, trace: Any | None = None) -> float:
         del trace
         expected = {field: getattr(example, field) for field in output_fields}
         actual = _to_prediction_dict(prediction)
-        return _score_prediction(task_name, expected, actual)
+        score, _ = score_prediction_with_details(task_name, expected, actual)
+        return score
 
     return metric
 
@@ -277,45 +202,17 @@ def _load_rows(dataset_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _split_rows(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+def _build_full_dataset_plan(rows: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(rows)
-    if total < 2:
-        raise ValueError("Se requieren al menos 2 ejemplos para optimizar y evaluar.")
+    if total < 1:
+        raise ValueError("Se requiere al menos 1 ejemplo para optimizar.")
 
-    if total <= 5:
-        return rows[:-1], rows[-1:], "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
-
-    train_count = min(total - 1, max(1, round(total * 0.8)))
-    return rows[:train_count], rows[train_count:], "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
-
-
-def _split_train_for_mipro(
-    train_rows: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    total = len(train_rows)
-    if total <= 1:
-        return train_rows, train_rows, {
-            "train_examples": total,
-            "val_examples": total,
-            "rule": "trainset too small; reused train rows as valset for MIPROv2",
-        }
-
-    if total <= 4:
-        mipro_train_count = max(1, total - 1)
-        rule = "tiny-train split with last row reserved as valset for MIPROv2"
-    else:
-        mipro_train_count = max(1, total - ceil(total * 0.5))
-        rule = "deterministic 50/50 split of train rows into MIPRO train/val for MIPROv2"
-
-    if mipro_train_count >= total:
-        mipro_train_count = total - 1
-
-    mipro_train_rows = train_rows[:mipro_train_count]
-    mipro_val_rows = train_rows[mipro_train_count:]
-    return mipro_train_rows, mipro_val_rows, {
-        "train_examples": len(mipro_train_rows),
-        "val_examples": len(mipro_val_rows),
-        "rule": rule,
+    return {
+        "optimization_examples": total,
+        "review_examples": total,
+        "mipro_train_examples": total,
+        "mipro_val_examples": total,
+        "rule": "full dataset reused for optimization, MIPRO train/val, and review without holdout split",
     }
 
 
@@ -390,17 +287,16 @@ def optimize_task(
         raise FileNotFoundError(f"No se encontro el dataset para {task_name}: {dataset_path}")
 
     rows = _load_rows(dataset_path)
-    train_rows, eval_rows, split_rule = _split_rows(rows)
-    mipro_train_rows, mipro_val_rows, mipro_split = _split_train_for_mipro(train_rows)
+    dataset_plan = _build_full_dataset_plan(rows)
     module_factory = MODULE_FACTORIES[task_name]
 
     trainset: list[dspy.Example] = []
-    for row in mipro_train_rows:
+    for row in rows:
         _, _, _, example = _build_example(row, config)
         trainset.append(example)
 
     valset: list[dspy.Example] = []
-    for row in mipro_val_rows:
+    for row in rows:
         _, _, _, example = _build_example(row, config)
         valset.append(example)
 
@@ -418,19 +314,22 @@ def optimize_task(
         valset=valset,
     )
 
-    eval_examples: list[dict[str, Any]] = []
+    review_examples: list[dict[str, Any]] = []
     baseline_scores: list[float] = []
     optimized_scores: list[float] = []
+    metric_profile = describe_metric_profile(task_name)
 
-    for row in eval_rows:
+    for row in rows:
         input_payload, serialized_input, output_payload, _ = _build_example(row, config)
         baseline_prediction = _to_prediction_dict(baseline_module.forward(**serialized_input))
         optimized_prediction = _to_prediction_dict(compiled_module.forward(**serialized_input))
-        baseline_scores.append(_score_prediction(task_name, output_payload, baseline_prediction))
-        optimized_scores.append(_score_prediction(task_name, output_payload, optimized_prediction))
+        baseline_score, baseline_details = score_prediction_with_details(task_name, output_payload, baseline_prediction)
+        optimized_score, optimized_details = score_prediction_with_details(task_name, output_payload, optimized_prediction)
+        baseline_scores.append(baseline_score)
+        optimized_scores.append(optimized_score)
 
         if task_name in TEXT_REPLY_TASKS:
-            eval_examples.append(
+            review_examples.append(
                 {
                     "trace_id": str(row.get("trace_id", "")),
                     "input_payload": input_payload,
@@ -438,10 +337,14 @@ def optimize_task(
                     "target_response_text": str(output_payload.get("response_text", "")),
                     "baseline_response_text": str(baseline_prediction.get("response_text", "")),
                     "optimized_response_text": str(optimized_prediction.get("response_text", "")),
+                    "baseline_score": round(baseline_score, 4),
+                    "optimized_score": round(optimized_score, 4),
+                    "baseline_criteria": baseline_details,
+                    "optimized_criteria": optimized_details,
                 }
             )
         else:
-            eval_examples.append(
+            review_examples.append(
                 {
                     "trace_id": str(row.get("trace_id", "")),
                     "input_payload": input_payload,
@@ -449,6 +352,10 @@ def optimize_task(
                     "target_payload": output_payload,
                     "baseline_output": baseline_prediction,
                     "optimized_output": optimized_prediction,
+                    "baseline_score": round(baseline_score, 4),
+                    "optimized_score": round(optimized_score, 4),
+                    "baseline_criteria": baseline_details,
+                    "optimized_criteria": optimized_details,
                 }
             )
 
@@ -478,12 +385,8 @@ def optimize_task(
             "mipro_train_examples": len(trainset),
             "mipro_val_examples": len(valset),
         },
-        "validation_split": {
-            "train_examples": len(train_rows),
-            "eval_examples": len(eval_rows),
-            "rule": split_rule,
-        },
-        "optimizer_split": mipro_split,
+        "metric_profile": metric_profile,
+        "dataset_usage": dataset_plan,
         "artifact_path": _relative_to_repo(artifact_path),
         "evaluation_report_path": _relative_to_repo(eval_path),
     }
@@ -493,12 +396,14 @@ def optimize_task(
         "dataset": _relative_to_repo(dataset_path),
         "dataset_fingerprint": dataset_fingerprint,
         "valid_examples": len(rows),
-        "train_examples": len(train_rows),
-        "eval_examples": len(eval_rows),
+        "optimization_examples": len(rows),
+        "review_examples": len(rows),
+        "review_scope": "same dataset used for optimization; no holdout split",
         "baseline_score": round(sum(baseline_scores) / len(baseline_scores), 4) if baseline_scores else None,
+        "metric_profile": metric_profile,
         "optimized_score": round(sum(optimized_scores) / len(optimized_scores), 4) if optimized_scores else None,
         "review_required": True,
-        "examples": eval_examples,
+        "examples": review_examples,
     }
 
     with open(meta_path, "w", encoding="utf-8") as handle:
@@ -512,8 +417,8 @@ def optimize_task(
     print(f"[*] Tarea: {task_name}")
     print(f"[*] Modelo: {settings.model}")
     print(f"[*] Dataset: {dataset_path} ({len(rows)} ejemplos)")
-    print(f"[*] Train/Eval: {len(train_rows)}/{len(eval_rows)}")
-    print(f"[*] MIPRO train/val: {len(trainset)}/{len(valset)}")
+    print(f"[*] Dataset completo para optimizacion: {len(trainset)} ejemplos")
+    print(f"[*] MIPRO train/val reutilizado: {len(trainset)}/{len(valset)}")
     print(f"[*] Artefacto: {artifact_path}")
     print(f"[*] Meta: {meta_path}")
     print(f"[*] Eval: {eval_path}")

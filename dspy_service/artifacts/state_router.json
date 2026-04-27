@@ -2,50 +2,9 @@
   "_predictor": {
     "traces": [],
     "train": [],
-    "demos": [
-      {
-        "user_message": "Holas",
-        "conversation_summary": "",
-        "active_goal": "",
-        "stage": "",
-        "pending_action": "",
-        "pending_question": "",
-        "appointment_slots": "{}",
-        "last_tool_result": "",
-        "last_user_message": "Holas",
-        "last_assistant_message": "",
-        "memories": "[]",
-        "guard_hint": "{\"confidence\": 0.9, \"intent\": \"conversation\", \"needs_retrieval\": false, \"next_node\": \"conversation\", \"reason\": \"simple-conversation\", \"state_update\": {\"active_goal\": \"conversation\", \"stage\": \"open\"}}",
-        "next_node": "conversation",
-        "intent": "start_conversation",
-        "confidence": 0.9,
-        "needs_retrieval": false,
-        "state_update": "{\"active_goal\": \"conversation\", \"stage\": \"open\"}",
-        "reason": "No hay historial de ningun tipo, o contexto que indique alguna interaccion. Un saludo sin contexto, ni historial, ni hilo de conversacion, de ahi se infiere el inicio de una nueva conversacion y primer contacto"
-      },
-      {
-        "user_message": "tengo depresión",
-        "conversation_summary": "",
-        "active_goal": "",
-        "stage": "",
-        "pending_action": "",
-        "pending_question": "",
-        "appointment_slots": "{}",
-        "last_tool_result": "",
-        "last_user_message": "tengo depresión",
-        "last_assistant_message": "",
-        "memories": "[]",
-        "guard_hint": "{}",
-        "next_node": "conversation",
-        "intent": "start_conversation",
-        "confidence": 0.92,
-        "needs_retrieval": false,
-        "state_update": "{\"active_goal\": \"escuchar activamente a usuario y solucion delimitada podemos ofrecerle, sin darle diagnostico en esta conversacion\", \"appointment_slots\": {}, \"conversation_summary\": \"Usuario informa 'tengo depresión'. No hay historial previo en el paquete de enrutamiento. No hay historial conversacional por el momento\", \"last_assistant_message\": \"\", \"last_tool_result\": \"\", \"last_user_message\": \"tengo depresión\", \"memories\": [\"Usuario reportó depresión (mensaje: 'tengo depresión')\"], \"pending_action\": \"guiarlo_para_que_uno_de_nuestros_profesionales_lo_pueda_evaluar_y_apoyar\", \"pending_question\": \"¿Desde cuándo se siente así?, ¿Buscas apoyarte con una evaluacion profesional?\", \"stage\": \"triage_inicial\"}",
-        "reason": "El usuario declara un problema de salud mental (depresión). No se requiere recuperar información externa ahora. Es prioritario continuar la conversación para evaluar muy superficialmente (un solo dato sobre su sintomatologia y como busca resolverlo), para despues ofrecer agendar cita y poder dirigirlo a una consulta profesional o resolver sus dudas con respecto al topic sobre la depresion, por eso next_node=conversation."
-      }
-    ],
+    "demos": [],
     "signature": {
-      "instructions": "Route the conversation state and emit structured JSON-compatible fields.",
+      "instructions": "given the current conversation state, decide the single best next action for the dialogue pipeline and explain why in one short sentence. Read the inputs and produce a JSON-compatible, structured output with the following keys exactly: next_node, intent, confidence, needs_retrieval, state_update, reason.\n\nConstraints:\n- next_node: one of {\"clarify_request\", \"respond\", \"call_tool\", \"retrieve\", \"update_memory\", \"finish\"}.\n- intent: a short intent label such as \"clarify\", \"request_info\", \"perform_action\", \"confirm\", \"inform\", or \"other\".\n- confidence: a float between 0.0 and 1.0 (two decimal places preferred) representing how certain you are.\n- needs_retrieval: \"yes\" or \"no\".\n- state_update: either \"no_change\" or a brief structured description of the memory\/state change (max 12 words).\n- reason: one-sentence natural-language justification (max 25 words) describing which inputs led to this routing decision.\n\nDecision rules (apply in order, stop at the first that matches):\n1. If user_message is empty or whitespace only, set next_node=\"clarify_request\", intent=\"clarify\", confidence≥0.8, needs_retrieval=\"no\", state_update=\"no_change\", reason explaining the missing user content.\n2. If current_mode indicates an ongoing tool interaction and last_tool_result is missing or incomplete, set next_node=\"call_tool\", intent=\"perform_action\", needs_retrieval=\"no\", state_update=\"no_change\", reason explaining tool continuation.\n3. If user_message is a clear, answerable question requiring external knowledge (facts, documents, web data) or conversation_summary\/last_tool_result indicates missing information, set next_node=\"retrieve\", intent=\"request_info\", needs_retrieval=\"yes\", confidence proportional to clarity.\n4. If user_message requests a concrete action that the assistant can perform via an available tool (e.g., \"send email\", \"create calendar event\") set next_node=\"call_tool\", intent=\"perform_action\", needs_retrieval=\"no\".\n5. If user_message is an ordinary conversational or informative utterance (no tool\/retrieval needed), set next_node=\"respond\", intent appropriate (\"inform\", \"confirm\", etc.), needs_retrieval=\"no\".\n6. If user explicitly signals conversation end (e.g., \"thanks, that's all\", \"bye\", \"done\"), set next_node=\"finish\", intent=\"finish\", needs_retrieval=\"no\".\n7. Otherwise, set next_node=\"clarify_request\" with low confidence (<0.6) and reason asking for clarification.\n\nAdditional guidance:\n- Use conversation_summary, last_assistant_message, last_tool_result, and memories to raise or lower confidence, and to decide state_update if the user provides persistent info (e.g., new name, preferences).\n- Keep outputs deterministic and concise. Do not output any fields other than the six required keys.\n- Return the result as a single JSON object only.\n\nExample output format:\n{\"next_node\":\"clarify_request\",\"intent\":\"clarify\",\"confidence\":0.85,\"needs_retrieval\":\"no\",\"state_update\":\"no_change\",\"reason\":\"User message empty; ask for clarification.\"}\n\nNow, read the provided inputs and return the JSON-only routing decision.",
       "fields": [
         {
           "prefix": "User Message:",
@@ -56,32 +15,12 @@
           "description": "${conversation_summary}"
         },
         {
-          "prefix": "Active Goal:",
-          "description": "${active_goal}"
-        },
-        {
-          "prefix": "Stage:",
-          "description": "${stage}"
-        },
-        {
-          "prefix": "Pending Action:",
-          "description": "${pending_action}"
-        },
-        {
-          "prefix": "Pending Question:",
-          "description": "${pending_question}"
-        },
-        {
-          "prefix": "Appointment Slots:",
-          "description": "${appointment_slots}"
+          "prefix": "Current Mode:",
+          "description": "${current_mode}"
         },
         {
           "prefix": "Last Tool Result:",
           "description": "${last_tool_result}"
-        },
-        {
-          "prefix": "Last User Message:",
-          "description": "${last_user_message}"
         },
         {
           "prefix": "Last Assistant Message:",
@@ -90,10 +29,6 @@
         {
           "prefix": "Memories:",
           "description": "${memories}"
-        },
-        {
-          "prefix": "Guard Hint:",
-          "description": "${guard_hint}"
         },
         {
           "prefix": "Next Node:",

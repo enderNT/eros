@@ -1,9 +1,9 @@
 {
   "task": "conversation_reply",
   "dataset": "dspy_service/datasets/conversation_reply.jsonl",
-  "examples": 5,
-  "dataset_fingerprint": "9656f573337126bd05eaac8a2e817476044774ed87e2f071bc03f801ab3d21a2",
-  "compiled_at": "2026-04-15T00:53:08.567556+00:00",
+  "examples": 3,
+  "dataset_fingerprint": "76cd7f307866a308dd8a4fae80df1820d8092f2a449750d34d09185497796b45",
+  "compiled_at": "2026-04-27T15:21:21.313406+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
     "auto": "heavy",
@@ -11,17 +11,14 @@
     "max_labeled_demos": 3,
     "num_threads": null,
     "mipro_train_examples": 3,
-    "mipro_val_examples": 1
+    "mipro_val_examples": 3
   },
-  "validation_split": {
-    "train_examples": 4,
-    "eval_examples": 1,
-    "rule": "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
-  },
-  "optimizer_split": {
-    "train_examples": 3,
-    "val_examples": 1,
-    "rule": "tiny-train split with last row reserved as valset for MIPROv2"
+  "dataset_usage": {
+    "optimization_examples": 3,
+    "review_examples": 3,
+    "mipro_train_examples": 3,
+    "mipro_val_examples": 3,
+    "rule": "full dataset reused for optimization, MIPRO train/val, and review without holdout split"
   },
   "artifact_path": "dspy_service/artifacts/conversation_reply.json",
   "evaluation_report_path": "dspy_service/artifacts/conversation_reply.eval.json"

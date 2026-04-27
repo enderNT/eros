@@ -1,27 +1,24 @@
 {
   "task": "state_router",
   "dataset": "dspy_service/datasets/state_router.jsonl",
-  "examples": 6,
-  "dataset_fingerprint": "9b76e5306ec1d122914327f1d912dbe541a5b509d8eab990e46dab772605d3ad",
-  "compiled_at": "2026-04-15T00:35:31.228070+00:00",
+  "examples": 7,
+  "dataset_fingerprint": "d9b9ad8277a2c7aef3b4651860afd7eda046600fbfa9448fb07a70bc9501df42",
+  "compiled_at": "2026-04-27T15:33:30.372151+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
     "auto": "heavy",
-    "max_bootstrapped_demos": 2,
-    "max_labeled_demos": 2,
+    "max_bootstrapped_demos": 4,
+    "max_labeled_demos": 4,
     "num_threads": null,
-    "mipro_train_examples": 2,
-    "mipro_val_examples": 3
+    "mipro_train_examples": 7,
+    "mipro_val_examples": 7
   },
-  "validation_split": {
-    "train_examples": 5,
-    "eval_examples": 1,
-    "rule": "4/1 holdout when dataset size is 5 or less; otherwise deterministic 80/20 with at least 1 eval row"
-  },
-  "optimizer_split": {
-    "train_examples": 2,
-    "val_examples": 3,
-    "rule": "deterministic 50/50 split of train rows into MIPRO train/val for MIPROv2"
+  "dataset_usage": {
+    "optimization_examples": 7,
+    "review_examples": 7,
+    "mipro_train_examples": 7,
+    "mipro_val_examples": 7,
+    "rule": "full dataset reused for optimization, MIPRO train/val, and review without holdout split"
   },
   "artifact_path": "dspy_service/artifacts/state_router.json",
   "evaluation_report_path": "dspy_service/artifacts/state_router.eval.json"
