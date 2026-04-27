@@ -58,7 +58,7 @@ export class ClinicRoutingService {
 
     const routingPacket: RoutingPacket = {
       user_message: compact(input.user_message, 400),
-      conversation_summary: compact(input.conversation_summary, 500),
+      conversation_summary: input.conversation_summary,
       current_mode: compact(this.normalizeMode(input.current_mode), 40),
       last_tool_result: compact(input.last_tool_result, 280),
       last_assistant_message: compact(input.last_assistant_message, 280),

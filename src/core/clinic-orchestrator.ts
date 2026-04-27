@@ -48,11 +48,6 @@ function buildConsoleFlowSummary(
   return parts.length > 0 ? `${capability} [${parts.join(", ")}]` : capability;
 }
 
-function compact(value: string, limit: number): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
-}
-
 const RECENT_TURN_LIMIT = 5;
 
 function buildTurnPairsFromHistory(
@@ -64,7 +59,7 @@ function buildTurnPairsFromHistory(
   for (const entry of history) {
     if (entry.role === "user") {
       if (pendingUser) {
-        recentTurns.push({ user: compact(pendingUser, 220), assistant: "" });
+        recentTurns.push({ user: pendingUser, assistant: "" });
       }
       pendingUser = entry.text;
       continue;
@@ -75,14 +70,14 @@ function buildTurnPairsFromHistory(
     }
 
     recentTurns.push({
-      user: compact(pendingUser, 220),
-      assistant: compact(entry.text, 220)
+      user: pendingUser,
+      assistant: entry.text
     });
     pendingUser = "";
   }
 
   if (pendingUser) {
-    recentTurns.push({ user: compact(pendingUser, 220), assistant: "" });
+    recentTurns.push({ user: pendingUser, assistant: "" });
   }
 
   return recentTurns;
@@ -107,7 +102,7 @@ function buildSummaryFromHistory(
   const summary = archivedTurns
     .map((turn) => `Usuario: ${turn.user}${turn.assistant ? ` Asistente: ${turn.assistant}` : ""}`)
     .join(" | ");
-  return compact(summary, 700);
+  return summary;
 }
 
 function buildInitialGraphState(

@@ -15,11 +15,6 @@ import {
   readStringValue
 } from "./json-response";
 
-function compact(value: string, limit: number): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
-}
-
 function isFirstTurn(context?: ReplyContextState): boolean {
   if (!context) {
     return true;
@@ -337,15 +332,12 @@ export class ClinicLlmService {
     );
 
     if (!text) {
-      return compact(
-        [input.current_summary, `Usuario: ${input.user_message}`, `Asistente: ${input.assistant_message}`]
-          .filter(Boolean)
-          .join(" "),
-        700
-      );
+      return [input.current_summary, `Usuario: ${input.user_message}`, `Asistente: ${input.assistant_message}`]
+        .filter(Boolean)
+        .join(" ");
     }
 
-    return compact(text, 700);
+    return text.trim();
   }
 
   private fallbackAppointment(

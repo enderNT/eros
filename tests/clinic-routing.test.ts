@@ -139,4 +139,39 @@ describe("clinic routing deterministic guards", () => {
       validation_applied: true
     });
   });
+
+  test("sends the full conversation summary to the routing signature while keeping other routing guards intact", async () => {
+    const settings = buildTestSettings({
+      dspy: {
+        enabled: true
+      }
+    });
+    const llmService = new ClinicLlmService(settings);
+    const bridge = new ClinicDspyHttpBridge(settings.dspy);
+    let capturedPayload: Record<string, unknown> | null = null;
+    bridge.predictStateRouter = async (payload) => {
+      capturedPayload = payload;
+      return {
+        next_node: "conversation",
+        intent: "conversation",
+        confidence: 0.8,
+        needs_retrieval: false,
+        state_update: {},
+        reason: "remote-dspy"
+      };
+    };
+    const routingService = new ClinicRoutingService(settings, llmService, bridge);
+    const longSummary = `Resumen-${"s".repeat(700)}`;
+
+    await routingService.routeState({
+      user_message: "Quiero continuar con lo anterior",
+      conversation_summary: longSummary,
+      current_mode: "conversation",
+      last_tool_result: "",
+      last_assistant_message: "",
+      memories: []
+    });
+
+    expect(capturedPayload?.conversation_summary).toBe(longSummary);
+  });
 });

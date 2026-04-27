@@ -268,6 +268,55 @@ describe("clinic short-term memory window", () => {
     expect(workflow.recordedState?.turn_count).toBe(7);
   });
 
+  test("keeps full archived and recent chat text when sliding window plus summary already handles overflow", async () => {
+    const workflow = new RecordingWorkflow();
+    const orchestrator = new ClinicOrchestrator(
+      new InMemoryClinicStateStore(),
+      workflow as unknown as ClinicWorkflow,
+      { emit: async () => undefined } satisfies OutboundTransport,
+      new InMemoryTraceSink(),
+      new OperationalLogger(buildTestSettings())
+    );
+    const archivedUser = `usuario-${"u".repeat(260)}`;
+    const archivedAssistant = `asistente-${"a".repeat(260)}`;
+    const recentUser = `reciente-${"r".repeat(260)}`;
+    const recentAssistant = `respuesta-${"s".repeat(260)}`;
+
+    await orchestrator.processTurn({
+      sessionId: "session-2",
+      actorId: "actor-2",
+      channel: "test",
+      text: "turno actual",
+      rawPayload: {},
+      receivedAt: new Date().toISOString(),
+      deliveryContext: {
+        provider: "test",
+        history: [
+          { role: "user", text: archivedUser },
+          { role: "assistant", text: archivedAssistant },
+          { role: "user", text: "u2" },
+          { role: "assistant", text: "a2" },
+          { role: "user", text: recentUser },
+          { role: "assistant", text: recentAssistant },
+          { role: "user", text: "u4" },
+          { role: "assistant", text: "a4" },
+          { role: "user", text: "u5" },
+          { role: "assistant", text: "a5" },
+          { role: "user", text: "u6" },
+          { role: "assistant", text: "a6" },
+          { role: "user", text: "u7" },
+          { role: "assistant", text: "a7" }
+        ]
+      }
+    });
+
+    expect(workflow.recordedState?.summary).toContain(`Usuario: ${archivedUser} Asistente: ${archivedAssistant}`);
+    expect(workflow.recordedState?.recent_turns[0]).toEqual({
+      user: recentUser,
+      assistant: recentAssistant
+    });
+  });
+
   test("folds overflow turns into summary while keeping a five-turn window", async () => {
     const settings = buildTestSettings({
       prompt: {
@@ -302,5 +351,57 @@ describe("clinic short-term memory window", () => {
     expect(memoryRuntime.commitCalls).toHaveLength(1);
     expect(memoryRuntime.commitCalls[0]?.recentTurns).toHaveLength(5);
     expect(memoryRuntime.commitCalls[0]?.shortTermSummary).toContain("Usuario: u1 Asistente: a1");
+  });
+
+  test("stores full recent turns and summary text after overflow folding", async () => {
+    const settings = buildTestSettings({
+      prompt: {
+        memoryMaxItems: 3,
+        memoryBudgetChars: 1200,
+        recentTurnsLimit: 9,
+        summarizeOnOverflow: true
+      }
+    });
+    class LongReplyClinicLlmService extends StubClinicLlmService {
+      override async generateConversationReply(): Promise<GeneratedReply> {
+        return {
+          response_text: longCurrentAssistant,
+          reply_mode: "llm"
+        };
+      }
+    }
+    const memoryRuntime = new StubClinicMemoryRuntime();
+    const longOverflowUser = `u1-${"x".repeat(260)}`;
+    const longOverflowAssistant = `a1-${"y".repeat(260)}`;
+    const longCurrentUser = `nuevo-${"n".repeat(260)}`;
+    const longCurrentAssistant = `respuesta-${"m".repeat(260)}`;
+    const llmService = new LongReplyClinicLlmService();
+    const workflow = new ClinicWorkflow(
+      new StubRoutingService(),
+      llmService,
+      memoryRuntime,
+      new StubKnowledgeProvider(),
+      new StubDspyBridge(),
+      settings
+    );
+
+    const result = await workflow.run({
+      ...createGraphState(),
+      last_user_message: longCurrentUser,
+      recent_turns: [
+        { user: longOverflowUser, assistant: longOverflowAssistant },
+        { user: "u2", assistant: "a2" },
+        { user: "u3", assistant: "a3" },
+        { user: "u4", assistant: "a4" },
+        { user: "u5", assistant: "a5" }
+      ]
+    });
+
+    expect(llmService.summaryCalls.some((call) => call.user_message === longOverflowUser)).toBe(true);
+    expect(result.state.summary).toContain(`Usuario: ${longOverflowUser} Asistente: ${longOverflowAssistant}`);
+    expect(result.state.recent_turns.at(-1)).toEqual({
+      user: longCurrentUser,
+      assistant: longCurrentAssistant
+    });
   });
 });

@@ -200,7 +200,7 @@ function appendRecentTurn(
   userMessage: string,
   assistantMessage: string
 ) {
-  return [...recentTurns, { user: compact(userMessage, 220), assistant: compact(assistantMessage, 220) }];
+  return [...recentTurns, { user: userMessage, assistant: assistantMessage }];
 }
 
 function mergeSlots(existing: Record<string, unknown>, incoming: Record<string, unknown>) {
@@ -695,7 +695,7 @@ export class ClinicWorkflow {
 
     const nextState = {
       ...state,
-      summary: compact(updatedSummary, 700),
+      summary: updatedSummary,
       summary_refresh_requested: false,
       recent_turns: retainedRecentTurns
     };
