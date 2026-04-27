@@ -3,7 +3,7 @@
   "dataset": "dspy_service/datasets/state_router.jsonl",
   "examples": 7,
   "dataset_fingerprint": "d9b9ad8277a2c7aef3b4651860afd7eda046600fbfa9448fb07a70bc9501df42",
-  "compiled_at": "2026-04-27T15:33:30.372151+00:00",
+  "compiled_at": "2026-04-27T17:37:46.658608+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
     "auto": "heavy",
@@ -12,6 +12,55 @@
     "num_threads": null,
     "mipro_train_examples": 7,
     "mipro_val_examples": 7
+  },
+  "metric_profile": {
+    "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
+    "criteria": [
+      {
+        "name": "next_node_match",
+        "description": "La decision de ruteo coincide con uno de los tres destinos operativos esperados (conversation, rag o appointment) para el caso.",
+        "field": "next_node",
+        "scorer": "exact_field_match",
+        "weight": 0.28
+      },
+      {
+        "name": "intent_match",
+        "description": "La intencion clasificada se mantiene alineada con la accion o necesidad principal del caso, sin sobrevalorar diferencias menores de redaccion en la etiqueta.",
+        "field": "intent",
+        "scorer": "exact_field_match",
+        "weight": 0.1
+      },
+      {
+        "name": "needs_retrieval_match",
+        "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
+        "field": "needs_retrieval",
+        "scorer": "exact_field_match",
+        "weight": 0.16
+      },
+      {
+        "name": "confidence_alignment",
+        "description": "La confianza se mantiene en un rango cercano al valor esperado como senal secundaria de solidez de la decision, sin pesar mas que el acierto del ruteo.",
+        "field": "confidence",
+        "scorer": "float_tolerance",
+        "weight": 0.06,
+        "tolerance": 0.05,
+        "max_diff": 0.35
+      },
+      {
+        "name": "state_update_coverage",
+        "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
+        "field": "state_update",
+        "scorer": "dict_subset_match",
+        "weight": 0.26
+      },
+      {
+        "name": "reason_similarity",
+        "description": "La justificacion conserva la misma logica operativa de decision: por que ese nodo, por que si o no retrieval, y cual es el siguiente paso esperado.",
+        "field": "reason",
+        "scorer": "text_similarity",
+        "weight": 0.14
+      }
+    ]
   },
   "dataset_usage": {
     "optimization_examples": 7,

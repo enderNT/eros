@@ -1,0 +1,4 @@
+- Proceso que se sigue para atender casos de autismo e intervenirlos
+- Metodos de pago
+- Horarios por "terapia" (segun disponibilidad en calendario)
+- Tabla de precios
