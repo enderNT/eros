@@ -54,33 +54,33 @@ SPANISH_STOPWORDS = {
 
 
 METRIC_PROFILES: dict[str, dict[str, Any]] = {
-    "conversation_reply": {
-        "description": "Metrica hibrida para respuestas conversacionales: combina similitud global, cobertura de informacion clave y presencia del siguiente paso conversacional.",
-        "criteria": [
-            {
-                "name": "response_similarity",
-                "description": "La respuesta generada conserva de forma global la intencion y el contenido de la respuesta objetivo.",
-                "field": "response_text",
-                "scorer": "text_similarity",
-                "weight": 0.35,
-            },
-            {
-                "name": "key_information_coverage",
-                "description": "La respuesta generada cubre los terminos informativos relevantes presentes en la respuesta objetivo.",
-                "field": "response_text",
-                "scorer": "keyword_coverage",
-                "weight": 0.45,
-                "min_token_length": 4,
-            },
-            {
-                "name": "follow_up_alignment",
-                "description": "Si la respuesta objetivo pide el siguiente dato o cierra con una pregunta de avance, la respuesta generada tambien lo hace.",
-                "field": "response_text",
-                "scorer": "question_alignment",
-                "weight": 0.20,
-            },
-        ],
-    },
+  "conversation_reply": {
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas directas, utiles y orientadas al siguiente paso, evitando repetir contexto, agregar obviedades o sobremencionar la clinica sin necesidad.",
+    "criteria": [
+      {
+        "name": "response_similarity",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+        "field": "response_text",
+        "scorer": "text_similarity",
+        "weight": 0.35
+      },
+      {
+        "name": "key_information_coverage",
+        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+        "field": "response_text",
+        "scorer": "keyword_coverage",
+        "weight": 0.45,
+        "min_token_length": 4
+      },
+      {
+        "name": "follow_up_alignment",
+        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+        "field": "response_text",
+        "scorer": "question_alignment",
+        "weight": 0.20
+      },
+    ]
+  },
     "rag_reply": {
         "description": "Metrica hibrida para respuestas RAG: prioriza retener hechos clave y mantener una formulacion cercana al objetivo, sin exigir igualdad literal.",
         "criteria": [
@@ -109,54 +109,54 @@ METRIC_PROFILES: dict[str, dict[str, Any]] = {
         ],
     },
     "state_router": {
-        "description": "Metrica estructural ponderada para decisiones de ruteo, con tolerancia limitada en confianza y razon.",
+        "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
         "criteria": [
             {
                 "name": "next_node_match",
-                "description": "La ruta elegida coincide con el destino esperado.",
+                "description": "La decision de ruteo coincide con uno de los tres destinos operativos esperados (conversation, rag o appointment) para el caso.",
                 "field": "next_node",
                 "scorer": "exact_field_match",
-                "weight": 0.24,
+                "weight": 0.28
             },
             {
                 "name": "intent_match",
-                "description": "La intencion clasificada coincide con la etiqueta esperada.",
+                "description": "La intencion clasificada se mantiene alineada con la accion o necesidad principal del caso, sin sobrevalorar diferencias menores de redaccion en la etiqueta.",
                 "field": "intent",
                 "scorer": "exact_field_match",
-                "weight": 0.18,
+                "weight": 0.1
             },
             {
                 "name": "needs_retrieval_match",
-                "description": "La necesidad de retrieval coincide con lo esperado.",
+                "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
                 "field": "needs_retrieval",
                 "scorer": "exact_field_match",
-                "weight": 0.14,
+                "weight": 0.16
             },
             {
                 "name": "confidence_alignment",
-                "description": "La confianza se mantiene cerca del valor esperado dentro de una tolerancia razonable.",
+                "description": "La confianza se mantiene en un rango cercano al valor esperado como senal secundaria de solidez de la decision, sin pesar mas que el acierto del ruteo.",
                 "field": "confidence",
                 "scorer": "float_tolerance",
-                "weight": 0.12,
+                "weight": 0.06,
                 "tolerance": 0.05,
-                "max_diff": 0.35,
+                "max_diff": 0.35
             },
             {
                 "name": "state_update_coverage",
-                "description": "El state_update generado conserva los campos esperados aunque agregue contexto adicional.",
+                "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
                 "field": "state_update",
                 "scorer": "dict_subset_match",
-                "weight": 0.20,
+                "weight": 0.26
             },
             {
                 "name": "reason_similarity",
-                "description": "La justificacion mantiene el mismo criterio de decision sin requerir redaccion identica.",
+                "description": "La justificacion conserva la misma logica operativa de decision: por que ese nodo, por que si o no retrieval, y cual es el siguiente paso esperado.",
                 "field": "reason",
                 "scorer": "text_similarity",
-                "weight": 0.12,
-            },
-        ],
-    },
+                "weight": 0.14
+            }
+        ]
+  }
 }
 
 
