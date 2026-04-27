@@ -28,6 +28,27 @@ class MetricProfilesTest(unittest.TestCase):
             "follow_up_alignment",
         ])
 
+    def test_conversation_reply_penalizes_coach_style_guidance(self) -> None:
+        expected = {
+            "response_text": "Podemos ayudarte a valorar lo que esta pasando en la clinica. Si gustas, te comparto el link para agendar una cita de evaluacion?",
+        }
+        clinic_prediction = {
+            "response_text": "Podemos ayudarte a valorar lo que esta pasando en la clinica. Si gustas, te comparto el link para agendar una cita de evaluacion?",
+        }
+        coach_prediction = {
+            "response_text": "Podemos ayudarte a valorar lo que esta pasando en la clinica. Puedo ofrecerte tecnicas inmediatas, ejercicios de respiracion y una guia paso a paso para calmarte. Si gustas, te comparto el link para agendar una cita de evaluacion?",
+        }
+
+        clinic_score, clinic_details = score_prediction_with_details("conversation_reply", expected, clinic_prediction)
+        coach_score, coach_details = score_prediction_with_details("conversation_reply", expected, coach_prediction)
+
+        clinic_follow_up = next(detail for detail in clinic_details if detail["name"] == "follow_up_alignment")
+        coach_follow_up = next(detail for detail in coach_details if detail["name"] == "follow_up_alignment")
+
+        self.assertGreater(clinic_score, coach_score)
+        self.assertGreater(clinic_follow_up["score"], coach_follow_up["score"])
+        self.assertLess(coach_follow_up["score"], 0.5)
+
     def test_state_router_gives_partial_credit_for_state_update_subset_and_reason_similarity(self) -> None:
         expected = {
             "next_node": "rag",

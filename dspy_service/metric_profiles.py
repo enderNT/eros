@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from copy import deepcopy
 from difflib import SequenceMatcher
 from typing import Any
@@ -52,32 +53,51 @@ SPANISH_STOPWORDS = {
     "ya",
 }
 
+CONVERSATION_COACH_STYLE_PATTERNS = (
+    "puedo ofrecerte",
+    "te puedo ofrecer",
+    "puedo darte",
+    "te puedo dar",
+    "guia paso a paso",
+    "pasos concretos",
+    "tecnicas inmediatas",
+    "estrategias para",
+    "autocuidado",
+    "ejercicios de respiracion",
+    "ejercicios para calmarte",
+    "anclaje",
+    "distracciones suaves",
+    "recursos de ayuda",
+    "lugar seguro",
+    "probar ejercicios",
+)
+
 
 METRIC_PROFILES: dict[str, dict[str, Any]] = {
   "conversation_reply": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas directas, utiles y orientadas al siguiente paso, evitando repetir contexto, agregar obviedades o sobremencionar la clinica sin necesidad.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas claras, empaticas y orientadas al siguiente paso clinico, evitando tono de coach, autoayuda, listas de consejos o guias paso a paso.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.35
+        "weight": 0.30
       },
       {
         "name": "key_information_coverage",
-        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.45,
+        "weight": 0.40,
         "min_token_length": 4
       },
       {
         "name": "follow_up_alignment",
-        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
         "field": "response_text",
-        "scorer": "question_alignment",
-        "weight": 0.20
+        "scorer": "conversation_follow_up",
+        "weight": 0.30
       },
     ]
   },
@@ -172,6 +192,11 @@ def _normalize_text(value: Any) -> str:
     text = str(value or "").strip().lower()
     text = re.sub(r"\s+", " ", text)
     return text
+
+
+def _normalize_match_text(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", _normalize_text(value))
+    return "".join(character for character in text if not unicodedata.combining(character))
 
 
 def _tokenize(text: str) -> list[str]:
@@ -339,7 +364,31 @@ def _score_question_alignment(criterion: dict[str, Any], expected: dict[str, Any
     return 1.0 if actual_has_question else 0.0
 
 
+def _score_conversation_follow_up(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
+    base_score = _score_question_alignment(criterion, expected, actual)
+    if base_score <= 0:
+        return 0.0
+
+    actual_text = str(actual.get(criterion["field"], ""))
+    normalized_actual = _normalize_match_text(actual_text)
+    penalty = 0.0
+
+    matched_patterns = sum(1 for pattern in CONVERSATION_COACH_STYLE_PATTERNS if pattern in normalized_actual)
+    if matched_patterns:
+        penalty += min(0.70, matched_patterns * 0.18)
+
+    if re.search(r"(?m)^\s*[-*]\s+\S", actual_text):
+        penalty += 0.20
+
+    question_count = actual_text.count("?")
+    if question_count > 1:
+        penalty += min(0.20, (question_count - 1) * 0.10)
+
+    return max(0.0, base_score - penalty)
+
+
 CRITERION_SCORERS = {
+    "conversation_follow_up": _score_conversation_follow_up,
     "dict_subset_match": _score_dict_subset_match,
     "exact_field_match": _score_exact_field_match,
     "float_tolerance": _score_float_tolerance,

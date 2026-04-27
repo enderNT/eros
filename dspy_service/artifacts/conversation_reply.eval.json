@@ -6,35 +6,35 @@
   "optimization_examples": 3,
   "review_examples": 3,
   "review_scope": "same dataset used for optimization; no holdout split",
-  "baseline_score": 0.2,
+  "baseline_score": 0.3,
   "metric_profile": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas directas, utiles y orientadas al siguiente paso, evitando repetir contexto, agregar obviedades o sobremencionar la clinica sin necesidad.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas claras, empaticas y orientadas al siguiente paso clinico, evitando tono de coach, autoayuda, listas de consejos o guias paso a paso.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.35
+        "weight": 0.3
       },
       {
         "name": "key_information_coverage",
-        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.45,
+        "weight": 0.4,
         "min_token_length": 4
       },
       {
         "name": "follow_up_alignment",
-        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
         "field": "response_text",
-        "scorer": "question_alignment",
-        "weight": 0.2
+        "scorer": "conversation_follow_up",
+        "weight": 0.3
       }
     ]
   },
-  "optimized_score": 0.2,
+  "optimized_score": 0.3,
   "review_required": true,
   "examples": [
     {
@@ -62,64 +62,64 @@
       "target_response_text": "",
       "baseline_response_text": "Hi — how can I help you today? You can ask me a question, request a task (writing, summarizing, planning, coding, etc.), or tell me what you’re working on and I’ll assist. If you’d like, give me a little context and the outcome you want.",
       "optimized_response_text": "Hi — how can I help you today? You can ask me a question, request a task (writing, summarizing, planning, coding, etc.), or tell me what you’re working on and I’ll assist. If you’d like, give me a little context and the outcome you want.",
-      "baseline_score": 0.2,
-      "optimized_score": 0.2,
+      "baseline_score": 0.3,
+      "optimized_score": 0.3,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.45,
+          "weight": 0.4,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
           "field": "response_text",
-          "scorer": "question_alignment",
-          "weight": 0.2,
+          "scorer": "conversation_follow_up",
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.2
+          "weighted_score": 0.3
         }
       ],
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.45,
+          "weight": 0.4,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
           "field": "response_text",
-          "scorer": "question_alignment",
-          "weight": 0.2,
+          "scorer": "conversation_follow_up",
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.2
+          "weighted_score": 0.3
         }
       ]
     },
@@ -148,64 +148,64 @@
       "target_response_text": "",
       "baseline_response_text": "Hi — how can I help you today? You can ask me a question, request a task (writing, summarizing, planning, coding, etc.), or tell me what you’re working on and I’ll assist. If you’d like, give me a little context and the outcome you want.",
       "optimized_response_text": "Hi — how can I help you today? You can ask me a question, request a task (writing, summarizing, planning, coding, etc.), or tell me what you’re working on and I’ll assist. If you’d like, give me a little context and the outcome you want.",
-      "baseline_score": 0.2,
-      "optimized_score": 0.2,
+      "baseline_score": 0.3,
+      "optimized_score": 0.3,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.45,
+          "weight": 0.4,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
           "field": "response_text",
-          "scorer": "question_alignment",
-          "weight": 0.2,
+          "scorer": "conversation_follow_up",
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.2
+          "weighted_score": 0.3
         }
       ],
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.45,
+          "weight": 0.4,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
           "field": "response_text",
-          "scorer": "question_alignment",
-          "weight": 0.2,
+          "scorer": "conversation_follow_up",
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.2
+          "weighted_score": 0.3
         }
       ]
     },
@@ -234,64 +234,64 @@
       "target_response_text": "",
       "baseline_response_text": "Hi — how can I help you today? You can ask me a question, request a task (writing, summarizing, planning, coding, etc.), or tell me what you’re working on and I’ll assist. If you’d like, give me a little context and the outcome you want.",
       "optimized_response_text": "Hi — how can I help you today? You can ask me a question, request a task (writing, summarizing, planning, coding, etc.), or tell me what you’re working on and I’ll assist. If you’d like, give me a little context and the outcome you want.",
-      "baseline_score": 0.2,
-      "optimized_score": 0.2,
+      "baseline_score": 0.3,
+      "optimized_score": 0.3,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.45,
+          "weight": 0.4,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
           "field": "response_text",
-          "scorer": "question_alignment",
-          "weight": 0.2,
+          "scorer": "conversation_follow_up",
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.2
+          "weighted_score": 0.3
         }
       ],
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con una redaccion directa y sin relleno innecesario.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a detalles secundarios, obvios o promocionales que no ayudan a resolver el turno.",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.45,
+          "weight": 0.4,
           "score": 0.0,
           "weighted_score": 0.0
         },
         {
           "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace, evitando abrir temas adicionales o encadenar preguntas innecesarias.",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
           "field": "response_text",
-          "scorer": "question_alignment",
-          "weight": 0.2,
+          "scorer": "conversation_follow_up",
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.2
+          "weighted_score": 0.3
         }
       ]
     }
