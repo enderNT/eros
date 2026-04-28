@@ -203,8 +203,6 @@ export class ClinicRoutingService {
 
   private isExplicitRagRequest(userMessage: string): boolean {
     return [
-      "horario",
-      "horarios",
       "precio",
       "costo",
       "costos",
