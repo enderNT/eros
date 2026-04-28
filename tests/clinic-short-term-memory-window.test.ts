@@ -163,7 +163,9 @@ class StubKnowledgeProvider implements ClinicKnowledgeProvider {
       backend: "simulate" as const,
       status: "simulated" as const,
       resultCount: 0,
-      fallbackUsed: false
+      fallbackUsed: false,
+      originalQuery: "",
+      rewrittenQuery: ""
     };
   }
 }

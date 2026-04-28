@@ -30,11 +30,20 @@ describe("QdrantRetrievalService", () => {
       toContextText: async () => "Clinica: Eros\nServicios:\n- Consulta inicial"
     });
 
-    const context = await service.buildContext("quiero informacion", "contact-1", ["memoria breve"]);
+    const context = await service.buildContext({
+      last_user_message: "quiero informacion",
+      recent_turns: [
+        { user: "quiero terapia individual", assistant: "Puedo orientarte con opciones." }
+      ],
+      contact_id: "contact-1",
+      memories: ["memoria breve"]
+    });
 
     expect(context.status).toBe("qdrant_unavailable");
     expect(context.backend).toBe("clinic_config");
     expect(context.fallbackUsed).toBe(true);
+    expect(context.originalQuery).toBe("quiero informacion");
+    expect(context.rewrittenQuery).toContain("Turnos recientes del hilo:");
     expect(context.text).toContain("Contexto base de respaldo desde clinic.json:");
     expect(context.text).toContain("Clinica: Eros");
   });
@@ -95,11 +104,19 @@ describe("QdrantRetrievalService", () => {
     });
 
     try {
-      const context = await service.buildContext("quiero informacion", "contact-1", ["memoria breve"]);
+      const context = await service.buildContext({
+        last_user_message: "quiero informacion",
+        recent_turns: [
+          { user: "quiero terapia individual", assistant: "Puedo orientarte con opciones." }
+        ],
+        contact_id: "contact-1",
+        memories: ["memoria breve"]
+      });
 
       expect(context.status).toBe("no_results");
       expect(context.backend).toBe("clinic_config");
       expect(context.fallbackUsed).toBe(true);
+      expect(context.rewrittenQuery).toContain("Consulta actual del usuario:");
       expect(context.text).toContain("Qdrant sin resultados. Usando respaldo de clinic.json.");
     } finally {
       globalThis.fetch = originalFetch;

@@ -27,6 +27,8 @@ export interface ClinicWorkflowDiagnostics {
     status: ClinicKnowledgeContext["status"];
     resultCount: number;
     fallbackUsed: boolean;
+    originalQuery: string;
+    rewrittenQuery: string;
   };
   shortTermMemory?: {
     summarizedTurns: number;
@@ -509,15 +511,20 @@ export class ClinicWorkflow {
     traceId?: string
   ): Promise<{ state: GraphState; diagnostics: ClinicWorkflowDiagnostics }> {
     const ragContext = await this.knowledgeProvider.buildContext(
-      state.last_user_message || "contexto del usuario",
-      state.actor_id,
-      state.recalled_memories
+      {
+        last_user_message: state.last_user_message || "contexto del usuario",
+        recent_turns: state.recent_turns,
+        contact_id: state.actor_id,
+        memories: state.recalled_memories
+      }
     );
     await this.trace(traceId, "clinic.rag.retrieval.meta", {
       backend: ragContext.backend,
       status: ragContext.status,
       result_count: ragContext.resultCount,
-      fallback_used: ragContext.fallbackUsed
+      fallback_used: ragContext.fallbackUsed,
+      original_query: ragContext.originalQuery,
+      rewritten_query: ragContext.rewrittenQuery
     });
     const payload = {
       ...this.buildConversationPayload(state),
@@ -554,7 +561,9 @@ export class ClinicWorkflow {
           backend: ragContext.backend,
           status: ragContext.status,
           resultCount: ragContext.resultCount,
-          fallbackUsed: ragContext.fallbackUsed
+          fallbackUsed: ragContext.fallbackUsed,
+          originalQuery: ragContext.originalQuery,
+          rewrittenQuery: ragContext.rewrittenQuery
         },
         reply: {
           node: "rag",

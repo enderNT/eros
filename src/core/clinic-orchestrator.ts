@@ -427,7 +427,8 @@ export class ClinicOrchestrator {
             ? "qdrant_simulation"
             : "qdrant",
         request: {
-          query: inbound.text,
+          query: diagnostics.retrieval.originalQuery,
+          rewritten_query: diagnostics.retrieval.rewrittenQuery,
           contact_id: inbound.actorId
         },
         response: {

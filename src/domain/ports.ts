@@ -64,6 +64,8 @@ export interface ClinicKnowledgeContext {
   status: "ok" | "no_results" | "qdrant_unavailable" | "simulated";
   resultCount: number;
   fallbackUsed: boolean;
+  originalQuery: string;
+  rewrittenQuery: string;
 }
 
 export interface TraceSink {
@@ -197,7 +199,12 @@ export interface ClinicDspyBridge {
 }
 
 export interface ClinicKnowledgeProvider {
-  buildContext(query: string, contactId: string, memories: string[]): Promise<ClinicKnowledgeContext>;
+  buildContext(input: {
+    last_user_message: string;
+    recent_turns: Array<Record<string, string>>;
+    contact_id: string;
+    memories: string[];
+  }): Promise<ClinicKnowledgeContext>;
 }
 
 export interface ClinicConfigProvider {

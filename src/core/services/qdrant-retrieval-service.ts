@@ -12,6 +12,31 @@ function shorten(value: string, limit: number): string {
   return compact.length <= limit ? compact : `${compact.slice(0, limit - 3)}...`;
 }
 
+function formatRecentTurns(recentTurns: Array<Record<string, string>>): string {
+  return recentTurns
+    .slice(-3)
+    .map((turn) => {
+      const user = shorten(String(turn.user ?? "").trim(), 140);
+      const assistant = shorten(String(turn.assistant ?? "").trim(), 140);
+      return [user ? `Usuario: ${user}` : "", assistant ? `Asistente: ${assistant}` : ""].filter(Boolean).join(" | ");
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildRewrittenQuery(lastUserMessage: string, recentTurns: Array<Record<string, string>>): string {
+  const compactUserMessage = shorten(lastUserMessage, 280);
+  const compactRecentTurns = formatRecentTurns(recentTurns);
+  if (!compactRecentTurns) {
+    return compactUserMessage;
+  }
+
+  return [
+    `Turnos recientes del hilo:\n${compactRecentTurns}`,
+    `Consulta actual del usuario: ${compactUserMessage}`
+  ].join("\n");
+}
+
 export class QdrantRetrievalService implements ClinicKnowledgeProvider {
   private readonly chatCompletionsUrl: string | null;
 
@@ -35,38 +60,50 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
     return Boolean(this.settings.qdrant.enabled && this.settings.qdrant.baseUrl && this.settings.qdrant.collectionName);
   }
 
-  async buildContext(query: string, contactId: string, memories: string[]): Promise<ClinicKnowledgeContext> {
+  async buildContext(input: {
+    last_user_message: string;
+    recent_turns: Array<Record<string, string>>;
+    contact_id: string;
+    memories: string[];
+  }): Promise<ClinicKnowledgeContext> {
+    const originalQuery = input.last_user_message.trim() || "contexto del usuario";
+    const rewrittenQuery = buildRewrittenQuery(originalQuery, input.recent_turns);
+
     if (this.settings.qdrant.simulate) {
-      const simulated = this.simulate(query, contactId);
+      const simulated = this.simulate(rewrittenQuery, input.contact_id);
       return {
-        text: this.renderContext(query, memories, simulated),
+        text: this.renderContext(originalQuery, rewrittenQuery, input.memories, simulated),
         backend: "simulate",
         status: "simulated",
         resultCount: simulated.length,
-        fallbackUsed: false
+        fallbackUsed: false,
+        originalQuery,
+        rewrittenQuery
       };
     }
 
     if (!this.ready) {
-      return this.buildFallbackOrUnavailableContext(query, memories, "qdrant_unavailable");
+      return this.buildFallbackOrUnavailableContext(originalQuery, rewrittenQuery, input.memories, "qdrant_unavailable");
     }
 
-    const results = await this.search(query, contactId);
+    const results = await this.search(rewrittenQuery, input.contact_id);
     if (results === null) {
-      return this.buildFallbackOrUnavailableContext(query, memories, "qdrant_unavailable");
+      return this.buildFallbackOrUnavailableContext(originalQuery, rewrittenQuery, input.memories, "qdrant_unavailable");
     }
 
     if (results.length > 0) {
       return {
-        text: this.renderContext(query, memories, results),
+        text: this.renderContext(originalQuery, rewrittenQuery, input.memories, results),
         backend: "qdrant",
         status: "ok",
         resultCount: results.length,
-        fallbackUsed: false
+        fallbackUsed: false,
+        originalQuery,
+        rewrittenQuery
       };
     }
 
-    return this.buildFallbackOrUnavailableContext(query, memories, "no_results");
+    return this.buildFallbackOrUnavailableContext(originalQuery, rewrittenQuery, input.memories, "no_results");
   }
 
   private async loadFallbackContext(): Promise<string> {
@@ -112,33 +149,39 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
   }
 
   private async buildFallbackOrUnavailableContext(
-    query: string,
+    originalQuery: string,
+    rewrittenQuery: string,
     memories: string[],
     status: "qdrant_unavailable" | "no_results"
   ): Promise<ClinicKnowledgeContext> {
     const fallbackContext = await this.loadFallbackContext();
     if (fallbackContext) {
       return {
-        text: this.renderFallbackContext(query, memories, fallbackContext, status),
+        text: this.renderFallbackContext(originalQuery, rewrittenQuery, memories, fallbackContext, status),
         backend: "clinic_config",
         status,
         resultCount: 0,
-        fallbackUsed: true
+        fallbackUsed: true,
+        originalQuery,
+        rewrittenQuery
       };
     }
 
     return {
-      text: this.renderEmptyContext(query, memories, status),
+      text: this.renderEmptyContext(originalQuery, rewrittenQuery, memories, status),
       backend: "qdrant",
       status,
       resultCount: 0,
-      fallbackUsed: false
+      fallbackUsed: false,
+      originalQuery,
+      rewrittenQuery
     };
   }
 
-  private renderContext(query: string, memories: string[], results: QdrantPoint[]): string {
+  private renderContext(originalQuery: string, rewrittenQuery: string, memories: string[], results: QdrantPoint[]): string {
     const chunks = [
-      `Consulta RAG ejecutada en Qdrant para: ${query}`,
+      `Consulta original del usuario: ${originalQuery}`,
+      `Query enriquecida para Qdrant: ${rewrittenQuery}`,
       "",
       "Memoria conversacional relevante:",
       memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
@@ -156,7 +199,8 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
   }
 
   private renderFallbackContext(
-    query: string,
+    originalQuery: string,
+    rewrittenQuery: string,
     memories: string[],
     fallbackContext: string,
     status: "qdrant_unavailable" | "no_results"
@@ -167,7 +211,8 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
 
     return [
       title,
-      `Consulta original: ${query}`,
+      `Consulta original del usuario: ${originalQuery}`,
+      `Query enriquecida para Qdrant: ${rewrittenQuery}`,
       "",
       "Memoria conversacional relevante:",
       memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
@@ -178,7 +223,8 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
   }
 
   private renderEmptyContext(
-    query: string,
+    originalQuery: string,
+    rewrittenQuery: string,
     memories: string[],
     status: "qdrant_unavailable" | "no_results"
   ): string {
@@ -188,7 +234,8 @@ export class QdrantRetrievalService implements ClinicKnowledgeProvider {
 
     return [
       title,
-      `Consulta original: ${query}`,
+      `Consulta original del usuario: ${originalQuery}`,
+      `Query enriquecida para Qdrant: ${rewrittenQuery}`,
       "",
       "Memoria conversacional relevante:",
       memories.length > 0 ? memories.map((memory) => `- ${memory}`).join("\n") : "- Sin memorias",
