@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
 from copy import deepcopy
@@ -54,8 +53,6 @@ SPANISH_STOPWORDS = {
 }
 
 CONVERSATION_COACH_STYLE_PATTERNS = (
-    "puedo ofrecerte",
-    "te puedo ofrecer",
     "puedo darte",
     "te puedo dar",
     "guia paso a paso",
@@ -72,32 +69,76 @@ CONVERSATION_COACH_STYLE_PATTERNS = (
     "probar ejercicios",
 )
 
+CONVERSATION_DRAMATIC_STYLE_PATTERNS = (
+    "siento que estes pasando por esto",
+    "debe ser muy estresante",
+    "lamento que te sientas asi",
+    "entiendo como te puedes llegar a sentir",
+    "esperando te encuentres muy bien",
+    "espero que tu tambien estes muy bien",
+)
+
+CONVERSATION_SALESY_STYLE_PATTERNS = (
+    "queremos ayudarte",
+    "podemos ayudarte con tu problema",
+    "ofrecerte soluciones",
+    "todas esas terapias las ofrecemos",
+    "a traves de alguno de estas soluciones",
+    "podemos lograr",
+    "intervencion de casos como este",
+    "si gustas asistir a la clinica",
+)
+
+CONVERSATION_TRIAGE_STYLE_PATTERNS = (
+    "desde cuando",
+    "cuanto tiempo con el problema",
+    "tienes mucho tiempo con el problema",
+    "has asistido a terapia",
+    "haz asistido a terapia",
+    "que tratamientos has probado",
+    "como esta afectando",
+    "en que pais",
+    "prefieres hablar en",
+    "que te pasa hoy exactamente",
+    "si estas en peligro inmediato",
+    "contacta los servicios de emergencia",
+    "linea de prevencion del suicidio",
+    "linea de apoyo",
+)
+
 
 METRIC_PROFILES: dict[str, dict[str, Any]] = {
   "conversation_reply": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas claras, empaticas y orientadas al siguiente paso clinico, evitando tono de coach, autoayuda, listas de consejos o guias paso a paso.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza escucha breve, puente clinico natural y canalizacion hacia consulta, evitando dramatizacion, triage por chat, tono de coach o venta forzada.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.30
+        "weight": 0.25
       },
       {
         "name": "key_information_coverage",
-        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
+        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.40,
+        "weight": 0.35,
         "min_token_length": 4
       },
       {
         "name": "follow_up_alignment",
-        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
+        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
         "field": "response_text",
         "scorer": "conversation_follow_up",
-        "weight": 0.30
+        "weight": 0.25
+      },
+      {
+        "name": "tone_guardrails",
+        "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+        "field": "response_text",
+        "scorer": "conversation_tone_guardrails",
+        "weight": 0.15
       },
     ]
   },
@@ -146,11 +187,19 @@ METRIC_PROFILES: dict[str, dict[str, Any]] = {
                 "weight": 0.1
             },
             {
+                "name": "needs_retrieval_type",
+                "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+                "field": "needs_retrieval",
+                "scorer": "type_match",
+                "expected_type": "boolean",
+                "weight": 0.06
+            },
+            {
                 "name": "needs_retrieval_match",
                 "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
                 "field": "needs_retrieval",
                 "scorer": "exact_field_match",
-                "weight": 0.16
+                "weight": 0.10
             },
             {
                 "name": "confidence_alignment",
@@ -162,11 +211,19 @@ METRIC_PROFILES: dict[str, dict[str, Any]] = {
                 "max_diff": 0.35
             },
             {
+                "name": "state_update_type",
+                "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+                "field": "state_update",
+                "scorer": "type_match",
+                "expected_type": "object",
+                "weight": 0.08
+            },
+            {
                 "name": "state_update_coverage",
                 "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
                 "field": "state_update",
                 "scorer": "dict_subset_match",
-                "weight": 0.26
+                "weight": 0.18
             },
             {
                 "name": "reason_similarity",
@@ -215,16 +272,12 @@ def _extract_keywords(text: str, min_token_length: int) -> list[str]:
     return keywords
 
 
-def _coerce_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "si", "y", "t"}:
-            return True
-        if lowered in {"false", "0", "no", "", "n", "f"}:
-            return False
-    return bool(value)
+def _is_boolean(value: Any) -> bool:
+    return isinstance(value, bool)
+
+
+def _is_json_object(value: Any) -> bool:
+    return isinstance(value, dict)
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -234,18 +287,6 @@ def _coerce_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _coerce_object(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return {}
-        return parsed if isinstance(parsed, dict) else {}
-    return {}
 
 
 def _normalize_for_metric(task_name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -258,8 +299,8 @@ def _normalize_for_metric(task_name: str, payload: dict[str, Any]) -> dict[str, 
         "next_node": str(payload.get("next_node", "")).strip(),
         "intent": str(payload.get("intent", "")).strip(),
         "confidence": _coerce_float(payload.get("confidence")),
-        "needs_retrieval": _coerce_bool(payload.get("needs_retrieval")),
-        "state_update": _coerce_object(payload.get("state_update")),
+        "needs_retrieval": payload.get("needs_retrieval"),
+        "state_update": payload.get("state_update"),
         "reason": str(payload.get("reason", "")).strip(),
     }
 
@@ -275,14 +316,20 @@ def _sequence_similarity(left: str, right: str) -> float:
 
 
 def _values_equal(expected: Any, actual: Any) -> bool:
-    if isinstance(expected, bool) or isinstance(actual, bool):
-        return _coerce_bool(expected) == _coerce_bool(actual)
+    if _is_boolean(expected) or _is_boolean(actual):
+        return _is_boolean(expected) and _is_boolean(actual) and expected == actual
+    if isinstance(expected, dict) or isinstance(actual, dict):
+        return isinstance(expected, dict) and isinstance(actual, dict) and expected == actual
+    if isinstance(expected, list) or isinstance(actual, list):
+        return isinstance(expected, list) and isinstance(actual, list) and expected == actual
     return _normalize_text(expected) == _normalize_text(actual)
 
 
 def _subset_score(expected: Any, actual: Any) -> float:
     if isinstance(expected, dict):
-        actual_dict = _coerce_object(actual)
+        if not isinstance(actual, dict):
+            return 0.0
+        actual_dict = actual
         if not expected:
             return 1.0
         matched = 0.0
@@ -293,7 +340,9 @@ def _subset_score(expected: Any, actual: Any) -> float:
         return matched / len(expected)
 
     if isinstance(expected, list):
-        actual_list = actual if isinstance(actual, list) else []
+        if not isinstance(actual, list):
+            return 0.0
+        actual_list = actual
         if not expected:
             return 1.0
         matched = 0.0
@@ -312,6 +361,22 @@ def _subset_score(expected: Any, actual: Any) -> float:
 def _score_exact_field_match(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
     field = criterion["field"]
     return 1.0 if _values_equal(expected.get(field), actual.get(field)) else 0.0
+
+
+def _score_type_match(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
+    del expected
+    field = criterion["field"]
+    expected_type = str(criterion.get("expected_type", "")).strip().lower()
+    value = actual.get(field)
+
+    if expected_type == "boolean":
+        return 1.0 if _is_boolean(value) else 0.0
+    if expected_type == "object":
+        return 1.0 if _is_json_object(value) else 0.0
+    if expected_type == "list":
+        return 1.0 if isinstance(value, list) else 0.0
+
+    return 0.0
 
 
 def _score_float_tolerance(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
@@ -387,14 +452,55 @@ def _score_conversation_follow_up(criterion: dict[str, Any], expected: dict[str,
     return max(0.0, base_score - penalty)
 
 
+def _score_conversation_tone_guardrails(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
+    del expected
+    actual_text = str(actual.get(criterion["field"], ""))
+    normalized_actual = _normalize_match_text(actual_text)
+    penalty = 0.0
+
+    coach_matches = sum(1 for pattern in CONVERSATION_COACH_STYLE_PATTERNS if pattern in normalized_actual)
+    if coach_matches:
+        penalty += min(0.40, coach_matches * 0.12)
+
+    dramatic_matches = sum(1 for pattern in CONVERSATION_DRAMATIC_STYLE_PATTERNS if pattern in normalized_actual)
+    if dramatic_matches:
+        penalty += min(0.40, dramatic_matches * 0.15)
+
+    sales_matches = sum(1 for pattern in CONVERSATION_SALESY_STYLE_PATTERNS if pattern in normalized_actual)
+    if sales_matches:
+        penalty += min(0.40, sales_matches * 0.15)
+
+    triage_matches = sum(1 for pattern in CONVERSATION_TRIAGE_STYLE_PATTERNS if pattern in normalized_actual)
+    if triage_matches:
+        penalty += min(0.50, triage_matches * 0.16)
+
+    question_count = actual_text.count("?")
+    if question_count > 1:
+        penalty += min(0.20, (question_count - 1) * 0.10)
+
+    clinic_mentions = len(re.findall(r"\b(?:clinica|eros neuronal)\b", normalized_actual))
+    if clinic_mentions > 1:
+        penalty += min(0.18, (clinic_mentions - 1) * 0.09)
+
+    word_count = len(_tokenize(actual_text))
+    if word_count > 80:
+        penalty += 0.12
+    if word_count > 120:
+        penalty += 0.18
+
+    return max(0.0, 1.0 - penalty)
+
+
 CRITERION_SCORERS = {
     "conversation_follow_up": _score_conversation_follow_up,
+    "conversation_tone_guardrails": _score_conversation_tone_guardrails,
     "dict_subset_match": _score_dict_subset_match,
     "exact_field_match": _score_exact_field_match,
     "float_tolerance": _score_float_tolerance,
     "keyword_coverage": _score_keyword_coverage,
     "question_alignment": _score_question_alignment,
     "text_similarity": _score_text_similarity,
+    "type_match": _score_type_match,
 }
 
 

@@ -1,50 +1,57 @@
 {
   "task": "conversation_reply",
   "dataset": "dspy_service/datasets/conversation_reply.jsonl",
-  "examples": 3,
-  "dataset_fingerprint": "76cd7f307866a308dd8a4fae80df1820d8092f2a449750d34d09185497796b45",
-  "compiled_at": "2026-04-27T19:22:10.924406+00:00",
+  "examples": 9,
+  "dataset_fingerprint": "659945d50acc1283878809b91c527e8941776a70f1bff2b119ad6a2206d15c89",
+  "compiled_at": "2026-04-28T04:16:18.822225+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
-    "auto": "medium",
-    "max_bootstrapped_demos": 3,
-    "max_labeled_demos": 3,
+    "auto": "heavy",
+    "max_bootstrapped_demos": 4,
+    "max_labeled_demos": 4,
     "num_threads": null,
-    "mipro_train_examples": 3,
-    "mipro_val_examples": 3
+    "mipro_train_examples": 9,
+    "mipro_val_examples": 9
   },
   "metric_profile": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza respuestas claras, empaticas y orientadas al siguiente paso clinico, evitando tono de coach, autoayuda, listas de consejos o guias paso a paso.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza escucha breve, puente clinico natural y canalizacion hacia consulta, evitando dramatizacion, triage por chat, tono de coach o venta forzada.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con tono de seguimiento clinico y sin dramatizar.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.3
+        "weight": 0.25
       },
       {
         "name": "key_information_coverage",
-        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo sin desviarse a consejos genericos, guias de autocuidado o explicaciones paralelas innecesarias.",
+        "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.4,
+        "weight": 0.35,
         "min_token_length": 4
       },
       {
         "name": "follow_up_alignment",
-        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve y clinica, evitando tono de coach, autoayuda, listas de opciones o ejercicios paso a paso.",
+        "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
         "field": "response_text",
         "scorer": "conversation_follow_up",
-        "weight": 0.3
+        "weight": 0.25
+      },
+      {
+        "name": "tone_guardrails",
+        "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+        "field": "response_text",
+        "scorer": "conversation_tone_guardrails",
+        "weight": 0.15
       }
     ]
   },
   "dataset_usage": {
-    "optimization_examples": 3,
-    "review_examples": 3,
-    "mipro_train_examples": 3,
-    "mipro_val_examples": 3,
+    "optimization_examples": 9,
+    "review_examples": 9,
+    "mipro_train_examples": 9,
+    "mipro_val_examples": 9,
     "rule": "full dataset reused for optimization, MIPRO train/val, and review without holdout split"
   },
   "artifact_path": "dspy_service/artifacts/conversation_reply.json",

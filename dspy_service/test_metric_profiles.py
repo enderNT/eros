@@ -26,6 +26,7 @@ class MetricProfilesTest(unittest.TestCase):
             "response_similarity",
             "key_information_coverage",
             "follow_up_alignment",
+            "tone_guardrails",
         ])
 
     def test_conversation_reply_penalizes_coach_style_guidance(self) -> None:
@@ -48,6 +49,27 @@ class MetricProfilesTest(unittest.TestCase):
         self.assertGreater(clinic_score, coach_score)
         self.assertGreater(clinic_follow_up["score"], coach_follow_up["score"])
         self.assertLess(coach_follow_up["score"], 0.5)
+
+    def test_conversation_reply_penalizes_dramatic_salesy_and_triage_tone(self) -> None:
+        expected = {
+            "response_text": "Gracias por contarlo. Lo adecuado es valorarlo en consulta para entender mejor lo que esta pasando. Si quieres, te comparto el enlace para agendar.",
+        }
+        balanced_prediction = {
+            "response_text": "Gracias por contarlo. Lo adecuado es valorarlo en consulta para entender mejor lo que esta pasando. Si quieres, te comparto el enlace para agendar.",
+        }
+        dramatic_prediction = {
+            "response_text": "Siento que estes pasando por esto. Debe ser muy estresante. En Eros Neuronal queremos ayudarte y ofrecerte soluciones. Desde cuando te sientes asi? Has asistido a terapia? Si estas en peligro inmediato contacta servicios de emergencia. Si quieres podemos ayudarte con tu problema en la clinica.",
+        }
+
+        balanced_score, balanced_details = score_prediction_with_details("conversation_reply", expected, balanced_prediction)
+        dramatic_score, dramatic_details = score_prediction_with_details("conversation_reply", expected, dramatic_prediction)
+
+        balanced_tone = next(detail for detail in balanced_details if detail["name"] == "tone_guardrails")
+        dramatic_tone = next(detail for detail in dramatic_details if detail["name"] == "tone_guardrails")
+
+        self.assertGreater(balanced_score, dramatic_score)
+        self.assertGreater(balanced_tone["score"], dramatic_tone["score"])
+        self.assertLess(dramatic_tone["score"], 0.5)
 
     def test_state_router_gives_partial_credit_for_state_update_subset_and_reason_similarity(self) -> None:
         expected = {
@@ -80,6 +102,33 @@ class MetricProfilesTest(unittest.TestCase):
 
         self.assertGreater(close_score, 0.80)
         self.assertLess(wrong_score, 0.40)
+
+    def test_state_router_requires_real_boolean_and_json_object_types(self) -> None:
+        expected = {
+            "next_node": "rag",
+            "intent": "ask_pricing",
+            "confidence": 0.90,
+            "needs_retrieval": True,
+            "state_update": {"stage": "lookup", "active_goal": "information"},
+            "reason": "Debe consultar informacion factual de precios antes de responder.",
+        }
+        wrong_types_prediction = {
+            "next_node": "rag",
+            "intent": "ask_pricing",
+            "confidence": 0.90,
+            "needs_retrieval": "true",
+            "state_update": "{\"stage\": \"lookup\", \"active_goal\": \"information\"}",
+            "reason": "Debe consultar informacion factual de precios antes de responder.",
+        }
+
+        score, details = score_prediction_with_details("state_router", expected, wrong_types_prediction)
+
+        by_name = {detail["name"]: detail for detail in details}
+        self.assertEqual(by_name["needs_retrieval_type"]["score"], 0.0)
+        self.assertEqual(by_name["needs_retrieval_match"]["score"], 0.0)
+        self.assertEqual(by_name["state_update_type"]["score"], 0.0)
+        self.assertEqual(by_name["state_update_coverage"]["score"], 0.0)
+        self.assertLess(score, 0.60)
 
     def test_metric_profile_exposes_manageable_criteria_definitions(self) -> None:
         profile = describe_metric_profile("rag_reply")

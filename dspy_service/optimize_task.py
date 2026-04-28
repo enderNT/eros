@@ -78,6 +78,7 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 VALID_GPT5_REASONING_EFFORTS = {"minimal", "low", "medium", "high"}
+STATE_ROUTER_ALLOWED_NEXT_NODES = {"conversation", "rag", "appointment"}
 
 
 def _is_gpt5_model(model_name: str) -> bool:
@@ -202,6 +203,51 @@ def _load_rows(dataset_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _unwrap_dataset_row(row: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(row.get("input"), dict) and not isinstance(row.get("output"), dict):
+        return deepcopy(row)
+
+    flattened: dict[str, Any] = {}
+
+    if isinstance(row.get("input"), dict):
+        flattened.update(deepcopy(row["input"]))
+    if isinstance(row.get("output"), dict):
+        flattened.update(deepcopy(row["output"]))
+
+    for key in ("trace_id",):
+        if key in row:
+            flattened[key] = deepcopy(row[key])
+
+    return flattened
+
+
+def _validate_row_schema(task_name: str, row: dict[str, Any], row_number: int) -> None:
+    if task_name == "state_router":
+        next_node = row.get("next_node")
+        needs_retrieval = row.get("needs_retrieval")
+        state_update = row.get("state_update")
+
+        if next_node not in STATE_ROUTER_ALLOWED_NEXT_NODES:
+            raise ValueError(
+                f"Fila {row_number}: next_node debe ser uno de {sorted(STATE_ROUTER_ALLOWED_NEXT_NODES)}, recibido={next_node!r}"
+            )
+        if not isinstance(needs_retrieval, bool):
+            raise ValueError(
+                f"Fila {row_number}: needs_retrieval debe ser booleano real, recibido={type(needs_retrieval).__name__}"
+            )
+        if not isinstance(state_update, dict):
+            raise ValueError(
+                f"Fila {row_number}: state_update debe ser objeto JSON/dict, recibido={type(state_update).__name__}"
+            )
+
+    if task_name in TEXT_REPLY_TASKS:
+        response_text = row.get("response_text")
+        if not isinstance(response_text, str) or not response_text.strip():
+            raise ValueError(
+                f"Fila {row_number}: response_text debe ser string no vacio, recibido={type(response_text).__name__}"
+            )
+
+
 def _build_full_dataset_plan(rows: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(rows)
     if total < 1:
@@ -286,7 +332,9 @@ def optimize_task(
     if not dataset_path.exists():
         raise FileNotFoundError(f"No se encontro el dataset para {task_name}: {dataset_path}")
 
-    rows = _load_rows(dataset_path)
+    rows = [_unwrap_dataset_row(row) for row in _load_rows(dataset_path)]
+    for index, row in enumerate(rows, start=1):
+        _validate_row_schema(task_name, row, index)
     dataset_plan = _build_full_dataset_plan(rows)
     module_factory = MODULE_FACTORIES[task_name]
 
