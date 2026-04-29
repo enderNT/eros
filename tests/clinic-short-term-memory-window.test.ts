@@ -58,12 +58,14 @@ class StubRoutingService implements ClinicRoutingService {
 
 class StubClinicLlmService implements ClinicLlmService {
   readonly summaryCalls: Array<Record<string, string>> = [];
+  readonly conversationPayloads: Array<Record<string, unknown>> = [];
 
   async classifyStateRoute(): Promise<StateRoutingDecision> {
     throw new Error("not_implemented");
   }
 
-  async generateConversationReply(): Promise<GeneratedReply> {
+  async generateConversationReply(payload: Record<string, unknown>): Promise<GeneratedReply> {
+    this.conversationPayloads.push(payload);
     return {
       response_text: "respuesta nueva",
       reply_mode: "llm"
@@ -229,6 +231,34 @@ function createGraphState(): GraphState {
 }
 
 describe("clinic short-term memory window", () => {
+  test("builds a compact context_summary for conversation replies without sending recent turns to the prompt payload", async () => {
+    const settings = buildTestSettings();
+    const llmService = new StubClinicLlmService();
+    const workflow = new ClinicWorkflow(
+      new StubRoutingService(),
+      llmService,
+      new StubClinicMemoryRuntime(),
+      new StubKnowledgeProvider(),
+      new StubDspyBridge(),
+      settings
+    );
+
+    await workflow.run({
+      ...createGraphState(),
+      summary: "Estado de la conversacion: conversacion en curso. Que ya se dijo: el usuario pregunto por estimulación y ya se compartio el precio."
+    });
+
+    expect(llmService.conversationPayloads).toHaveLength(1);
+    expect(llmService.conversationPayloads[0]).toEqual({
+      user_message: "nuevo turno",
+      context_summary: expect.stringContaining("Estado de la conversacion: conversacion en curso."),
+      last_assistant_message: "respuesta previa"
+    });
+    expect(String(llmService.conversationPayloads[0]?.context_summary ?? "")).toContain("No repetir o contradecir:");
+    expect(llmService.conversationPayloads[0]).not.toHaveProperty("recent_turns");
+    expect(llmService.conversationPayloads[0]).not.toHaveProperty("memories");
+  });
+
   test("builds initial clinic state with only the last five turns and summarizes older history", async () => {
     const settings = buildTestSettings();
     const workflow = new RecordingWorkflow();

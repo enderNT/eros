@@ -22,7 +22,7 @@ def _compact_text(value: str, limit: int = 140) -> str:
 
 
 def _preview_payload(payload: dict[str, Any]) -> str:
-    for key in ("user_message", "contact_name", "summary"):
+    for key in ("user_message", "contact_name", "context_summary", "summary"):
         candidate = payload.get(key)
         if isinstance(candidate, str) and candidate.strip():
             return _compact_text(candidate)

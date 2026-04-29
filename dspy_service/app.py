@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - package-style fallback
 
 TASK_OUTPUT_FIELDS: dict[str, list[str]] = {
     "state_router": ["next_node", "intent", "confidence", "needs_retrieval", "state_update", "reason"],
-    "conversation_reply": ["response_text"],
+    "conversation_reply": ["reply_reasoning", "response_text"],
     "rag_reply": ["response_text"],
     "appointment_reply": ["response_text"],
 }
@@ -369,19 +369,15 @@ def predict_conversation_reply(payload: dict[str, Any]) -> dict[str, Any]:
         "conversation_reply",
         {
             "user_message": payload.get("user_message", ""),
-            "summary": payload.get("summary", ""),
-            "active_goal": payload.get("active_goal", ""),
-            "stage": payload.get("stage", ""),
-            "pending_question": payload.get("pending_question", ""),
+            "context_summary": payload.get("context_summary", payload.get("summary", "")),
             "last_assistant_message": payload.get("last_assistant_message", ""),
-            "recent_turns": payload.get("recent_turns", []),
-            "memories": payload.get("memories", []),
         },
     )
     if not prediction or not str(prediction.get("response_text", "")).strip():
         _passthrough_to_app("conversation_reply", status, run)
 
     response = {
+        "reply_reasoning": str(prediction.get("reply_reasoning", "")).strip(),
         "response_text": str(prediction.get("response_text", "")).strip(),
         "reply_mode": "llm",
     }

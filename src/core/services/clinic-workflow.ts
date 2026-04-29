@@ -337,6 +337,147 @@ function extractPendingQuestion(replyText: string): string {
   return compact(matches.slice(-2).join(" ").trim(), 220);
 }
 
+function hasConversationHistory(state: GraphState): boolean {
+  return (
+    state.turn_count > 1 ||
+    state.recent_turns.length > 0 ||
+    Boolean(state.last_assistant_message.trim()) ||
+    Boolean(state.summary.trim())
+  );
+}
+
+function hasGreetingOpening(text: string): boolean {
+  return /^(hola|buen(?:os)?\s+d[ií]as|buenas\s+tardes|buenas\s+noches|buen\s+d[ií]a)\b/i.test(text.trim());
+}
+
+function buildRecentConversationDigest(state: GraphState): string {
+  const recent = state.recent_turns.slice(-2);
+  if (recent.length === 0) {
+    return "";
+  }
+
+  return recent
+    .map((turn) => {
+      const user = compact(String(turn.user ?? ""), 120);
+      const assistant = compact(String(turn.assistant ?? ""), 140);
+      if (!user && !assistant) {
+        return "";
+      }
+      return `Usuario dijo: ${user || "n/a"}. Asistente respondio: ${assistant || "n/a"}.`;
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildGreetingState(state: GraphState): string {
+  if (!hasConversationHistory(state)) {
+    return "primera interaccion; se permite saludo breve.";
+  }
+
+  if (
+    hasGreetingOpening(state.last_assistant_message) ||
+    state.recent_turns.some((turn) => hasGreetingOpening(String(turn.assistant ?? "")))
+  ) {
+    return "ya hubo saludo; no volver a saludar.";
+  }
+
+  return "conversacion en curso; responder directo sin reabrir con saludo.";
+}
+
+function buildActiveTopic(state: GraphState): string {
+  const parts = [state.active_goal.trim(), state.stage.trim()].filter(Boolean);
+  if (parts.length > 0) {
+    return parts.join(" / ");
+  }
+  if (state.last_user_message.trim()) {
+    return compact(state.last_user_message, 140);
+  }
+  return "n/a";
+}
+
+function buildWhatWasSaid(state: GraphState): string {
+  const summary = state.summary.trim();
+  if (summary) {
+    return compact(summary, 420);
+  }
+
+  const recentDigest = buildRecentConversationDigest(state);
+  if (recentDigest) {
+    return compact(recentDigest, 420);
+  }
+
+  if (state.last_assistant_message.trim()) {
+    return `Ultima respuesta del asistente: ${compact(state.last_assistant_message, 220)}.`;
+  }
+
+  return "Sin historial relevante todavia.";
+}
+
+function buildPendingStatus(state: GraphState): string {
+  if (state.pending_question.trim()) {
+    return compact(state.pending_question, 220);
+  }
+  if (state.pending_action.trim()) {
+    return compact(state.pending_action, 160);
+  }
+  return "sin pendiente explicito.";
+}
+
+function buildContinuationHint(state: GraphState): string {
+  if (!hasConversationHistory(state)) {
+    return "Responder como primer turno: saludo breve y una pregunta natural para abrir la conversacion.";
+  }
+  if (state.pending_question.trim()) {
+    return `Continuar desde la pregunta pendiente sin reiniciar el hilo: ${compact(state.pending_question, 180)}`;
+  }
+  if (state.active_goal === "appointment") {
+    return "Mantener continuidad hacia agendar o confirmar los datos pendientes, sin volver a abrir la conversacion.";
+  }
+  if (state.active_goal === "information" || state.stage === "lookup") {
+    return "Responder directo a la consulta actual y cerrar con el siguiente paso mas util, sin redundancia.";
+  }
+  return "Mantener continuidad con el hilo actual, responder directo y solo preguntar algo breve si realmente ayuda a avanzar.";
+}
+
+function buildDoNotRepeatHint(state: GraphState): string {
+  const hints = ["No repetir ni contradecir lo ya explicado por el asistente."];
+
+  if (state.last_assistant_message.trim()) {
+    hints.push("No reabrir con saludo si la conversacion ya esta en curso.");
+  }
+  if (state.last_tool_result.trim()) {
+    hints.push("No inventar datos distintos al ultimo resultado operativo o factual ya obtenido.");
+  }
+  if (state.recalled_memories.length > 0) {
+    hints.push("Respetar las memorias relevantes ya registradas del usuario.");
+  }
+
+  return hints.join(" ");
+}
+
+function buildMemoryDigest(state: GraphState): string {
+  if (state.recalled_memories.length === 0) {
+    return "sin memorias relevantes.";
+  }
+  return state.recalled_memories
+    .slice(0, 3)
+    .map((memory) => compact(memory, 140))
+    .join(" | ");
+}
+
+function buildConversationContextSummary(state: GraphState): string {
+  return [
+    `Estado de la conversacion: ${hasConversationHistory(state) ? "conversacion en curso" : "primera interaccion"}.`,
+    `Saludo previo: ${buildGreetingState(state)}`,
+    `Tema activo: ${buildActiveTopic(state)}.`,
+    `Que ya se dijo: ${buildWhatWasSaid(state)}`,
+    `Que quedo pendiente: ${buildPendingStatus(state)}`,
+    `Continuidad esperada: ${buildContinuationHint(state)}`,
+    `No repetir o contradecir: ${buildDoNotRepeatHint(state)}`,
+    `Memorias relevantes: ${buildMemoryDigest(state)}`
+  ].join("\n");
+}
+
 function inferConversationStage(state: GraphState): string {
   const userMessage = state.last_user_message.toLowerCase();
   if (/(depres|ansiedad|estres|estr[eé]s|triste|sin ganas|insomnio|crisis|terapia|psicolog|psiquiatr)/i.test(userMessage)) {
@@ -527,7 +668,7 @@ export class ClinicWorkflow {
       rewritten_query: ragContext.rewrittenQuery
     });
     const payload = {
-      ...this.buildConversationPayload(state),
+      ...this.buildSharedReplyPayload(state),
       retrieved_context: ragContext.text
     };
     const context = buildReplyContext(state);
@@ -601,7 +742,7 @@ export class ClinicWorkflow {
     await this.trace(traceId, "clinic.appointment_extraction.output", appointment as Record<string, unknown>);
 
     const payload = {
-      ...this.buildConversationPayload(state),
+      ...this.buildSharedReplyPayload(state),
       contact_name: state.contact_name,
       appointment_state: appointment,
       booking_url: this.settings.clinic.bookingUrl
@@ -788,6 +929,14 @@ export class ClinicWorkflow {
   }
 
   private buildConversationPayload(state: GraphState): Record<string, unknown> {
+    return {
+      user_message: state.last_user_message,
+      context_summary: buildConversationContextSummary(state),
+      last_assistant_message: state.last_assistant_message
+    };
+  }
+
+  private buildSharedReplyPayload(state: GraphState): Record<string, unknown> {
     return {
       user_message: state.last_user_message,
       summary: state.summary,

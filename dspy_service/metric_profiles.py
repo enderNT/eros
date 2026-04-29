@@ -52,6 +52,16 @@ SPANISH_STOPWORDS = {
     "ya",
 }
 
+GREETING_OPEN_PATTERNS = (
+    "hola",
+    "buen dia",
+    "buenos dias",
+    "buenas tardes",
+    "buenas noches",
+    "mucho gusto",
+    "soy eros bot",
+)
+
 CONVERSATION_COACH_STYLE_PATTERNS = (
     "puedo darte",
     "te puedo dar",
@@ -109,21 +119,21 @@ CONVERSATION_TRIAGE_STYLE_PATTERNS = (
 
 METRIC_PROFILES: dict[str, dict[str, Any]] = {
   "conversation_reply": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza escucha breve, puente clinico natural y canalizacion hacia consulta, evitando dramatizacion, triage por chat, tono de coach o venta forzada.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza continuidad natural, puente clinico breve y canalizacion clara, evitando saludos fuera de lugar, dramatizacion, triage por chat, tono de coach o venta forzada.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.25
+        "weight": 0.22
       },
       {
         "name": "key_information_coverage",
         "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.35,
+        "weight": 0.30,
         "min_token_length": 4
       },
       {
@@ -131,7 +141,14 @@ METRIC_PROFILES: dict[str, dict[str, Any]] = {
         "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
         "field": "response_text",
         "scorer": "conversation_follow_up",
-        "weight": 0.25
+        "weight": 0.18
+      },
+      {
+        "name": "greeting_alignment",
+        "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+        "field": "response_text",
+        "scorer": "conversation_greeting_alignment",
+        "weight": 0.15
       },
       {
         "name": "tone_guardrails",
@@ -452,6 +469,23 @@ def _score_conversation_follow_up(criterion: dict[str, Any], expected: dict[str,
     return max(0.0, base_score - penalty)
 
 
+def _has_greeting_opening(text: str) -> bool:
+    normalized = _normalize_match_text(text)
+    return any(normalized.startswith(pattern) for pattern in GREETING_OPEN_PATTERNS)
+
+
+def _score_conversation_greeting_alignment(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
+    field = criterion["field"]
+    expected_has_greeting = _has_greeting_opening(str(expected.get(field, "")))
+    actual_has_greeting = _has_greeting_opening(str(actual.get(field, "")))
+
+    if expected_has_greeting == actual_has_greeting:
+        return 1.0
+    if actual_has_greeting and not expected_has_greeting:
+        return 0.0
+    return 0.35
+
+
 def _score_conversation_tone_guardrails(criterion: dict[str, Any], expected: dict[str, Any], actual: dict[str, Any]) -> float:
     del expected
     actual_text = str(actual.get(criterion["field"], ""))
@@ -492,6 +526,7 @@ def _score_conversation_tone_guardrails(criterion: dict[str, Any], expected: dic
 
 
 CRITERION_SCORERS = {
+    "conversation_greeting_alignment": _score_conversation_greeting_alignment,
     "conversation_follow_up": _score_conversation_follow_up,
     "conversation_tone_guardrails": _score_conversation_tone_guardrails,
     "dict_subset_match": _score_dict_subset_match,

@@ -26,6 +26,7 @@ class MetricProfilesTest(unittest.TestCase):
             "response_similarity",
             "key_information_coverage",
             "follow_up_alignment",
+            "greeting_alignment",
             "tone_guardrails",
         ])
 
@@ -70,6 +71,27 @@ class MetricProfilesTest(unittest.TestCase):
         self.assertGreater(balanced_score, dramatic_score)
         self.assertGreater(balanced_tone["score"], dramatic_tone["score"])
         self.assertLess(dramatic_tone["score"], 0.5)
+
+    def test_conversation_reply_penalizes_unnecessary_greeting_mid_thread(self) -> None:
+        expected = {
+            "response_text": "Para definir el numero de sesiones primero se requiere una valoracion. Si quieres, te comparto el enlace para agendar.",
+        }
+        aligned_prediction = {
+            "response_text": "Para definir el numero de sesiones primero se requiere una valoracion. Si quieres, te comparto el enlace para agendar.",
+        }
+        greeting_prediction = {
+            "response_text": "Hola, para definir el numero de sesiones primero se requiere una valoracion. Si quieres, te comparto el enlace para agendar.",
+        }
+
+        aligned_score, aligned_details = score_prediction_with_details("conversation_reply", expected, aligned_prediction)
+        greeting_score, greeting_details = score_prediction_with_details("conversation_reply", expected, greeting_prediction)
+
+        aligned_greeting = next(detail for detail in aligned_details if detail["name"] == "greeting_alignment")
+        greeting_greeting = next(detail for detail in greeting_details if detail["name"] == "greeting_alignment")
+
+        self.assertGreater(aligned_score, greeting_score)
+        self.assertGreater(aligned_greeting["score"], greeting_greeting["score"])
+        self.assertEqual(greeting_greeting["score"], 0.0)
 
     def test_state_router_gives_partial_credit_for_state_update_subset_and_reason_similarity(self) -> None:
         expected = {

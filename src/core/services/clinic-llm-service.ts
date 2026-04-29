@@ -81,6 +81,28 @@ function formatReplyContext(context?: ReplyContextState, options?: { include_too
   return lines.join("\n");
 }
 
+function buildStateSummaryFallback(input: {
+  current_summary: string;
+  user_message: string;
+  assistant_message: string;
+  active_goal: string;
+  stage: string;
+}): string {
+  const current = input.current_summary.trim();
+  const previousTheme = current && current !== "n/a" ? current : "sin historial relevante";
+  const greetingState = current ? "ya hubo intercambio previo" : "sin saludo confirmado";
+
+  return [
+    "Estado de la conversacion: conversacion en curso.",
+    `Saludo previo: ${greetingState}.`,
+    `Tema activo: ${(input.active_goal || "n/a").trim() || "n/a"} / ${(input.stage || "n/a").trim() || "n/a"}.`,
+    `Que ya se dijo: ${previousTheme}.`,
+    `Que quedo pendiente: responder al mensaje actual del usuario con continuidad clinica.`,
+    "Continuidad esperada: responder directo, breve y sin reiniciar el hilo.",
+    `No repetir o contradecir: Usuario dijo "${input.user_message}". Ultima respuesta del asistente: "${input.assistant_message}".`
+  ].join("\n");
+}
+
 function buildRoutingDebug(
   provider: StateRoutingDecisionDebug["provider"],
   rawNextNode: string,
@@ -175,16 +197,18 @@ export class ClinicLlmService {
   }
 
   async generateConversationReply(payload: Record<string, unknown>, context?: ReplyContextState): Promise<GeneratedReply> {
+    const contextSummary = String(payload.context_summary ?? payload.summary ?? "").trim();
     const text = await this.requestText(
       [
         "Eres Eros Bot, el asistente virtual de Clinica Eros Neuronal, una clinica de salud mental.",
         "Responde en espanol con tono humano, breve, claro y sereno.",
+        "Usa el resumen contextual como fuente principal para mantener continuidad.",
         "Solo puedes saludar o presentarte en el primer mensaje del hilo o si el usuario pregunta explicitamente quien eres.",
         "No inventes servicios, horarios, diagnosticos ni precios."
       ].join(" "),
       [
-        formatReplyContext(context),
-        `Memorias relevantes: ${JSON.stringify(payload.memories ?? [])}`,
+        `Contexto resumido del hilo:\n${contextSummary || formatReplyContext(context)}`,
+        `Ultimo mensaje del asistente: ${String(payload.last_assistant_message ?? context?.last_assistant_message ?? "") || "n/a"}`,
         `Mensaje actual del usuario: ${String(payload.user_message ?? "")}`,
         "Responde en espanol de forma breve, amable y profesional."
       ].join("\n")
@@ -323,7 +347,18 @@ export class ClinicLlmService {
     stage: string;
   }): Promise<string> {
     const text = await this.requestText(
-      "Actualiza un resumen corto de estado conversacional. Mantenlo en una o dos frases. Devuelve solo el resumen.",
+      [
+        "Actualiza un resumen operativo del hilo para ayudar a redactar la siguiente respuesta.",
+        "Devuelve solo texto plano con estas etiquetas exactas, cada una en una linea:",
+        "Estado de la conversacion:",
+        "Saludo previo:",
+        "Tema activo:",
+        "Que ya se dijo:",
+        "Que quedo pendiente:",
+        "Continuidad esperada:",
+        "No repetir o contradecir:",
+        "Mantelo breve, concreto y centrado en continuidad conversacional."
+      ].join(" "),
       [
         `Resumen actual: ${input.current_summary || "n/a"}`,
         `Objetivo activo: ${input.active_goal || "n/a"}`,
@@ -335,9 +370,7 @@ export class ClinicLlmService {
     );
 
     if (!text) {
-      return [input.current_summary, `Usuario: ${input.user_message}`, `Asistente: ${input.assistant_message}`]
-        .filter(Boolean)
-        .join(" ");
+      return buildStateSummaryFallback(input);
     }
 
     return text.trim();

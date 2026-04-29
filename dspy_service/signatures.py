@@ -32,14 +32,10 @@ if dspy is not None:
         """Draft a conversational assistant reply."""
 
         user_message = dspy.InputField()
-        summary = dspy.InputField()
-        active_goal = dspy.InputField()
-        stage = dspy.InputField()
-        pending_question = dspy.InputField()
+        context_summary = dspy.InputField()
         last_assistant_message = dspy.InputField()
-        recent_turns = dspy.InputField()
-        memories = dspy.InputField()
 
+        reply_reasoning = dspy.OutputField()
         response_text = dspy.OutputField()
 
 

@@ -2,8 +2,8 @@
   "task": "conversation_reply",
   "dataset": "dspy_service/datasets/conversation_reply.jsonl",
   "examples": 9,
-  "dataset_fingerprint": "659945d50acc1283878809b91c527e8941776a70f1bff2b119ad6a2206d15c89",
-  "compiled_at": "2026-04-28T04:16:18.822225+00:00",
+  "dataset_fingerprint": "ff7962776e066232c7caedf91b5ff8506d37c4aae4b56f854c1e1c9989d967d7",
+  "compiled_at": "2026-04-29T18:39:23.756624+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
     "auto": "heavy",
@@ -14,21 +14,21 @@
     "mipro_val_examples": 9
   },
   "metric_profile": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza escucha breve, puente clinico natural y canalizacion hacia consulta, evitando dramatizacion, triage por chat, tono de coach o venta forzada.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza continuidad natural, puente clinico breve y canalizacion clara, evitando saludos fuera de lugar, dramatizacion, triage por chat, tono de coach o venta forzada.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.25
+        "weight": 0.22
       },
       {
         "name": "key_information_coverage",
         "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.35,
+        "weight": 0.3,
         "min_token_length": 4
       },
       {
@@ -36,7 +36,14 @@
         "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
         "field": "response_text",
         "scorer": "conversation_follow_up",
-        "weight": 0.25
+        "weight": 0.18
+      },
+      {
+        "name": "greeting_alignment",
+        "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+        "field": "response_text",
+        "scorer": "conversation_greeting_alignment",
+        "weight": 0.15
       },
       {
         "name": "tone_guardrails",

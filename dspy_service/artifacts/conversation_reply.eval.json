@@ -1,28 +1,28 @@
 {
   "task": "conversation_reply",
   "dataset": "dspy_service/datasets/conversation_reply.jsonl",
-  "dataset_fingerprint": "659945d50acc1283878809b91c527e8941776a70f1bff2b119ad6a2206d15c89",
+  "dataset_fingerprint": "ff7962776e066232c7caedf91b5ff8506d37c4aae4b56f854c1e1c9989d967d7",
   "valid_examples": 9,
   "optimization_examples": 9,
   "review_examples": 9,
   "review_scope": "same dataset used for optimization; no holdout split",
-  "baseline_score": 0.5415,
+  "baseline_score": 0.602,
   "metric_profile": {
-    "description": "Metrica hibrida para respuestas conversacionales: prioriza escucha breve, puente clinico natural y canalizacion hacia consulta, evitando dramatizacion, triage por chat, tono de coach o venta forzada.",
+    "description": "Metrica hibrida para respuestas conversacionales: prioriza continuidad natural, puente clinico breve y canalizacion clara, evitando saludos fuera de lugar, dramatizacion, triage por chat, tono de coach o venta forzada.",
     "criteria": [
       {
         "name": "response_similarity",
-        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+        "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
         "field": "response_text",
         "scorer": "text_similarity",
-        "weight": 0.25
+        "weight": 0.22
       },
       {
         "name": "key_information_coverage",
         "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
         "field": "response_text",
         "scorer": "keyword_coverage",
-        "weight": 0.35,
+        "weight": 0.3,
         "min_token_length": 4
       },
       {
@@ -30,7 +30,14 @@
         "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
         "field": "response_text",
         "scorer": "conversation_follow_up",
-        "weight": 0.25
+        "weight": 0.18
+      },
+      {
+        "name": "greeting_alignment",
+        "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+        "field": "response_text",
+        "scorer": "conversation_greeting_alignment",
+        "weight": 0.15
       },
       {
         "name": "tone_guardrails",
@@ -41,72 +48,62 @@
       }
     ]
   },
-  "optimized_score": 0.5799,
+  "optimized_score": 0.6866,
   "review_required": true,
   "examples": [
     {
       "trace_id": "",
       "input_payload": {
         "user_message": "que dias puedo ir",
-        "summary": "n/a",
-        "active_goal": "information",
-        "stage": "lookup",
-        "pending_question": "n/a",
-        "last_assistant_message": "¿Te refieres al precio de algún servicio en particular? Puedo confirmar lo siguiente según la información disponible:\n\n- Valoración psiquiátrica inicial: 2,500 MXN (60 minutos).\n- Terapia de estimulación magnética transcraneal (sesión individual): 900 MXN por sesión (50 minutos).\n- La clínica ofrece además psicoterapia individual, seguimiento psiquiátrico y consulta psiquiátrica inicial entre sus servicios, pero no tengo precios confirmados para todos ellos en los datos actuales.\n- Medios de pago aceptados: tarjetas, transferencia y efectivo.\n\n¿Quieres el precio de alguno de los otros servicios, o que confirme si hay paquetes, descuentos o precios para sesiones de psicoterapia o seguimiento psiquiátrico? Si deseas, puedo buscar/consultar para obtener confirmación adicional.",
-        "recent_turns": [
-          {
-            "user": "precio",
-            "assistant": "¿Te refieres al precio de algún servicio en particular? Puedo confirmar lo siguiente según la información disponible: - Valoración psiquiátrica inicial: 2,500 MXN (60 minutos). - Terapia de estimulación magnética tran..."
-          }
-        ],
-        "memories": [
-          "Assistant stated that accepted payment methods at the clinic are cards, bank transfer, and cash (tarjetas, transferencia...",
-          "User asked about prices ('precio') of the clinic's services and requested cost information",
-          "Assistant stated that the clinic offers individual psychotherapy, psychiatric follow-up (seguimiento psiquiátrico), and ..."
-        ]
+        "context_summary": "El usuario viene consultando información práctica sobre la clínica. Ya se le compartieron precios de la valoración psiquiátrica inicial y de la estimulación magnética transcraneal, junto con los medios de pago, y también quedó claro que no hay precios confirmados para todos los demás servicios. Ahora pregunta qué días puede ir, así que corresponde responder sobre disponibilidad y el siguiente paso para agendar sin volver a listar precios ni inventar horarios concretos.",
+        "last_assistant_message": "Valoración psiquiátrica inicial: 800 MXN (50 minutos). Terapia de estimulación magnética transcraneal: 900 MXN por sesión (50 minutos). La clínica ofrece además psicoterapia individual, seguimiento psiquiátrico y consulta psiquiátrica inicial, pero no tengo precios confirmados para todos esos servicios. Medios de pago aceptados: tarjetas, transferencia y efectivo. ¿Quieres el precio de alguno de los otros servicios, o que confirme si hay paquetes, descuentos o precios para sesiones de psicoterapia o seguimiento psiquiátrico?"
       },
       "serialized_input": {
         "user_message": "que dias puedo ir",
-        "summary": "n/a",
-        "active_goal": "information",
-        "stage": "lookup",
-        "pending_question": "n/a",
-        "last_assistant_message": "¿Te refieres al precio de algún servicio en particular? Puedo confirmar lo siguiente según la información disponible:\n\n- Valoración psiquiátrica inicial: 2,500 MXN (60 minutos).\n- Terapia de estimulación magnética transcraneal (sesión individual): 900 MXN por sesión (50 minutos).\n- La clínica ofrece además psicoterapia individual, seguimiento psiquiátrico y consulta psiquiátrica inicial entre sus servicios, pero no tengo precios confirmados para todos ellos en los datos actuales.\n- Medios de pago aceptados: tarjetas, transferencia y efectivo.\n\n¿Quieres el precio de alguno de los otros servicios, o que confirme si hay paquetes, descuentos o precios para sesiones de psicoterapia o seguimiento psiquiátrico? Si deseas, puedo buscar/consultar para obtener confirmación adicional.",
-        "recent_turns": "[{\"assistant\": \"¿Te refieres al precio de algún servicio en particular? Puedo confirmar lo siguiente según la información disponible: - Valoración psiquiátrica inicial: 2,500 MXN (60 minutos). - Terapia de estimulación magnética tran...\", \"user\": \"precio\"}]",
-        "memories": "[\"Assistant stated that accepted payment methods at the clinic are cards, bank transfer, and cash (tarjetas, transferencia...\", \"User asked about prices ('precio') of the clinic's services and requested cost information\", \"Assistant stated that the clinic offers individual psychotherapy, psychiatric follow-up (seguimiento psiquiátrico), and ...\"]"
+        "context_summary": "El usuario viene consultando información práctica sobre la clínica. Ya se le compartieron precios de la valoración psiquiátrica inicial y de la estimulación magnética transcraneal, junto con los medios de pago, y también quedó claro que no hay precios confirmados para todos los demás servicios. Ahora pregunta qué días puede ir, así que corresponde responder sobre disponibilidad y el siguiente paso para agendar sin volver a listar precios ni inventar horarios concretos.",
+        "last_assistant_message": "Valoración psiquiátrica inicial: 800 MXN (50 minutos). Terapia de estimulación magnética transcraneal: 900 MXN por sesión (50 minutos). La clínica ofrece además psicoterapia individual, seguimiento psiquiátrico y consulta psiquiátrica inicial, pero no tengo precios confirmados para todos esos servicios. Medios de pago aceptados: tarjetas, transferencia y efectivo. ¿Quieres el precio de alguno de los otros servicios, o que confirme si hay paquetes, descuentos o precios para sesiones de psicoterapia o seguimiento psiquiátrico?"
       },
       "target_response_text": "Puedo compartirte el enlace para que revises los días y horarios disponibles. Si quieres, te lo paso para que agendes.",
-      "baseline_response_text": "¿A qué servicio te refieres (valoración psiquiátrica inicial, terapia de estimulación magnética transcraneal, psicoterapia, seguimiento psiquiátrico u otro)? Así puedo decirte los días y horarios disponibles o consultar la disponibilidad. Si ya tienes preferencia de días o rango de horario (por ejemplo mañanas entre semana, tardes, fines de semana), dímelo y busco opciones que se ajusten.",
-      "optimized_response_text": "Tenemos disponibilidad de lunes a viernes y algunos sábados por la mañana. Para darte días y horarios concretos necesito saber tu ciudad y si prefieres mañana o tarde; también puedo compartir el enlace de agendamiento si lo prefieres. ¿Desde qué ciudad llamas y qué franja horaria te acomoda?",
-      "baseline_score": 0.556,
-      "optimized_score": 0.5289,
+      "baseline_response_text": "La disponibilidad varía según el servicio y el profesional. ¿Para qué servicio quieres agendar (valoración psiquiátrica inicial, estimulación magnética transcraneal, psicoterapia, seguimiento)? Indícame también tus días y franjas horarias preferidas (por ejemplo: mañanas entre semana, tardes, fines de semana) y te confirmo qué opciones hay o te digo el siguiente paso para reservar.\n\nSi prefieres, puedo pasarte los datos para agendar directamente (teléfono/WhatsApp/correo) o indicarte cómo solicitar la cita en línea. ¿Cómo quieres proceder?",
+      "optimized_response_text": "Puedo ayudarte a confirmar días y horarios disponibles, pero no puedo dar un calendario aquí mismo. Si quieres, te envío el enlace para ver las fechas y reservar online, o puedo pasar tu datos para que la recepción te contacte y coordinen por teléfono/WhatsApp. ¿Prefieres que te comparta el enlace de agendamiento o que te contacten desde la clínica?",
+      "baseline_score": 0.5516,
+      "optimized_score": 0.6682,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.1572,
-          "weighted_score": 0.0393
+          "weight": 0.22,
+          "score": 0.1027,
+          "weighted_score": 0.0226
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 0.3333,
-          "weighted_score": 0.1167
+          "weighted_score": 0.1
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
+          "score": 0.9,
+          "weighted_score": 0.162
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -114,37 +111,46 @@
           "field": "response_text",
           "scorer": "conversation_tone_guardrails",
           "weight": 0.15,
-          "score": 1.0,
-          "weighted_score": 0.15
+          "score": 0.78,
+          "weighted_score": 0.117
         }
       ],
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0488,
-          "weighted_score": 0.0122
+          "weight": 0.22,
+          "score": 0.0981,
+          "weighted_score": 0.0216
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.3333,
-          "weighted_score": 0.1167
+          "weight": 0.3,
+          "score": 0.5556,
+          "weighted_score": 0.1667
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -161,73 +167,55 @@
       "trace_id": "",
       "input_payload": {
         "user_message": "quiero 20 sesiones",
-        "summary": "n/a",
-        "active_goal": "information",
-        "stage": "lookup",
-        "pending_question": "n/a",
-        "last_assistant_message": "Si te refieres a estimulación (estimulación magnética transcraneal, EMT/TMS) —según la información disponible en la clínica referenciada— los precios orientativos son:\n\n- TMS de alta intensidad (sesión individual, 50 minutos): 1200 MXN por sesión.  \n- TMS de baja intensidad (sesión individual, 50 minutos): 900 MXN por sesión.  \n- Valoración psicologica inicial (50 minutos): 800 MXN.  \n- Nota: la EMT/TMS suele acompañarse de seguimiento psicologico durante el tratamiento.\n\nEn cuanto a terapia electroconvulsiva (TEC/electrochoques), nosotros no manejamos esa terapia. La TEC es un procedimiento diferente y normalmente se realiza en settings hospitalarios.\n\n¿Quieres que te comparta el calendario para que agendes tu primera sesion? La duración total típica de un tratamiento (número de sesiones recomendado) es variable, para eso es la primera sesion.",
-        "recent_turns": [
-          {
-            "user": "cura el autismo?",
-            "assistant": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se 'cura'. Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mu..."
-          },
-          {
-            "user": "los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad",
-            "assistant": "Los electrochoques (terapia electroconvulsiva, TEC o ECT en inglés) no 'curan' el autismo. La TEC es un tratamiento médico utilizado principalmente para ciertos trastornos psiquiátricos graves, sobre todo depresión ma..."
-          },
-          {
-            "user": "cuanto vale tu estimulacion?",
-            "assistant": "Si te refieres a estimulación (estimulación magnética transcraneal, EMT/TMS) —según la información disponible en la clínica referenciada— los precios orientativos son..."
-          }
-        ],
-        "memories": [
-          "User asked in Spanish about the cost of 'estimulación' (the assistant interpreted this as transcranial magnetic stimulation...",
-          "Assistant offered to confirm appointment availability, provide the typical total treatment duration or recommended number of sessions for...",
-          "Assistant provided indicative prices from a referenced clinic for transcranial magnetic stimulation (TMS/EMT) high-intensi..."
-        ]
+        "context_summary": "La conversación ha girado alrededor de si ciertos tratamientos ayudan en autismo y luego se movió a la estimulación magnética y su costo. Ya se aclaró que la terapia electroconvulsiva no la manejan, se dieron precios orientativos de TMS de alta y baja intensidad y de la valoración inicial, y también se dijo que la cantidad de sesiones se define después de la primera consulta. Ahora el usuario quiere avanzar directo a 20 sesiones, por lo que la respuesta debe encaminarlo a agendar la valoración sin prometer un paquete fijo ni contradecir esa necesidad de evaluación previa.",
+        "last_assistant_message": "Los precios son: - TMS de alta intensidad (sesión individual, 50 minutos): 1200 MXN por sesión. - TMS de baja intensidad (sesión individual, 50 minutos): 900 MXN por sesión. - Valoración psicologica inicial (50 minutos): 800 MXN. - Nota: la EMT/TMS suele acompañarse de seguimiento psicologico durante el tratamiento. En cuanto a terapia electroconvulsiva (TEC/electrochoques), nosotros no manejamos esa terapia. La TEC es un procedimiento diferente y normalmente se realiza en settings hospitalarios. ¿Quieres que te comparta el calendario para que agendes tu primera sesion? La duración total típica de un tratamiento (número de sesiones recomendado) es variable, para eso es la primera sesion."
       },
       "serialized_input": {
         "user_message": "quiero 20 sesiones",
-        "summary": "n/a",
-        "active_goal": "information",
-        "stage": "lookup",
-        "pending_question": "n/a",
-        "last_assistant_message": "Si te refieres a estimulación (estimulación magnética transcraneal, EMT/TMS) —según la información disponible en la clínica referenciada— los precios orientativos son:\n\n- TMS de alta intensidad (sesión individual, 50 minutos): 1200 MXN por sesión.  \n- TMS de baja intensidad (sesión individual, 50 minutos): 900 MXN por sesión.  \n- Valoración psicologica inicial (50 minutos): 800 MXN.  \n- Nota: la EMT/TMS suele acompañarse de seguimiento psicologico durante el tratamiento.\n\nEn cuanto a terapia electroconvulsiva (TEC/electrochoques), nosotros no manejamos esa terapia. La TEC es un procedimiento diferente y normalmente se realiza en settings hospitalarios.\n\n¿Quieres que te comparta el calendario para que agendes tu primera sesion? La duración total típica de un tratamiento (número de sesiones recomendado) es variable, para eso es la primera sesion.",
-        "recent_turns": "[{\"assistant\": \"No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se 'cura'. Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mu...\", \"user\": \"cura el autismo?\"}, {\"assistant\": \"Los electrochoques (terapia electroconvulsiva, TEC o ECT en inglés) no 'curan' el autismo. La TEC es un tratamiento médico utilizado principalmente para ciertos trastornos psiquiátricos graves, sobre todo depresión ma...\", \"user\": \"los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad\"}, {\"assistant\": \"Si te refieres a estimulación (estimulación magnética transcraneal, EMT/TMS) —según la información disponible en la clínica referenciada— los precios orientativos son...\", \"user\": \"cuanto vale tu estimulacion?\"}]",
-        "memories": "[\"User asked in Spanish about the cost of 'estimulación' (the assistant interpreted this as transcranial magnetic stimulation...\", \"Assistant offered to confirm appointment availability, provide the typical total treatment duration or recommended number of sessions for...\", \"Assistant provided indicative prices from a referenced clinic for transcranial magnetic stimulation (TMS/EMT) high-intensi...\"]"
+        "context_summary": "La conversación ha girado alrededor de si ciertos tratamientos ayudan en autismo y luego se movió a la estimulación magnética y su costo. Ya se aclaró que la terapia electroconvulsiva no la manejan, se dieron precios orientativos de TMS de alta y baja intensidad y de la valoración inicial, y también se dijo que la cantidad de sesiones se define después de la primera consulta. Ahora el usuario quiere avanzar directo a 20 sesiones, por lo que la respuesta debe encaminarlo a agendar la valoración sin prometer un paquete fijo ni contradecir esa necesidad de evaluación previa.",
+        "last_assistant_message": "Los precios son: - TMS de alta intensidad (sesión individual, 50 minutos): 1200 MXN por sesión. - TMS de baja intensidad (sesión individual, 50 minutos): 900 MXN por sesión. - Valoración psicologica inicial (50 minutos): 800 MXN. - Nota: la EMT/TMS suele acompañarse de seguimiento psicologico durante el tratamiento. En cuanto a terapia electroconvulsiva (TEC/electrochoques), nosotros no manejamos esa terapia. La TEC es un procedimiento diferente y normalmente se realiza en settings hospitalarios. ¿Quieres que te comparta el calendario para que agendes tu primera sesion? La duración total típica de un tratamiento (número de sesiones recomendado) es variable, para eso es la primera sesion."
       },
       "target_response_text": "Para definir el número de sesiones primero se requiere una valoración. Si quieres, te comparto el enlace para agendar esa primera consulta.",
-      "baseline_response_text": "Perfecto — quieres 20 sesiones. Para continuar necesito confirmar algunos detalles:\n\n1. ¿Prefieres TMS de alta intensidad (1200 MXN/sesión) o de baja intensidad (900 MXN/sesión)?  \n2. ¿Deseas incluir valoración psicológica inicial (800 MXN) antes de comenzar? (recomendada)  \n3. ¿Tienes alguna preferencia de días u horarios para agendar?  \n4. ¿Vas a pagar todo por adelantado o prefieres pagar por sesión?\n\nCon base en tus respuestas te calculo el total y, si quieres, te muestro un calendario con las fechas posibles para las 20 sesiones.",
-      "optimized_response_text": "Perfecto. Podemos programar 20 sesiones de EMT si tras la valoración inicial se considera apropiado. Precios por sesión según lo informado: EMT alta intensidad 1,200 MXN y EMT baja intensidad 900 MXN; para 20 sesiones serían aproximadamente 24,000 MXN (alta) o 18,000 MXN (baja).  \n\nImportante: se requiere una evaluación clínica inicial antes de confirmar el plan (valoración psiquiátrica 2,500 MXN / 60 min). ¿Quieres que agende la valoración inicial o me indicas tu ciudad para ver disponibilidad y horarios?",
-      "baseline_score": 0.4462,
-      "optimized_score": 0.5319,
+      "baseline_response_text": "Perfecto — entiendo que quieres avanzar con 20 sesiones. Antes de confirmar un paquete definitivo, necesitamos hacer la valoración inicial para determinar el tipo de TMS (alta o baja intensidad), la frecuencia recomendada y confirmar que 20 sesiones son lo indicado para tu caso.\n\n¿Qué proponemos hacer ahora?\n- Agendar la valoración inicial (50 min, 800 MXN). En esa consulta definimos protocolo, número final de sesiones y frecuencia.\n- Si tras la valoración se decide que 20 sesiones son apropiadas, podemos programarlas en bloque (te doy opciones de calendario) y acordar la forma de pago. Los precios orientativos por sesión son: TMS alta intensidad 1,200 MXN y TMS baja intensidad 900 MXN.\n- Indícame tus días/horarios preferidos para la valoración (mañana/tarde, días de semana/fines de semana) o si prefieres que te comparta el calendario disponible.\n\nSi quieres, también puedo explicarte cómo suele organizarse el tratamiento (p. ej. sesiones diarias de lunes a viernes por X semanas, o 2–3 veces por semana) para que vayas viendo opciones. ¿Cómo prefieres proceder?",
+      "optimized_response_text": "Entiendo que quieres avanzar con 20 sesiones. Normalmente el número y tipo de sesiones (TMS u otra intervención, frecuencia y duración) se deciden tras la valoración inicial para ajustar el plan a la condición y objetivos. Puedo enviarte el enlace para agendar la consulta de evaluación y, si tras esa valoración el equipo recomienda un plan de 20 sesiones, te explicarán costos y logística antes de confirmar. ¿Quieres que te comparta ahora el enlace para reservar la primera cita?",
+      "baseline_score": 0.5269,
+      "optimized_score": 0.6719,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.1103,
-          "weighted_score": 0.0276
+          "weight": 0.22,
+          "score": 0.0495,
+          "weighted_score": 0.0109
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.3333,
-          "weighted_score": 0.1167
+          "weight": 0.3,
+          "score": 0.5,
+          "weighted_score": 0.15
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.8,
-          "weighted_score": 0.2
+          "weight": 0.18,
+          "score": 0.7,
+          "weighted_score": 0.126
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -235,37 +223,46 @@
           "field": "response_text",
           "scorer": "conversation_tone_guardrails",
           "weight": 0.15,
-          "score": 0.68,
-          "weighted_score": 0.102
+          "score": 0.6,
+          "weighted_score": 0.09
         }
       ],
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.1329,
-          "weighted_score": 0.0332
+          "weight": 0.22,
+          "score": 0.0451,
+          "weighted_score": 0.0099
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.3333,
-          "weighted_score": 0.1167
+          "weight": 0.3,
+          "score": 0.6667,
+          "weighted_score": 0.2
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -282,65 +279,55 @@
       "trace_id": "",
       "input_payload": {
         "user_message": "los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad",
-        "summary": "n/a",
-        "active_goal": "conversation",
-        "stage": "open",
-        "pending_question": "n/a",
-        "last_assistant_message": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se \"cura\". Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mundo. Muchas personas autistas viven vidas plenas y no buscan \"curarse\"; en cambio, pueden beneficiarse de apoyos y terapias que mejoran habilidades, comunicación y calidad de vida.\n\nQué puede ayudar:\n- Intervenciones tempranas y terapias basadas en evidencia (terapia del habla, terapia ocupacional, intervención conductual) para abordar dificultades concretas.\n- Apoyos educativos adaptados y ajustes razonables en la escuela o el trabajo.\n- Apoyo psicosocial para la familia y la persona (asesoramiento, grupos de apoyo).\n- Tratamiento de condiciones asociadas si las hay (ansiedad, depresión, epilepsia, problemas del sueño, etc.).\n\nEs importante respetar la diversidad neurobiológica y centrarse en las necesidades y metas de cada persona. Si tienes preocupaciones específicas sobre alguien, puedo darte información sobre recursos, terapias concretas o cómo buscar evaluación profesional. ¿Quieres que te explique más sobre alguna intervención concreta o dónde encontrar apoyo?",
-        "recent_turns": [
-          {
-            "user": "cura el autismo?",
-            "assistant": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se \"cura\". Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mu..."
-          }
-        ],
-        "memories": [
-          "User asked in Spanish whether autism ('¿cura el autismo?') can be cured.",
-          "Assistant explained that autism (autism spectrum disorder) is not considered a disease that can be cured; it is a neurological and develo...",
-          "Assistant recommended early interventions and evidence-based therapies—specifically speech therapy, occupational therapy, and behavioral ..."
-        ]
+        "context_summary": "Antes de este mensaje el usuario preguntó si el autismo se cura y ya se le respondió que no se considera una enfermedad que se cure, sino una condición del neurodesarrollo que suele abordarse con apoyos e intervenciones basadas en evidencia. Ahora aterriza una duda específica sobre los electrochoques en un niño de 7 años, así que la respuesta debe enlazar con esa explicación previa, mantener un tono prudente y no sugerir que ese procedimiento cure el autismo ni contradiga lo ya dicho.",
+        "last_assistant_message": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se \"cura\". Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mundo. Muchas personas autistas viven vidas plenas y no buscan \"curarse\"; en cambio, pueden beneficiarse de apoyos y terapias que mejoran habilidades, comunicación y calidad de vida. Qué puede ayudar: - Intervenciones tempranas y terapias basadas en evidencia (terapia del habla, terapia ocupacional, intervención conductual) para abordar dificultades concretas. - Apoyos educativos adaptados y ajustes razonables en la escuela o el trabajo. - Apoyo psicosocial para la familia y la persona (asesoramiento, grupos de apoyo). - Tratamiento de condiciones asociadas si las hay (ansiedad, depresión, epilepsia, problemas del sueño, etc.). Es importante respetar la diversidad neurobiológica y centrarse en las necesidades y metas de cada persona. Si tienes preocupaciones específicas sobre alguien, puedo darte información sobre recursos, terapias concretas o cómo buscar evaluación profesional. ¿Quieres que te explique más sobre alguna intervención concreta o dónde encontrar apoyo?"
       },
       "serialized_input": {
         "user_message": "los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad",
-        "summary": "n/a",
-        "active_goal": "conversation",
-        "stage": "open",
-        "pending_question": "n/a",
-        "last_assistant_message": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se \"cura\". Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mundo. Muchas personas autistas viven vidas plenas y no buscan \"curarse\"; en cambio, pueden beneficiarse de apoyos y terapias que mejoran habilidades, comunicación y calidad de vida.\n\nQué puede ayudar:\n- Intervenciones tempranas y terapias basadas en evidencia (terapia del habla, terapia ocupacional, intervención conductual) para abordar dificultades concretas.\n- Apoyos educativos adaptados y ajustes razonables en la escuela o el trabajo.\n- Apoyo psicosocial para la familia y la persona (asesoramiento, grupos de apoyo).\n- Tratamiento de condiciones asociadas si las hay (ansiedad, depresión, epilepsia, problemas del sueño, etc.).\n\nEs importante respetar la diversidad neurobiológica y centrarse en las necesidades y metas de cada persona. Si tienes preocupaciones específicas sobre alguien, puedo darte información sobre recursos, terapias concretas o cómo buscar evaluación profesional. ¿Quieres que te explique más sobre alguna intervención concreta o dónde encontrar apoyo?",
-        "recent_turns": "[{\"assistant\": \"No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se \\\"cura\\\". Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mu...\", \"user\": \"cura el autismo?\"}]",
-        "memories": "[\"User asked in Spanish whether autism ('¿cura el autismo?') can be cured.\", \"Assistant explained that autism (autism spectrum disorder) is not considered a disease that can be cured; it is a neurological and develo...\", \"Assistant recommended early interventions and evidence-based therapies—specifically speech therapy, occupational therapy, and behavioral ...\"]"
+        "context_summary": "Antes de este mensaje el usuario preguntó si el autismo se cura y ya se le respondió que no se considera una enfermedad que se cure, sino una condición del neurodesarrollo que suele abordarse con apoyos e intervenciones basadas en evidencia. Ahora aterriza una duda específica sobre los electrochoques en un niño de 7 años, así que la respuesta debe enlazar con esa explicación previa, mantener un tono prudente y no sugerir que ese procedimiento cure el autismo ni contradiga lo ya dicho.",
+        "last_assistant_message": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se \"cura\". Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mundo. Muchas personas autistas viven vidas plenas y no buscan \"curarse\"; en cambio, pueden beneficiarse de apoyos y terapias que mejoran habilidades, comunicación y calidad de vida. Qué puede ayudar: - Intervenciones tempranas y terapias basadas en evidencia (terapia del habla, terapia ocupacional, intervención conductual) para abordar dificultades concretas. - Apoyos educativos adaptados y ajustes razonables en la escuela o el trabajo. - Apoyo psicosocial para la familia y la persona (asesoramiento, grupos de apoyo). - Tratamiento de condiciones asociadas si las hay (ansiedad, depresión, epilepsia, problemas del sueño, etc.). Es importante respetar la diversidad neurobiológica y centrarse en las necesidades y metas de cada persona. Si tienes preocupaciones específicas sobre alguien, puedo darte información sobre recursos, terapias concretas o cómo buscar evaluación profesional. ¿Quieres que te explique más sobre alguna intervención concreta o dónde encontrar apoyo?"
       },
       "target_response_text": "No, no es un tratamiento indicado para \"curar\" el autismo. Lo adecuado es una valoración profesional previa para revisar el caso y decirte con claridad cuál sería el siguiente paso. Si quieres, te comparto el enlace para una valoración inicial.",
-      "baseline_response_text": "Los electrochoques (terapia electroconvulsiva, TEC) no curan el autismo. La TEC es un tratamiento médico que se usa en ciertas condiciones psiquiátricas graves, como la depresión mayor resistente al tratamiento, algunas psicosis severas o episodios catatónicos, y se aplica bajo indicación y supervisión médica estricta. No existe evidencia científica que apoye su uso para “curar” el trastorno del espectro autista (TEA).\n\nAdemás, la TEC puede tener efectos secundarios importantes (por ejemplo, pérdida de memoria y confusión transitoria) y por ello se reserva para casos específicos en adultos cuando otros tratamientos han fallado.\n\nPara un niño de 7 años con TEA, las intervenciones recomendadas son otras, basadas en la evidencia y más seguras, por ejemplo:\n- Intervención conductual basada en análisis conductual aplicado (ABA) u otros enfoques centrados en habilidades funcionales.\n- Terapia del habla y del lenguaje para mejorar la comunicación.\n- Terapia ocupacional para habilidades sensoriales y de la vida diaria.\n- Apoyos educativos adaptados y estrategias en la escuela.\n- Tratamiento de problemas asociados (ansiedad, sueño, epilepsia) por profesionales.\n\nSi te preocupa el comportamiento o la salud de tu hijo, lo mejor es hablar con su pediatra, un neurólogo infantil o un equipo especializado en TEA para recibir evaluación y recomendaciones personalizadas. Si quieres, puedo:\n- Explicar más sobre las terapias recomendadas para niños.\n- Sugerir preguntas para llevar al médico.\n- Dar recursos en tu país para buscar ayuda.\n\n¿Te gustaría que te ayude con alguna de esas opciones?",
-      "optimized_response_text": "No, los electrochoques (terapia electroconvulsiva, TEC) no se usan para \"curar\" el autismo y no son un tratamiento indicado para el trastorno del espectro autista en niños. Para un niño de 7 años lo más útil son evaluaciones y terapias basadas en evidencia (intervención temprana, terapia del lenguaje, terapia ocupacional, intervención conductual) y apoyos escolares. Si quieres, puedo ayudarte a solicitar una evaluación inicial en la clínica, explicar las opciones de intervención para tu hijo o darte un mensaje para la escuela; ¿qué prefieres?",
-      "baseline_score": 0.4309,
-      "optimized_score": 0.5075,
+      "baseline_response_text": "No. Los \"electrochoques\" (terapia electroconvulsiva, TEC o ECT en inglés) no curan el autismo. El autismo es una condición del neurodesarrollo y no existe una intervención que lo \"cura\". \n\nQué es la TEC y cuándo se usa\n- La TEC es un tratamiento psiquiátrico que induce convulsiones controladas bajo anestesia. Se utiliza principalmente en adultos con depresión severa, catatonia u otras situaciones psiquiátricas graves que no responden a tratamientos convencionales.  \n- En niños y adolescentes se usa muy raramente y solo en casos extremos, con supervisión experta y consentimiento informado estricto.\n\nImportante sobre autismo\n- La TEC no está indicada para \"tratar\" el autismo en sí.  \n- Sin embargo, en personas autistas que desarrollan complicaciones psiquiátricas muy graves (por ejemplo, catatonia o depresión resistente al tratamiento) algunos equipos de salud mental pueden considerar la TEC como último recurso. Eso es excepcional y se decide caso por caso por especialistas experimentados.\n\nQué hacer si te preocupa tu hijo (7 años)\n1. Habla con el pediatra y solicita valoración por un especialista en desarrollo infantil o un psiquiatra infantil.  \n2. Si hay conductas muy preocupantes (autolesiones, catatonia, depresión profunda, crisis que ponen en riesgo la vida), pide atención urgente y explica todos los síntomas.  \n3. Pregunta por tratamientos basados en evidencia para autismo: intervenciones tempranas, terapia del habla, terapia ocupacional, intervenciones conductuales, apoyos escolares y manejo de condiciones asociadas (ansiedad, problemas de sueño, epilepsia).  \n4. Si alguien te propone TEC para tu hijo, pide una explicación clara de por qué lo recomiendan, pruebas que lo justifican, riesgos/beneficios y busca una segunda opinión con un equipo especializado en infancia.\n\nSi quieres, puedo:\n- Darte información sobre terapias recomendadas para niños con autismo de 7 años.  \n- Indicar preguntas útiles para llevar al pediatra o psiquiatra.  \n- Ayudarte a encontrar recursos en tu área (si me dices país/ciudad).\n\nSiento que estés preocupado —si me cuentas más sobre los síntomas del niño puedo orientarte mejor.",
+      "optimized_response_text": "No, los electrochoques (terapia electroconvulsiva, TEC) no curan el autismo. La TEC es un tratamiento que, en adultos, puede utilizarse en casos graves de depresión u otros trastornos psiquiátricos seleccionados y siempre bajo evaluación médica, consentimiento informado y seguimiento especializado; su uso en niños es muy excepcional y solo en circunstancias clínicas específicas por especialistas en salud mental infantil.  \n\nPara un niño con TEA lo más apropiado son intervenciones terapéuticas y educativas basadas en evidencia (terapia del lenguaje, terapia ocupacional, apoyo conductual y escolar, etc.) y la valoración por un equipo multidisciplinario para identificar necesidades concretas. Si quieres, puedo ayudarte a buscar una evaluación especializada o enviarte recursos y guías para familias; ¿prefieres que te comparta opciones para agendar o información práctica sobre terapias para niños con autismo?",
+      "baseline_score": 0.4885,
+      "optimized_score": 0.529,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.037,
-          "weighted_score": 0.0092
+          "weight": 0.22,
+          "score": 0.0279,
+          "weighted_score": 0.0061
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.3333,
-          "weighted_score": 0.1167
+          "weight": 0.3,
+          "score": 0.2778,
+          "weighted_score": 0.0833
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 0.8,
-          "weighted_score": 0.2
+          "weighted_score": 0.144
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -355,30 +342,39 @@
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0354,
-          "weighted_score": 0.0088
+          "weight": 0.22,
+          "score": 0.0484,
+          "weighted_score": 0.0106
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.3333,
-          "weighted_score": 0.1167
+          "weight": 0.3,
+          "score": 0.2778,
+          "weighted_score": 0.0833
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -386,8 +382,8 @@
           "field": "response_text",
           "scorer": "conversation_tone_guardrails",
           "weight": 0.15,
-          "score": 0.88,
-          "weighted_score": 0.132
+          "score": 0.7,
+          "weighted_score": 0.105
         }
       ]
     },
@@ -395,60 +391,102 @@
       "trace_id": "",
       "input_payload": {
         "user_message": "Hola buen dia, esperando te encuentres muy bien",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": [
-          ""
-        ],
-        "memories": [
-          ""
-        ]
+        "context_summary": "La conversación apenas empieza con un saludo del usuario y no hay respuestas previas del asistente ni contexto adicional que arrastrar. Conviene responder como primer turno, mantener un tono amable y abrir espacio para que cuente qué necesita, sin asumir síntomas, tratamientos ni ningún antecedente que no existe.",
+        "last_assistant_message": ""
       },
       "serialized_input": {
         "user_message": "Hola buen dia, esperando te encuentres muy bien",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": "[\"\"]",
-        "memories": "[\"\"]"
+        "context_summary": "La conversación apenas empieza con un saludo del usuario y no hay respuestas previas del asistente ni contexto adicional que arrastrar. Conviene responder como primer turno, mantener un tono amable y abrir espacio para que cuente qué necesita, sin asumir síntomas, tratamientos ni ningún antecedente que no existe.",
+        "last_assistant_message": ""
       },
       "target_response_text": "Hola, buen día. Te leo. ¿En qué puedo ayudarte?",
-      "baseline_response_text": "¡Hola! Muy buenos días — gracias, espero que tú también te encuentres muy bien. ¿En qué puedo ayudarte hoy?",
-      "optimized_response_text": "¡Hola, buen día! Gracias, estoy bien — ¿en qué puedo ayudarte hoy? ¿Quieres hablar sobre tu hijo, síntomas propios o agendar una valoración? Dime qué prefieres y en qué ciudad estás para ofrecerte opciones.",
-      "baseline_score": 0.8896,
-      "optimized_score": 0.7396,
+      "baseline_response_text": "¡Hola! Muy buenos días, espero que tú también estés muy bien. ¿En qué puedo ayudarte hoy? Puedes contarme lo que necesites —preguntas, dudas, alguna tarea— y con gusto te apoyo.",
+      "optimized_response_text": "Hola, buen día. Gracias, estoy bien —te escucho cuando quieras. ¿En qué puedo ayudarte hoy: quieres hablar de cómo te sientes, necesitas orientación sobre un problema específico, o prefieres que te ayude a buscar atención profesional?",
+      "baseline_score": 0.7445,
+      "optimized_score": 0.8442,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.5584,
-          "weighted_score": 0.1396
+          "weight": 0.22,
+          "score": 0.3839,
+          "weighted_score": 0.0845
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.35
+          "weighted_score": 0.3
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 0.35,
+          "weighted_score": 0.0525
+        },
+        {
+          "name": "tone_guardrails",
+          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "field": "response_text",
+          "scorer": "conversation_tone_guardrails",
+          "weight": 0.15,
+          "score": 0.85,
+          "weighted_score": 0.1275
+        }
+      ],
+      "optimized_criteria": [
+        {
+          "name": "response_similarity",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
+          "field": "response_text",
+          "scorer": "text_similarity",
+          "weight": 0.22,
+          "score": 0.2918,
+          "weighted_score": 0.0642
+        },
+        {
+          "name": "key_information_coverage",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
+          "field": "response_text",
+          "scorer": "keyword_coverage",
+          "weight": 0.3,
+          "score": 1.0,
+          "weighted_score": 0.3
+        },
+        {
+          "name": "follow_up_alignment",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
+          "field": "response_text",
+          "scorer": "conversation_follow_up",
+          "weight": 0.18,
+          "score": 1.0,
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -459,141 +497,42 @@
           "score": 1.0,
           "weighted_score": 0.15
         }
-      ],
-      "optimized_criteria": [
-        {
-          "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
-          "field": "response_text",
-          "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.1186,
-          "weighted_score": 0.0296
-        },
-        {
-          "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
-          "field": "response_text",
-          "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 1.0,
-          "weighted_score": 0.35
-        },
-        {
-          "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
-          "field": "response_text",
-          "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.9,
-          "weighted_score": 0.225
-        },
-        {
-          "name": "tone_guardrails",
-          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
-          "field": "response_text",
-          "scorer": "conversation_tone_guardrails",
-          "weight": 0.15,
-          "score": 0.9,
-          "weighted_score": 0.135
-        }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
         "user_message": "eso sirve para niños? mi hijo tiene 6 años, en la escuela me han dicho que se distrae muy facil, me tiene vuelta loca, no se que hacer",
-        "summary": "n/a",
-        "active_goal": "information",
-        "stage": "lookup",
-        "pending_question": "n/a",
-        "last_assistant_message": "¡Claro! ¿Te refieres a la estimulación magnética transcraneal (EMT)? Según nuestra oferta vigente:\n\n- EMT de alta intensidad: 50 minutos — 1,200 MXN por sesión.\n- EMT de baja intensidad: 50 minutos — 900 MXN por sesión.\n\nAdemás, ten en cuenta:\n- La estimulación siempre va acompañada de seguimiento psiquiátrico durante el tratamiento.\n- La valoración inicial (primera consulta psiquiátrica) tiene un costo de 800 MXN y dura 50 minutos.\n\n¿Quieres que agende una cita o te doy más detalles sobre el proceso, contraindicaciones o planes de tratamiento? Si te referías a otro tipo de \"estimulación\", dime cuál para darte el precio exacto.",
-        "recent_turns": [
-          {
-            "user": "Hola buen dia, esperando te encuentres muy bien",
-            "assistant": "¡Hola! Muy buenos días — gracias, espero que tú también estés muy bien. ¿En qué puedo ayudarte hoy?"
-          },
-          {
-            "user": "quisiera saber el precio de su estimulacion",
-            "assistant": "¡Claro! ¿Te refieres a la estimulación magnética transcraneal (EMT)? Según nuestra oferta vigente:\n\n- EMT de alta intensidad: 50 minutos — 1,200 MXN por sesión.\n- EMT de baja intensidad: 50 minutos — 900 MXN por sesión.\n\nAdemás, ten en cuenta:\n- La estimulación siempre va acompañada de seguimiento psiquiátrico durante el tratamiento.\n- La valoración inicial (primera consulta psiquiátrica) tiene un costo de 2,500 MXN y dura 60 minutos.\n\n¿Quieres que agende una cita o te doy más detalles sobre el proceso, contraindicaciones o planes de tratamiento? Si te referías a otro tipo de \"estimulación\", dime cuál para darte el precio exacto."
-          }
-        ],
-        "memories": [
-          "User asked for the price of the clinic's brain stimulation treatment (transcranial magnetic stimulation / estimulación magnética transcra...",
-          "User was informed that the initial psychiatric evaluation costs 2,500 MXN and lasts 60 minutes (information provided on 2026-04-27).",
-          "User was told that low-intensity EMT sessions are 50 minutes long and cost 900 MXN per session (information provided on 2026-04-27)."
-        ]
+        "context_summary": "Antes de este mensaje, el usuario preguntó por el precio de la estimulación y ya recibió una explicación sobre tipos de EMT, costos por sesión, seguimiento psiquiátrico y valoración inicial, con la opción de agendar o pedir más detalles. Ahora aterriza la duda en su hijo de 6 años y pregunta si eso sirve para niños, así que la respuesta debe conectar con esa información previa, ir directo al punto y sostener que hace falta una valoración profesional antes de concluir algo por chat.",
+        "last_assistant_message": "¡Claro! ¿Te refieres a la estimulación magnética transcraneal (EMT)? Según nuestra oferta vigente: - EMT de alta intensidad: 50 minutos — 1,200 MXN por sesión. - EMT de baja intensidad: 50 minutos — 900 MXN por sesión. Además, ten en cuenta: - La estimulación siempre va acompañada de seguimiento psiquiátrico durante el tratamiento. - La valoración inicial (primera consulta psiquiátrica) tiene un costo de 800 MXN y dura 50 minutos. ¿Quieres que agende una cita o te doy más detalles sobre el proceso, contraindicaciones o planes de tratamiento? Si te referías a otro tipo de \"estimulación\", dime cuál para darte el precio exacto."
       },
       "serialized_input": {
         "user_message": "eso sirve para niños? mi hijo tiene 6 años, en la escuela me han dicho que se distrae muy facil, me tiene vuelta loca, no se que hacer",
-        "summary": "n/a",
-        "active_goal": "information",
-        "stage": "lookup",
-        "pending_question": "n/a",
-        "last_assistant_message": "¡Claro! ¿Te refieres a la estimulación magnética transcraneal (EMT)? Según nuestra oferta vigente:\n\n- EMT de alta intensidad: 50 minutos — 1,200 MXN por sesión.\n- EMT de baja intensidad: 50 minutos — 900 MXN por sesión.\n\nAdemás, ten en cuenta:\n- La estimulación siempre va acompañada de seguimiento psiquiátrico durante el tratamiento.\n- La valoración inicial (primera consulta psiquiátrica) tiene un costo de 800 MXN y dura 50 minutos.\n\n¿Quieres que agende una cita o te doy más detalles sobre el proceso, contraindicaciones o planes de tratamiento? Si te referías a otro tipo de \"estimulación\", dime cuál para darte el precio exacto.",
-        "recent_turns": "[{\"assistant\": \"¡Hola! Muy buenos días — gracias, espero que tú también estés muy bien. ¿En qué puedo ayudarte hoy?\", \"user\": \"Hola buen dia, esperando te encuentres muy bien\"}, {\"assistant\": \"¡Claro! ¿Te refieres a la estimulación magnética transcraneal (EMT)? Según nuestra oferta vigente:\\n\\n- EMT de alta intensidad: 50 minutos — 1,200 MXN por sesión.\\n- EMT de baja intensidad: 50 minutos — 900 MXN por sesión.\\n\\nAdemás, ten en cuenta:\\n- La estimulación siempre va acompañada de seguimiento psiquiátrico durante el tratamiento.\\n- La valoración inicial (primera consulta psiquiátrica) tiene un costo de 2,500 MXN y dura 60 minutos.\\n\\n¿Quieres que agende una cita o te doy más detalles sobre el proceso, contraindicaciones o planes de tratamiento? Si te referías a otro tipo de \\\"estimulación\\\", dime cuál para darte el precio exacto.\", \"user\": \"quisiera saber el precio de su estimulacion\"}]",
-        "memories": "[\"User asked for the price of the clinic's brain stimulation treatment (transcranial magnetic stimulation / estimulación magnética transcra...\", \"User was informed that the initial psychiatric evaluation costs 2,500 MXN and lasts 60 minutes (information provided on 2026-04-27).\", \"User was told that low-intensity EMT sessions are 50 minutes long and cost 900 MXN per session (information provided on 2026-04-27).\"]"
+        "context_summary": "Antes de este mensaje, el usuario preguntó por el precio de la estimulación y ya recibió una explicación sobre tipos de EMT, costos por sesión, seguimiento psiquiátrico y valoración inicial, con la opción de agendar o pedir más detalles. Ahora aterriza la duda en su hijo de 6 años y pregunta si eso sirve para niños, así que la respuesta debe conectar con esa información previa, ir directo al punto y sostener que hace falta una valoración profesional antes de concluir algo por chat.",
+        "last_assistant_message": "¡Claro! ¿Te refieres a la estimulación magnética transcraneal (EMT)? Según nuestra oferta vigente: - EMT de alta intensidad: 50 minutos — 1,200 MXN por sesión. - EMT de baja intensidad: 50 minutos — 900 MXN por sesión. Además, ten en cuenta: - La estimulación siempre va acompañada de seguimiento psiquiátrico durante el tratamiento. - La valoración inicial (primera consulta psiquiátrica) tiene un costo de 800 MXN y dura 50 minutos. ¿Quieres que agende una cita o te doy más detalles sobre el proceso, contraindicaciones o planes de tratamiento? Si te referías a otro tipo de \"estimulación\", dime cuál para darte el precio exacto."
       },
       "target_response_text": "Te leo. Para un caso así no conviene sacar conclusiones por chat; lo adecuado es una valoración profesional previa para revisar qué está pasando y decirte si desde la clínica podemos orientarte. Si quieres, te comparto el enlace para agendar una primera consulta.",
-      "baseline_response_text": "Sí puede servir, pero depende de la causa de la distracción. La estimulación magnética transcraneal (EMT) se usa en niños con ciertas condiciones (por ejemplo, algunos trastornos del ánimo o del neurodesarrollo) principalmente dentro de protocolos específicos y con evaluación especializada. Para un niño de 6 años lo habitual es: \n\n- Primero una valoración pediátrica/neurológica y psiquiátrica para identificar por qué se distrae (problemas de sueño, ansiedad, TDAH, dificultades de aprendizaje, factores ambientales, etc.).\n- La EMT en niños se administra con precaución; no todos los centros la ofrecen para edades tan bajas y suele requerir consentimiento informado estricto y seguimiento cercano.\n\nSi quieres, puedo:\n- Explicarte qué evalúan en la valoración inicial y qué pruebas pueden pedir (cuestionarios para TDAH, evaluación del sueño, rendimiento escolar, etc.).\n- Decirte los riesgos y contraindicaciones básicos de la EMT.\n- Recomendar pasos prácticos mientras gestionas la evaluación (estrategias en casa/escuela para mejorar la atención, cuándo pedir una consulta especializada).\n\nDime qué prefieres y si quieres que agende una valoración; nuestra consulta inicial cuesta 2,500 MXN y dura 60 minutos.",
-      "optimized_response_text": "Sí, muchas intervenciones sí sirven para niños de 6 años, pero primero conviene evaluar a tu hijo para identificar la causa de la distracción y recomendar el apoyo adecuado. Podemos ofrecer una valoración inicial (psiquiátrica/psicológica) para orientar diagnóstico y tratamiento; esta consulta permite explorar sueño, audición, aprendizaje, habilidades socioemocionales y posibles trastornos como TDAH.  \n\nSi quieres información práctica: la valoración inicial cuesta 2,500 MXN y dura ~60 minutos; las terapias varían según lo que se recomiende (terapia conductual, terapia ocupacional o fonoaudiología, por ejemplo). ¿Quieres que agende la valoración o prefieres que te diga estrategias concretas para manejar la distracción en casa y qué preguntas llevar a la escuela? También dime en qué ciudad estás para sugerir recursos locales.",
-      "baseline_score": 0.3774,
-      "optimized_score": 0.4587,
+      "baseline_response_text": "Sí, entiendo tu preocupación — con niños es muy común que la distracción cause estrés en la familia.\n\nPunto clave: no se puede decidir sólo por chat. La indicación de cualquier tipo de estimulación (incluida la EMT) en niños requiere una valoración clínica completa por un psiquiatra infantil o neurólogo pediátrico antes de considerar el tratamiento.\n\nInformación breve y práctica:\n- Evidencia y edad: La mayoría de los protocolos de EMT tienen menos evidencia en niños que en adultos. En algunos casos y bajo criterios estrictos (problemas neurológicos o psiquiátricos específicos, refractariedad a otros tratamientos), se puede considerar, pero siempre con supervisión especializada.\n- Seguridad: Es imprescindible evaluar antecedentes médicos, crisis convulsivas, implantes metálicos, medicación y desarrollo neurológico. Estas contraindicaciones y precauciones se revisan en la consulta.\n- Alternativas iniciales: Antes de EMT suele intentarse intervención psicoeducativa/psicoterapia (p. ej. entrenamiento en atención, técnicas conductuales), adaptación escolar (rutinas, apoyos, maestro de apoyo) y, si procede, valoración para tratamiento farmacológico según diagnóstico (por ejemplo, TDAH).\n- Costos y pasos: Como mencionamos, la valoración inicial psiquiátrica cuesta 800 MXN (50 minutos); ahí el especialista podrá decir si es recomendable explorar EMT, derivar a neuropsicología escolar o proponer otras intervenciones. Si se considerara EMT, se explican tipo, sesiones y costos.\n\nSi quieres, puedo:\n- Agendar la valoración inicial para que un especialista evalúe a tu hijo.\n- Enviarte información sobre estrategias conductuales y apoyo escolar para niños con dificultad de atención.\n- Explicar más sobre contraindicaciones y cómo sería el seguimiento si se llegara a plantear EMT.\n\n¿Quieres que agende la consulta o prefieres primero recibir recursos/prácticas que puedes aplicar en casa y en la escuela?",
+      "optimized_response_text": "Siento que estés pasando por eso; es comprensible que te sientas agobiada. La estimulación magnética o los \"electrochoques\" no son tratamientos de primera línea ni rutinarios para niños pequeños con problemas de atención; su uso en pediatría es excepcional y sólo se considera en casos muy específicos por especialistas, nunca como solución para \"distracción\". \n\nLo más útil ahora es evaluar a tu hijo para identificar causa(s): problemas de atención (TDAH), dificultades de aprendizaje, sueño, ansiedad, problemas sensoriales o ambientales en la escuela. Intervenciones habituales y seguras incluyen evaluación por pediatra y/o psicólogo infantil, adaptaciones escolares, terapia conductual y apoyo en casa; también es importante descartar problemas médicos.\n\nSi quieres, puedo ayudarte a agendar una valoración infantil para evaluar a tu hijo o darte pautas concretas para conversar con la escuela y organizar una observación. ¿Prefieres que te envíe el enlace para agendar o que te dé estrategias prácticas para manejar la conducta en casa y en la escuela?",
+      "baseline_score": 0.4979,
+      "optimized_score": 0.5435,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0352,
-          "weighted_score": 0.0088
+          "weight": 0.22,
+          "score": 0.0156,
+          "weighted_score": 0.0034
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.1818,
-          "weighted_score": 0.0636
-        },
-        {
-          "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
-          "field": "response_text",
-          "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.8,
-          "weighted_score": 0.2
-        },
-        {
-          "name": "tone_guardrails",
-          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
-          "field": "response_text",
-          "scorer": "conversation_tone_guardrails",
-          "weight": 0.15,
-          "score": 0.7,
-          "weighted_score": 0.105
-        }
-      ],
-      "optimized_criteria": [
-        {
-          "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
-          "field": "response_text",
-          "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0329,
-          "weighted_score": 0.0082
-        },
-        {
-          "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
-          "field": "response_text",
-          "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.2727,
+          "weight": 0.3,
+          "score": 0.3182,
           "weighted_score": 0.0955
         },
         {
@@ -601,9 +540,65 @@
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
+          "score": 0.8,
+          "weighted_score": 0.144
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.15
+        },
+        {
+          "name": "tone_guardrails",
+          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "field": "response_text",
+          "scorer": "conversation_tone_guardrails",
+          "weight": 0.15,
+          "score": 0.7,
+          "weighted_score": 0.105
+        }
+      ],
+      "optimized_criteria": [
+        {
+          "name": "response_similarity",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
+          "field": "response_text",
+          "scorer": "text_similarity",
+          "weight": 0.22,
+          "score": 0.0591,
+          "weighted_score": 0.013
+        },
+        {
+          "name": "key_information_coverage",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
+          "field": "response_text",
+          "scorer": "keyword_coverage",
+          "weight": 0.3,
+          "score": 0.3182,
+          "weighted_score": 0.0955
+        },
+        {
+          "name": "follow_up_alignment",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
+          "field": "response_text",
+          "scorer": "conversation_follow_up",
+          "weight": 0.18,
+          "score": 1.0,
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -620,63 +615,55 @@
       "trace_id": "",
       "input_payload": {
         "user_message": "me la pueden curar?",
-        "summary": "n/a",
-        "active_goal": "conversation",
-        "stage": "in_assessment",
-        "pending_question": "n/a",
-        "last_assistant_message": "Siento que estés pasando por esto. Gracias por contármelo. ¿Quieres hablar un poco sobre cómo te sientes? Puedo escuchar, hacer preguntas para entender mejor, ofrecer estrategias para manejar síntomas inmediatos, recursos de autocuidado, o ayudarte a buscar ayuda profesional si lo necesitas. ¿Qué prefieres ahora?\n\nSi estás en peligro inmediato (piensas hacerte daño o lastimar a alguien), por favor busca ayuda ahora mismo: contacta los servicios de emergencia de tu país o una línea de prevención del suicidio local.\n\nSi me dices en qué país estás, puedo darte recursos y números locales. También dime si prefieres hablar en español o en otro idioma. ¿Qué te pasa hoy exactamente? ¿Desde cuándo te sientes así?",
-        "recent_turns": [
-          {
-            "user": "Hola tengo depresion",
-            "assistant": "Entiendo como te puedes llegar a sentir. Gracias por contármelo. ¿Tienes mucho tiempo con el problema? En eros neuronal podemos ayudarte, si gustas asistir a la clinica, podemos valorar tu situacion y escucharte, ofrecerte soluciones que te ayuden atender ese problema.  ¿Haz asistido a terapia ateriormente?."
-          }
-        ],
-        "memories": [
-          ""
-        ]
+        "context_summary": "Venían hablando de que el usuario dice tener depresión y el asistente ya respondió con contención, ofreció escuchar, orientar y ayudar a buscar apoyo profesional, además de marcar recursos de seguridad si hubiera riesgo. El mensaje actual pregunta si se la pueden curar, así que la respuesta debe seguir esa línea de apoyo, contestar sin prometer resultados y mantener que primero hace falta una valoración, sin deshacer el encuadre cuidadoso ya establecido.",
+        "last_assistant_message": "Siento que estés pasando por esto. Gracias por contármelo. ¿Quieres hablar un poco sobre cómo te sientes? Puedo escuchar, hacer preguntas para entender mejor, ofrecer estrategias para manejar síntomas inmediatos, recursos de autocuidado, o ayudarte a buscar ayuda profesional si lo necesitas. ¿Qué prefieres ahora? Si estás en peligro inmediato (piensas hacerte daño o lastimar a alguien), por favor busca ayuda ahora mismo: contacta los servicios de emergencia de tu país o una línea de prevención del suicidio local. Si me dices en qué país estás, puedo darte recursos y números locales. También dime si prefieres hablar en español o en otro idioma. ¿Qué te pasa hoy exactamente? ¿Desde cuándo te sientes así?"
       },
       "serialized_input": {
         "user_message": "me la pueden curar?",
-        "summary": "n/a",
-        "active_goal": "conversation",
-        "stage": "in_assessment",
-        "pending_question": "n/a",
-        "last_assistant_message": "Siento que estés pasando por esto. Gracias por contármelo. ¿Quieres hablar un poco sobre cómo te sientes? Puedo escuchar, hacer preguntas para entender mejor, ofrecer estrategias para manejar síntomas inmediatos, recursos de autocuidado, o ayudarte a buscar ayuda profesional si lo necesitas. ¿Qué prefieres ahora?\n\nSi estás en peligro inmediato (piensas hacerte daño o lastimar a alguien), por favor busca ayuda ahora mismo: contacta los servicios de emergencia de tu país o una línea de prevención del suicidio local.\n\nSi me dices en qué país estás, puedo darte recursos y números locales. También dime si prefieres hablar en español o en otro idioma. ¿Qué te pasa hoy exactamente? ¿Desde cuándo te sientes así?",
-        "recent_turns": "[{\"assistant\": \"Entiendo como te puedes llegar a sentir. Gracias por contármelo. ¿Tienes mucho tiempo con el problema? En eros neuronal podemos ayudarte, si gustas asistir a la clinica, podemos valorar tu situacion y escucharte, ofrecerte soluciones que te ayuden atender ese problema.  ¿Haz asistido a terapia ateriormente?.\", \"user\": \"Hola tengo depresion\"}]",
-        "memories": "[\"\"]"
+        "context_summary": "Venían hablando de que el usuario dice tener depresión y el asistente ya respondió con contención, ofreció escuchar, orientar y ayudar a buscar apoyo profesional, además de marcar recursos de seguridad si hubiera riesgo. El mensaje actual pregunta si se la pueden curar, así que la respuesta debe seguir esa línea de apoyo, contestar sin prometer resultados y mantener que primero hace falta una valoración, sin deshacer el encuadre cuidadoso ya establecido.",
+        "last_assistant_message": "Siento que estés pasando por esto. Gracias por contármelo. ¿Quieres hablar un poco sobre cómo te sientes? Puedo escuchar, hacer preguntas para entender mejor, ofrecer estrategias para manejar síntomas inmediatos, recursos de autocuidado, o ayudarte a buscar ayuda profesional si lo necesitas. ¿Qué prefieres ahora? Si estás en peligro inmediato (piensas hacerte daño o lastimar a alguien), por favor busca ayuda ahora mismo: contacta los servicios de emergencia de tu país o una línea de prevención del suicidio local. Si me dices en qué país estás, puedo darte recursos y números locales. También dime si prefieres hablar en español o en otro idioma. ¿Qué te pasa hoy exactamente? ¿Desde cuándo te sientes así?"
       },
       "target_response_text": "La depresión no se resuelve igual en todos los casos, por eso primero hay que valorarla bien. En la clínica podemos revisarlo contigo y decirte qué tipo de ayuda tendría sentido en tu caso. Si quieres, te comparto el enlace para agendar.",
-      "baseline_response_text": "Gracias por confiar en contarme esto. Cuando preguntas \"me la pueden curar\", ¿te refieres a si la depresión se puede curar o mejorar? La respuesta breve es que muchas personas mejoran mucho y pueden llegar a sentirse bien con tratamiento, aunque la experiencia varía entre personas.\n\nPuedo ayudarte mejor si me dices un poco más:\n- ¿Desde cuándo llevas con depresión?\n- ¿Estás recibiendo algún tratamiento ahora (medicación, terapia, seguimiento médico)?\n- ¿Tienes crisis recientes (pensamientos de hacerte daño) o problemas para funcionar en el día a día?\n\nMientras tanto, información general:\n- Tratamientos eficaces incluyen psicoterapia (por ejemplo terapia cognitivo-conductual), medicación antidepresiva, cambios en el estilo de vida (actividad física, sueño, alimentación) y apoyo social. A veces se combinan varias opciones.\n- Muchas personas alcanzan remisión completa; otras necesitan manejar la condición a largo plazo con apoyo continuado. El seguimiento profesional permite ajustar el tratamiento.\n- Si tienes pensamientos de hacerte daño o estás en peligro ahora, busca ayuda inmediata: servicios de emergencia o la línea de prevención del suicidio local. Si me dices en qué país estás, te doy los números y recursos de tu zona.\n\nSi quieres, podemos:\n- Repasar opciones de tratamiento según tu situación.\n- Prepararte preguntas para tu médico o terapeuta.\n- Buscar servicios cerca de ti (dime tu país/ciudad).\n- Empezar ahora con estrategias para aliviar síntomas inmediatos (respiración, actividades breves, plan de seguridad).\n\n¿Qué prefieres hacer ahora? [[ ## completed ## ]]",
-      "optimized_response_text": "Si te refieres al autismo: no se considera una condición que se \"cura\". Podemos ofrecer evaluaciones y terapias (intervención temprana, terapia del habla, terapia ocupacional y apoyo educativo) que mejoran habilidades y calidad de vida. Si te refieres a la depresión u otra condición asociada, muchas veces pueden mejorarse mucho con tratamiento (psicoterapia, medicación si está indicada y apoyos psicosociales) tras una valoración clínica. ¿A cuál te refieres exactamente y quieres que agende una valoración inicial? Si me dices tu ciudad puedo darte opciones y precios.",
-      "baseline_score": 0.1936,
-      "optimized_score": 0.3839,
+      "baseline_response_text": "Entiendo la pregunta y siento que estés pasando por esto. La respuesta corta es: muchas personas mejoran mucho con tratamiento, pero no puedo prometer una \"cura\" sin antes hacer una valoración.  \n\nLo que suele ocurrir y puede ayudarte saber:\n- La depresión es tratable en la mayoría de los casos. Con la combinación adecuada de apoyo, terapia (por ejemplo terapia cognitivo-conductual u otras), a veces medicación, y cambios en el estilo de vida, muchas personas recuperan su bienestar o reducen mucho sus síntomas.\n- Cada persona es diferente: el tratamiento que funciona para uno puede no ser el mismo para otro. Por eso es importante que un profesional (médico o psicólogo) evalúe tu situación para recomendar el plan más adecuado.\n- El proceso puede tomar tiempo y ajustes: a veces hace falta probar distintas terapias o medicamentos para encontrar lo que mejor funciona.\n\nSi quieres, puedo:\n- Ayudarte a encontrar opciones de profesionales (psicólogo/psiquiatra) en tu zona.\n- Explicar en qué consiste la terapia y los tipos de tratamientos.\n- Sugerir estrategias de autocuidado para aliviar síntomas mientras buscas ayuda.\n- Darte números de emergencia o líneas de ayuda en tu país si me dices dónde estás.\n\nSi estás pensando hacerte daño o crees que corres riesgo ahora mismo, por favor busca ayuda inmediatamente: llama a los servicios de emergencia de tu país o a una línea local de prevención del suicidio. Dime en qué país estás o si prefieres que te guíe paso a paso; estoy aquí para acompañarte.",
+      "optimized_response_text": "Entiendo la pregunta y siento que estés pasando por esto. No puedo prometer una \"cura\" por aquí, pero muchas personas con depresión mejoran de forma importante con un tratamiento adecuado: evaluación clínica, un plan personalizado (psicoterapia, a veces medicación u otras intervenciones según el caso) y seguimiento. Lo primero es una valoración profesional para entender tus síntomas, antecedentes y si hay riesgo de daño; a partir de eso se diseña el tratamiento más apropiado. ¿Quieres que te envíe el enlace para agendar una consulta o prefieres contarme ahora cómo te sientes y desde cuándo? Si en este momento tienes ideas de hacerte daño, busca ayuda inmediata: contacta emergencias locales o la línea de prevención del suicidio de tu país.",
+      "baseline_score": 0.4021,
+      "optimized_score": 0.4857,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0361,
-          "weighted_score": 0.009
+          "weight": 0.22,
+          "score": 0.0207,
+          "weighted_score": 0.0046
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.2273,
-          "weighted_score": 0.0795
+          "weight": 0.3,
+          "score": 0.3182,
+          "weighted_score": 0.0955
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.42,
-          "weighted_score": 0.105
+          "weight": 0.18,
+          "score": 0.62,
+          "weighted_score": 0.1116
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -684,37 +671,46 @@
           "field": "response_text",
           "scorer": "conversation_tone_guardrails",
           "weight": 0.15,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.27,
+          "weighted_score": 0.0405
         }
       ],
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0049,
-          "weighted_score": 0.0012
+          "weight": 0.22,
+          "score": 0.0548,
+          "weighted_score": 0.0121
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.1818,
-          "weighted_score": 0.0636
+          "weight": 0.3,
+          "score": 0.3636,
+          "weighted_score": 0.1091
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.82,
-          "weighted_score": 0.205
+          "weight": 0.18,
+          "score": 1.0,
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",
@@ -722,8 +718,8 @@
           "field": "response_text",
           "scorer": "conversation_tone_guardrails",
           "weight": 0.15,
-          "score": 0.76,
-          "weighted_score": 0.114
+          "score": 0.23,
+          "weighted_score": 0.0345
         }
       ]
     },
@@ -731,60 +727,279 @@
       "trace_id": "",
       "input_payload": {
         "user_message": "Hola buen dia, esperando te encuentres muy bien",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": [
-          ""
-        ],
-        "memories": [
-          ""
-        ]
+        "context_summary": "La conversación apenas comienza y no hay mensajes previos ni información acumulada. El usuario abre con un saludo amable y todavía no plantea un tema concreto, así que lo coherente es corresponder de forma breve y dejar espacio para que explique en qué necesita ayuda, sin inventar antecedentes ni asumir un motivo de consulta.",
+        "last_assistant_message": ""
       },
       "serialized_input": {
         "user_message": "Hola buen dia, esperando te encuentres muy bien",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": "[\"\"]",
-        "memories": "[\"\"]"
+        "context_summary": "La conversación apenas comienza y no hay mensajes previos ni información acumulada. El usuario abre con un saludo amable y todavía no plantea un tema concreto, así que lo coherente es corresponder de forma breve y dejar espacio para que explique en qué necesita ayuda, sin inventar antecedentes ni asumir un motivo de consulta.",
+        "last_assistant_message": ""
       },
       "target_response_text": "Hola, buen día. Te leo. ¿En qué puedo ayudarte?",
-      "baseline_response_text": "¡Hola! Muy buenos días — gracias, espero que tú también te encuentres muy bien. ¿En qué puedo ayudarte hoy?",
-      "optimized_response_text": "¡Hola, buen día! Gracias, estoy bien — ¿en qué puedo ayudarte hoy? ¿Quieres hablar sobre tu hijo, síntomas propios o agendar una valoración? Dime qué prefieres y en qué ciudad estás para ofrecerte opciones.",
-      "baseline_score": 0.8896,
-      "optimized_score": 0.7396,
+      "baseline_response_text": "¡Hola! Muy buenos días, gracias — espero que tú también estés muy bien. ¿En qué puedo ayudarte hoy?",
+      "optimized_response_text": "Hola, buen día. Gracias por el saludo; estoy bien. ¿En qué puedo ayudarte hoy? ¿Prefieres hablar sobre algo puntual o quieres contar cómo te sientes?",
+      "baseline_score": 0.7896,
+      "optimized_score": 0.8435,
       "baseline_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.5584,
-          "weighted_score": 0.1396
+          "weight": 0.22,
+          "score": 0.589,
+          "weighted_score": 0.1296
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.35
+          "weighted_score": 0.3
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 1.0,
-          "weighted_score": 0.25
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 0.35,
+          "weighted_score": 0.0525
+        },
+        {
+          "name": "tone_guardrails",
+          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "field": "response_text",
+          "scorer": "conversation_tone_guardrails",
+          "weight": 0.15,
+          "score": 0.85,
+          "weighted_score": 0.1275
+        }
+      ],
+      "optimized_criteria": [
+        {
+          "name": "response_similarity",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
+          "field": "response_text",
+          "scorer": "text_similarity",
+          "weight": 0.22,
+          "score": 0.4388,
+          "weighted_score": 0.0965
+        },
+        {
+          "name": "key_information_coverage",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
+          "field": "response_text",
+          "scorer": "keyword_coverage",
+          "weight": 0.3,
+          "score": 1.0,
+          "weighted_score": 0.3
+        },
+        {
+          "name": "follow_up_alignment",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
+          "field": "response_text",
+          "scorer": "conversation_follow_up",
+          "weight": 0.18,
+          "score": 0.9,
+          "weighted_score": 0.162
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
+        },
+        {
+          "name": "tone_guardrails",
+          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "field": "response_text",
+          "scorer": "conversation_tone_guardrails",
+          "weight": 0.15,
+          "score": 0.9,
+          "weighted_score": 0.135
+        }
+      ]
+    },
+    {
+      "trace_id": "",
+      "input_payload": {
+        "user_message": "Hola tengo depresion",
+        "context_summary": "La conversación empieza con que el usuario dice que tiene depresión, sin historial previo ni respuesta anterior del asistente. Lo que sigue debe reconocerlo con sobriedad y encaminar el caso hacia una valoración profesional, ofreciendo el enlace para agendar como siguiente paso, sin convertir el intercambio en un diagnóstico por chat ni prometer resultados.",
+        "last_assistant_message": ""
+      },
+      "serialized_input": {
+        "user_message": "Hola tengo depresion",
+        "context_summary": "La conversación empieza con que el usuario dice que tiene depresión, sin historial previo ni respuesta anterior del asistente. Lo que sigue debe reconocerlo con sobriedad y encaminar el caso hacia una valoración profesional, ofreciendo el enlace para agendar como siguiente paso, sin convertir el intercambio en un diagnóstico por chat ni prometer resultados.",
+        "last_assistant_message": ""
+      },
+      "target_response_text": "Gracias por contarlo. Lo adecuado es valorarlo contigo en consulta para entender qué está pasando y cómo ayudarte de forma profesional. Si quieres, te comparto el enlace para agendar.",
+      "baseline_response_text": "Siento que estés pasando por esto. Gracias por compartirlo: decir que tienes depresión es importante. \n\nNo puedo diagnosticar ni sustituir una evaluación profesional por chat, pero puedo ayudarte a dar el siguiente paso. Si te parece bien, te puedo facilitar un enlace para agendar una valoración con un profesional de salud mental que pueda evaluar tus síntomas y proponerte opciones de tratamiento.\n\nSi en algún momento tienes pensamientos de hacerte daño, sientes que podrías actuar sobre ellos o hay riesgo inmediato, busca ayuda de emergencia ahora (llama a los servicios de emergencia locales) o contacta una línea de crisis/prevención del suicidio en tu país. Si quieres, dime en qué país estás y te doy el enlace para agendar la valoración o te doy recursos locales de emergencia y líneas de ayuda.\n\n¿Quieres que te envíe el enlace para agendar una consulta ahora?",
+      "optimized_response_text": "Gracias por contarlo; lamento que estés pasando por esto. Lo más adecuado es una valoración clínica para entender la intensidad y duración de tus síntomas y proponer un plan personal (psicoterapia, medicación u otros apoyos según corresponda). Puedo enviarte el enlace para agendar una consulta con un profesional si quieres. ¿Te lo envío ahora y en qué país estás para ofrecer recursos locales si los necesitaras?",
+      "baseline_score": 0.5606,
+      "optimized_score": 0.6877,
+      "baseline_criteria": [
+        {
+          "name": "response_similarity",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
+          "field": "response_text",
+          "scorer": "text_similarity",
+          "weight": 0.22,
+          "score": 0.0552,
+          "weighted_score": 0.0121
+        },
+        {
+          "name": "key_information_coverage",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
+          "field": "response_text",
+          "scorer": "keyword_coverage",
+          "weight": 0.3,
+          "score": 0.5333,
+          "weighted_score": 0.16
+        },
+        {
+          "name": "follow_up_alignment",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
+          "field": "response_text",
+          "scorer": "conversation_follow_up",
+          "weight": 0.18,
+          "score": 1.0,
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
+        },
+        {
+          "name": "tone_guardrails",
+          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "field": "response_text",
+          "scorer": "conversation_tone_guardrails",
+          "weight": 0.15,
+          "score": 0.39,
+          "weighted_score": 0.0585
+        }
+      ],
+      "optimized_criteria": [
+        {
+          "name": "response_similarity",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
+          "field": "response_text",
+          "scorer": "text_similarity",
+          "weight": 0.22,
+          "score": 0.1441,
+          "weighted_score": 0.0317
+        },
+        {
+          "name": "key_information_coverage",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
+          "field": "response_text",
+          "scorer": "keyword_coverage",
+          "weight": 0.3,
+          "score": 0.6667,
+          "weighted_score": 0.2
+        },
+        {
+          "name": "follow_up_alignment",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
+          "field": "response_text",
+          "scorer": "conversation_follow_up",
+          "weight": 0.18,
+          "score": 1.0,
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 1.0,
+          "weighted_score": 0.15
+        },
+        {
+          "name": "tone_guardrails",
+          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "field": "response_text",
+          "scorer": "conversation_tone_guardrails",
+          "weight": 0.15,
+          "score": 0.84,
+          "weighted_score": 0.126
+        }
+      ]
+    },
+    {
+      "trace_id": "",
+      "input_payload": {
+        "user_message": "Hola",
+        "context_summary": "La charla inicia aquí y no existe ningún mensaje anterior del asistente ni un tema ya desarrollado. El usuario solo saluda para abrir contacto, de modo que la respuesta debe mantenerse simple y abierta, invitando a que cuente qué necesita sin agregar contexto inexistente ni contradecir que esta es la primera interacción.",
+        "last_assistant_message": ""
+      },
+      "serialized_input": {
+        "user_message": "Hola",
+        "context_summary": "La charla inicia aquí y no existe ningún mensaje anterior del asistente ni un tema ya desarrollado. El usuario solo saluda para abrir contacto, de modo que la respuesta debe mantenerse simple y abierta, invitando a que cuente qué necesita sin agregar contexto inexistente ni contradecir que esta es la primera interacción.",
+        "last_assistant_message": ""
+      },
+      "target_response_text": "Hola. Te leo. ¿En qué puedo ayudarte?",
+      "baseline_response_text": "¡Hola! ¿En qué puedo ayudarte hoy?",
+      "optimized_response_text": "Hola, ¿cómo estás? ¿En qué puedo ayudarte hoy?",
+      "baseline_score": 0.856,
+      "optimized_score": 0.906,
+      "baseline_criteria": [
+        {
+          "name": "response_similarity",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
+          "field": "response_text",
+          "scorer": "text_similarity",
+          "weight": 0.22,
+          "score": 0.7887,
+          "weighted_score": 0.1735
+        },
+        {
+          "name": "key_information_coverage",
+          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
+          "field": "response_text",
+          "scorer": "keyword_coverage",
+          "weight": 0.3,
+          "score": 1.0,
+          "weighted_score": 0.3
+        },
+        {
+          "name": "follow_up_alignment",
+          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
+          "field": "response_text",
+          "scorer": "conversation_follow_up",
+          "weight": 0.18,
+          "score": 1.0,
+          "weighted_score": 0.18
+        },
+        {
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
+          "field": "response_text",
+          "scorer": "conversation_greeting_alignment",
+          "weight": 0.15,
+          "score": 0.35,
+          "weighted_score": 0.0525
         },
         {
           "name": "tone_guardrails",
@@ -799,246 +1014,39 @@
       "optimized_criteria": [
         {
           "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
+          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con continuidad breve, tono clinico y sin dramatizar.",
           "field": "response_text",
           "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.1186,
-          "weighted_score": 0.0296
+          "weight": 0.22,
+          "score": 0.7229,
+          "weighted_score": 0.159
         },
         {
           "name": "key_information_coverage",
           "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
           "field": "response_text",
           "scorer": "keyword_coverage",
-          "weight": 0.35,
+          "weight": 0.3,
           "score": 1.0,
-          "weighted_score": 0.35
+          "weighted_score": 0.3
         },
         {
           "name": "follow_up_alignment",
           "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
           "field": "response_text",
           "scorer": "conversation_follow_up",
-          "weight": 0.25,
+          "weight": 0.18,
           "score": 0.9,
-          "weighted_score": 0.225
+          "weighted_score": 0.162
         },
         {
-          "name": "tone_guardrails",
-          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
+          "name": "greeting_alignment",
+          "description": "La respuesta generada saluda solo cuando la respuesta objetivo sugiere primera interaccion; en conversaciones ya abiertas evita reabrir con saludos innecesarios.",
           "field": "response_text",
-          "scorer": "conversation_tone_guardrails",
+          "scorer": "conversation_greeting_alignment",
           "weight": 0.15,
-          "score": 0.9,
-          "weighted_score": 0.135
-        }
-      ]
-    },
-    {
-      "trace_id": "",
-      "input_payload": {
-        "user_message": "Hola tengo depresion",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": [
-          ""
-        ],
-        "memories": [
-          ""
-        ]
-      },
-      "serialized_input": {
-        "user_message": "Hola tengo depresion",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": "[\"\"]",
-        "memories": "[\"\"]"
-      },
-      "target_response_text": "Gracias por contarlo. Lo adecuado es valorarlo contigo en consulta para entender qué está pasando y cómo ayudarte de forma profesional. Si quieres, te comparto el enlace para agendar.",
-      "baseline_response_text": "Hola — siento que estés pasando por eso. Gracias por contármelo. ¿Te gustaría hablar más sobre cómo te sientes ahora? Puedo ayudarte con algunos recursos y estrategias para sobrellevar la depresión, escucharte sin juzgar, o, si prefieres, orientarte sobre cuándo pedir ayuda profesional.\n\nAlgunas cosas que puedo ofrecer ahora:\n- Preguntar cómo han sido tus síntomas (ánimo, sueño, apetito, energía, pensamientos).\n- Sugerir técnicas inmediatas para calmarte (respiración, anclaje).\n- Proponer pequeños pasos para el día a día (rutina, actividad física, sueño).\n- Información sobre cómo y cuándo buscar ayuda profesional o líneas de emergencia en tu país.\n\nSi en este momento te sientes en peligro de hacerte daño o tienes pensamientos de suicidio, por favor dímelo o contacta inmediatamente a los servicios de emergencia o a una línea de prevención del suicidio en tu país. Puedo ayudarte a encontrar números locales si me dices dónde estás (país o ciudad).\n\n¿Quieres que empecemos por contarme cómo te has sentido últimamente o prefieres recursos y pasos prácticos primero?",
-      "optimized_response_text": "Siento que estés pasando por eso. Es importante evaluarlo con un profesional para ofrecerte el tratamiento más adecuado; la depresión suele mejorar con psicoterapia, medicación si está indicada y apoyo psicosocial. \n\nPodemos empezar así: ¿prefieres una valoración inicial presencial u online? Si quieres, te paso el enlace para agendar; también dime en qué ciudad estás para ofrecerte opciones locales. Si ahora mismo te sientes en riesgo (piensas hacerte daño), por favor contacta emergencias o la línea de prevención de tu país inmediatamente.",
-      "baseline_score": 0.2016,
-      "optimized_score": 0.5268,
-      "baseline_criteria": [
-        {
-          "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
-          "field": "response_text",
-          "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0382,
-          "weighted_score": 0.0096
-        },
-        {
-          "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
-          "field": "response_text",
-          "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.4,
-          "weighted_score": 0.14
-        },
-        {
-          "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
-          "field": "response_text",
-          "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.16,
-          "weighted_score": 0.04
-        },
-        {
-          "name": "tone_guardrails",
-          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
-          "field": "response_text",
-          "scorer": "conversation_tone_guardrails",
-          "weight": 0.15,
-          "score": 0.08,
-          "weighted_score": 0.012
-        }
-      ],
-      "optimized_criteria": [
-        {
-          "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
-          "field": "response_text",
-          "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.0193,
-          "weighted_score": 0.0048
-        },
-        {
-          "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
-          "field": "response_text",
-          "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 0.4,
-          "weighted_score": 0.14
-        },
-        {
-          "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
-          "field": "response_text",
-          "scorer": "conversation_follow_up",
-          "weight": 0.25,
           "score": 1.0,
-          "weighted_score": 0.25
-        },
-        {
-          "name": "tone_guardrails",
-          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
-          "field": "response_text",
-          "scorer": "conversation_tone_guardrails",
-          "weight": 0.15,
-          "score": 0.88,
-          "weighted_score": 0.132
-        }
-      ]
-    },
-    {
-      "trace_id": "",
-      "input_payload": {
-        "user_message": "Hola",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": [
-          ""
-        ],
-        "memories": [
-          ""
-        ]
-      },
-      "serialized_input": {
-        "user_message": "Hola",
-        "summary": "n/a",
-        "active_goal": "n/a",
-        "stage": "n/a",
-        "pending_question": "n/a",
-        "last_assistant_message": "n/a",
-        "recent_turns": "[\"\"]",
-        "memories": "[\"\"]"
-      },
-      "target_response_text": "Hola. Te leo. ¿En qué puedo ayudarte?",
-      "baseline_response_text": "¡Hola! ¿Cómo estás? ¿En qué puedo ayudarte hoy?",
-      "optimized_response_text": "¡Hola! ¿En qué puedo ayudarte hoy? ¿Quieres hablar sobre algún síntoma, una cita o recursos para tu hijo o para ti?",
-      "baseline_score": 0.8886,
-      "optimized_score": 0.8021,
-      "baseline_criteria": [
-        {
-          "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
-          "field": "response_text",
-          "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.7143,
-          "weighted_score": 0.1786
-        },
-        {
-          "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
-          "field": "response_text",
-          "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 1.0,
-          "weighted_score": 0.35
-        },
-        {
-          "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
-          "field": "response_text",
-          "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.9,
-          "weighted_score": 0.225
-        },
-        {
-          "name": "tone_guardrails",
-          "description": "La respuesta evita dramatizacion, tono vendedor, preguntas de triage o evaluacion por chat, y no se alarga innecesariamente.",
-          "field": "response_text",
-          "scorer": "conversation_tone_guardrails",
-          "weight": 0.15,
-          "score": 0.9,
-          "weighted_score": 0.135
-        }
-      ],
-      "optimized_criteria": [
-        {
-          "name": "response_similarity",
-          "description": "La respuesta generada conserva la intencion y el contenido de la respuesta objetivo, con escucha breve, tono clinico y sin dramatizar.",
-          "field": "response_text",
-          "scorer": "text_similarity",
-          "weight": 0.25,
-          "score": 0.3684,
-          "weighted_score": 0.0921
-        },
-        {
-          "name": "key_information_coverage",
-          "description": "La respuesta generada cubre la informacion relevante presente en la respuesta objetivo y conserva la canalizacion a consulta sin desviarse a consejos, explicaciones largas ni promesas innecesarias.",
-          "field": "response_text",
-          "scorer": "keyword_coverage",
-          "weight": 0.35,
-          "score": 1.0,
-          "weighted_score": 0.35
-        },
-        {
-          "name": "follow_up_alignment",
-          "description": "Si la respuesta objetivo cierra con una pregunta o siguiente paso, la respuesta generada tambien lo hace de forma breve, clinica y natural, sin abrir interrogatorios ni listas de opciones.",
-          "field": "response_text",
-          "scorer": "conversation_follow_up",
-          "weight": 0.25,
-          "score": 0.9,
-          "weighted_score": 0.225
+          "weighted_score": 0.15
         },
         {
           "name": "tone_guardrails",

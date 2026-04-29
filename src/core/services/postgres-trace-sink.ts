@@ -126,16 +126,25 @@ function buildConversationLikeRawInput(
       ? state.recalled_memories
       : servedInput.memories;
 
-  const rawInput: Record<string, unknown> = {
-    user_message: state.last_user_message ?? servedInput.user_message ?? "",
-    summary: state.summary ?? servedInput.summary ?? "",
-    active_goal: state.active_goal ?? servedInput.active_goal ?? "",
-    stage: state.stage ?? servedInput.stage ?? "",
-    pending_question: state.pending_question ?? servedInput.pending_question ?? "",
-    last_assistant_message: state.last_assistant_message ?? servedInput.last_assistant_message ?? "",
-    recent_turns: state.recent_turns ?? servedInput.recent_turns ?? [],
-    memories: rawMemories ?? servedInput.memories ?? []
-  };
+  const isConversationTask = nodeName === "conversation";
+  const rawInput: Record<string, unknown> = isConversationTask
+    ? {
+        user_message: state.last_user_message ?? servedInput.user_message ?? "",
+        context_summary: servedInput.context_summary ?? "",
+        last_assistant_message: state.last_assistant_message ?? servedInput.last_assistant_message ?? "",
+        recent_turns_backend: state.recent_turns ?? [],
+        memories_backend: rawMemories ?? []
+      }
+    : {
+        user_message: state.last_user_message ?? servedInput.user_message ?? "",
+        summary: state.summary ?? servedInput.summary ?? "",
+        active_goal: state.active_goal ?? servedInput.active_goal ?? "",
+        stage: state.stage ?? servedInput.stage ?? "",
+        pending_question: state.pending_question ?? servedInput.pending_question ?? "",
+        last_assistant_message: state.last_assistant_message ?? servedInput.last_assistant_message ?? "",
+        recent_turns: state.recent_turns ?? servedInput.recent_turns ?? [],
+        memories: rawMemories ?? servedInput.memories ?? []
+      };
 
   if (nodeName === "rag" && servedInput.retrieved_context !== undefined) {
     rawInput.retrieved_context = servedInput.retrieved_context;
