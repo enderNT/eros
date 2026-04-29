@@ -124,11 +124,7 @@ describe("clinic routing deterministic guards", () => {
 
     const decision = await llmService.classifyStateRoute({
       user_message: "Necesito información",
-      conversation_summary: "",
-      current_mode: "conversation",
-      last_tool_result: "",
-      last_assistant_message: "",
-      memories: []
+      routing_context: "Modo actual: conversation.\nResumen del hilo: sin resumen relevante.\nUltimo mensaje del asistente: n/a\nUltimo resultado de herramienta: n/a\nMemorias relevantes: sin memorias relevantes.\nRiesgo de factualidad: bajo."
     });
 
     expect(decision.next_node).toBe("conversation");
@@ -140,7 +136,7 @@ describe("clinic routing deterministic guards", () => {
     });
   });
 
-  test("sends the full conversation summary to the routing signature while keeping other routing guards intact", async () => {
+  test("sends a compact routing_context to the routing signature while preserving the full summary inside it", async () => {
     const settings = buildTestSettings({
       dspy: {
         enabled: true
@@ -172,6 +168,9 @@ describe("clinic routing deterministic guards", () => {
       memories: []
     });
 
-    expect(capturedPayload?.conversation_summary).toBe(longSummary);
+    expect(typeof capturedPayload?.routing_context).toBe("string");
+    expect(String(capturedPayload?.routing_context ?? "")).toContain(longSummary);
+    expect(String(capturedPayload?.routing_context ?? "")).toContain("Modo actual: conversation.");
+    expect(String(capturedPayload?.routing_context ?? "")).toContain("Riesgo de factualidad:");
   });
 });

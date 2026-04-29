@@ -3,7 +3,7 @@
   "dataset": "dspy_service/datasets/conversation_reply.jsonl",
   "examples": 9,
   "dataset_fingerprint": "ff7962776e066232c7caedf91b5ff8506d37c4aae4b56f854c1e1c9989d967d7",
-  "compiled_at": "2026-04-29T18:39:23.756624+00:00",
+  "compiled_at": "2026-04-29T20:03:23.202774+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
     "auto": "heavy",

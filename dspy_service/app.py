@@ -57,6 +57,7 @@ def _prediction_to_dict(prediction: Any) -> dict[str, Any]:
         "needs_retrieval": getattr(prediction, "needs_retrieval", False),
         "state_update": getattr(prediction, "state_update", {}),
         "reason": getattr(prediction, "reason", ""),
+        "reply_reasoning": getattr(prediction, "reply_reasoning", ""),
         "response_text": getattr(prediction, "response_text", ""),
     }
 
@@ -67,6 +68,24 @@ def _has_value(value: Any) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     return True
+
+
+def _build_legacy_routing_context(payload: dict[str, Any]) -> str:
+    memories = payload.get("memories", [])
+    if not isinstance(memories, list):
+        memories = []
+    memory_lines = [str(item).strip() for item in memories if str(item).strip()]
+    memory_text = " | ".join(memory_lines[:3]) if memory_lines else "sin memorias relevantes"
+
+    return "\n".join(
+        [
+            f"Modo actual: {str(payload.get('current_mode', 'conversation')).strip() or 'conversation'}",
+            f"Resumen del hilo: {str(payload.get('conversation_summary', '')).strip() or 'sin resumen'}",
+            f"Ultimo mensaje del asistente: {str(payload.get('last_assistant_message', '')).strip() or 'n/a'}",
+            f"Ultimo resultado de herramienta: {str(payload.get('last_tool_result', '')).strip() or 'n/a'}",
+            f"Memorias relevantes: {memory_text}",
+        ]
+    )
 
 
 logging_enabled = os.getenv("DSPY_LOG_TO_CONSOLE", "true").strip().lower() != "false"
@@ -347,11 +366,7 @@ def predict_state_router(payload: dict[str, Any]) -> dict[str, Any]:
         "state_router",
         {
             "user_message": payload.get("user_message", ""),
-            "conversation_summary": payload.get("conversation_summary", ""),
-            "current_mode": payload.get("current_mode", "conversation"),
-            "last_tool_result": payload.get("last_tool_result", ""),
-            "last_assistant_message": payload.get("last_assistant_message", ""),
-            "memories": payload.get("memories", []),
+            "routing_context": payload.get("routing_context", "") or _build_legacy_routing_context(payload),
         },
     )
     if not prediction:

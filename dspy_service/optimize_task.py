@@ -54,11 +54,7 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
         "dataset": "state_router.jsonl",
         "input_fields": (
             "user_message",
-            "conversation_summary",
-            "current_mode",
-            "last_tool_result",
-            "last_assistant_message",
-            "memories",
+            "routing_context",
         ),
         "output_fields": (
             "next_node",
@@ -68,7 +64,7 @@ TASK_CONFIGS: dict[str, dict[str, Any]] = {
             "state_update",
             "reason",
         ),
-        "complex_fields": {"memories", "state_update"},
+        "complex_fields": {"state_update"},
     },
 }
 
@@ -152,6 +148,22 @@ def _serialize_value(value: Any) -> Any:
     if isinstance(value, (dict, list)):
         return _json_dump(value)
     return value
+
+
+def _build_legacy_routing_context(row: dict[str, Any]) -> str:
+    memories = row.get("memories", [])
+    if not isinstance(memories, list):
+        memories = []
+    memory_text = " | ".join(str(item).strip() for item in memories[:3] if str(item).strip()) or "sin memorias relevantes"
+    return "\n".join(
+        [
+            f"Modo actual: {str(row.get('current_mode', 'conversation')).strip() or 'conversation'}",
+            f"Resumen del hilo: {str(row.get('conversation_summary', '')).strip() or 'sin resumen'}",
+            f"Ultimo mensaje del asistente: {str(row.get('last_assistant_message', '')).strip() or 'n/a'}",
+            f"Ultimo resultado de herramienta: {str(row.get('last_tool_result', '')).strip() or 'n/a'}",
+            f"Memorias relevantes: {memory_text}",
+        ]
+    )
 
 
 def _build_metric(task_name: str, output_fields: tuple[str, ...]):
@@ -280,7 +292,7 @@ def _build_example(row: dict[str, Any], config: dict[str, Any]) -> tuple[dict[st
 
 def _normalize_row(row: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     normalized = deepcopy(row)
-    if "current_mode" in config["input_fields"] and not normalized.get("current_mode"):
+    if ("current_mode" in config["input_fields"] or "routing_context" in config["input_fields"]) and not normalized.get("current_mode"):
         active_goal = str(normalized.get("active_goal", "")).strip().lower()
         stage = str(normalized.get("stage", "")).strip().lower()
         last_tool_result = str(normalized.get("last_tool_result", "")).strip()
@@ -290,6 +302,8 @@ def _normalize_row(row: dict[str, Any], config: dict[str, Any]) -> dict[str, Any
             normalized["current_mode"] = "information"
         else:
             normalized["current_mode"] = "conversation"
+    if "routing_context" in config["input_fields"] and not str(normalized.get("routing_context", "")).strip():
+        normalized["routing_context"] = _build_legacy_routing_context(normalized)
     return normalized
 
 

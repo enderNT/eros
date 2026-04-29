@@ -14,11 +14,7 @@ if dspy is not None:
         """Route the conversation state and emit structured JSON-compatible fields."""
 
         user_message = dspy.InputField()
-        conversation_summary = dspy.InputField()
-        current_mode = dspy.InputField()
-        last_tool_result = dspy.InputField()
-        last_assistant_message = dspy.InputField()
-        memories = dspy.InputField()
+        routing_context = dspy.InputField()
 
         next_node = dspy.OutputField()
         intent = dspy.OutputField()

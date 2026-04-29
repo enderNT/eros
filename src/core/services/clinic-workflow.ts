@@ -253,7 +253,7 @@ function buildPendingQuestion(missingFields: string[]): string {
   return `Necesito ${readable.slice(0, -1).join(", ")} y ${readable.at(-1)} para continuar.`;
 }
 
-function deriveRoutingMode(state: GraphState): RoutingPacket["current_mode"] {
+function deriveRoutingMode(state: GraphState): "conversation" | "information" | "appointment" {
   if (state.active_goal === "appointment" || ["collecting_slots", "ready_for_handoff"].includes(state.stage)) {
     return "appointment";
   }
@@ -263,7 +263,33 @@ function deriveRoutingMode(state: GraphState): RoutingPacket["current_mode"] {
   return "conversation";
 }
 
+function buildRoutingContextFromState(state: GraphState): string {
+  const mode = deriveRoutingMode(state);
+  const memoryText = state.recalled_memories.length > 0
+    ? state.recalled_memories.slice(0, 3).map((memory) => compact(memory, 140)).join(" | ")
+    : "sin memorias relevantes";
+  const factualRisk = mode === "information" || Boolean(state.last_tool_result.trim())
+    ? "alto: puede requerir retrieval o continuidad factual."
+    : "bajo: probablemente puede resolverse sin retrieval.";
+
+  return [
+    `Modo actual: ${mode}.`,
+    `Resumen del hilo: ${state.summary.trim() || "sin resumen relevante."}`,
+    `Ultimo mensaje del asistente: ${state.last_assistant_message.trim() || "n/a"}`,
+    `Ultimo resultado de herramienta: ${state.last_tool_result.trim() || "n/a"}`,
+    `Memorias relevantes: ${memoryText}.`,
+    `Riesgo de factualidad: ${factualRisk}`
+  ].join("\n");
+}
+
 function buildRoutingPacket(state: GraphState): RoutingPacket {
+  return {
+    user_message: state.last_user_message,
+    routing_context: buildRoutingContextFromState(state)
+  };
+}
+
+function buildRoutingServiceInput(state: GraphState) {
   return {
     user_message: state.last_user_message,
     conversation_summary: state.summary,
@@ -316,12 +342,9 @@ function buildValidatedRouteDebug(
 
 function buildRouteInputSummary(input: RoutingPacket): Record<string, unknown> {
   return {
-    current_mode: input.current_mode,
     user_message_preview: compact(input.user_message, 160),
-    conversation_summary_present: Boolean(input.conversation_summary.trim()),
-    memory_count: input.memories.length,
-    has_last_tool_result: Boolean(input.last_tool_result.trim()),
-    has_last_assistant_message: Boolean(input.last_assistant_message.trim())
+    routing_context_present: Boolean(input.routing_context.trim()),
+    routing_context_preview: compact(input.routing_context, 220)
   };
 }
 
@@ -576,7 +599,8 @@ export class ClinicWorkflow {
 
   private async route(state: GraphState, traceId?: string, observerId?: string): Promise<GraphState> {
     const routingInput = buildRoutingPacket(state);
-    const decision = await this.routingService.routeState(routingInput, traceId);
+    const routingServiceInput = buildRoutingServiceInput(state);
+    const decision = await this.routingService.routeState(routingServiceInput, traceId);
     const candidateNextNode = String(decision.next_node ?? "").trim();
     const finalNextNode = isAllowedRouteDestination(candidateNextNode) ? candidateNextNode : "conversation";
     const routeDebug = buildValidatedRouteDebug(decision.debug, candidateNextNode, finalNextNode);

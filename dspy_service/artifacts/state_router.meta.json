@@ -2,8 +2,8 @@
   "task": "state_router",
   "dataset": "dspy_service/datasets/state_router.jsonl",
   "examples": 7,
-  "dataset_fingerprint": "d9b9ad8277a2c7aef3b4651860afd7eda046600fbfa9448fb07a70bc9501df42",
-  "compiled_at": "2026-04-27T17:37:46.658608+00:00",
+  "dataset_fingerprint": "4d69eb0d1ed985d54318c9cece0b536fdadb3dbbbd315719be970a894e27b0d4",
+  "compiled_at": "2026-04-29T20:40:51.171272+00:00",
   "optimizer": "dspy.MIPROv2",
   "optimizer_settings": {
     "auto": "heavy",
@@ -14,7 +14,7 @@
     "mipro_val_examples": 7
   },
   "metric_profile": {
-    "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
+    "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), usando un contexto de ruteo compacto, determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
     "criteria": [
       {
         "name": "next_node_match",
@@ -31,11 +31,19 @@
         "weight": 0.1
       },
       {
+        "name": "needs_retrieval_type",
+        "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+        "field": "needs_retrieval",
+        "scorer": "type_match",
+        "expected_type": "boolean",
+        "weight": 0.06
+      },
+      {
         "name": "needs_retrieval_match",
         "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
         "field": "needs_retrieval",
         "scorer": "exact_field_match",
-        "weight": 0.16
+        "weight": 0.1
       },
       {
         "name": "confidence_alignment",
@@ -47,11 +55,19 @@
         "max_diff": 0.35
       },
       {
+        "name": "state_update_type",
+        "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+        "field": "state_update",
+        "scorer": "type_match",
+        "expected_type": "object",
+        "weight": 0.08
+      },
+      {
         "name": "state_update_coverage",
         "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
         "field": "state_update",
         "scorer": "dict_subset_match",
-        "weight": 0.26
+        "weight": 0.18
       },
       {
         "name": "reason_similarity",

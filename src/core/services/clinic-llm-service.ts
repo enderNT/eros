@@ -172,7 +172,11 @@ export class ClinicLlmService {
   async classifyStateRoute(routingPacket: RoutingPacket, guardHint: Record<string, unknown> = {}): Promise<StateRoutingDecision> {
     const payload = await this.requestJson(
       "Eres un clasificador de ruta para un asistente de clinica. Devuelve JSON estricto con next_node, intent, confidence, needs_retrieval y reason. Solo enruta; no intentes mantener ni editar el estado conversacional. Los valores permitidos para next_node son conversation, rag y appointment.",
-      JSON.stringify({ routing_packet: routingPacket, guard_hint: guardHint }, null, 2),
+      [
+        `Mensaje actual del usuario: ${routingPacket.user_message}`,
+        `Contexto de ruteo:\n${routingPacket.routing_context || "n/a"}`,
+        `Guard hint: ${JSON.stringify(guardHint)}`
+      ].join("\n\n"),
       0
     );
 

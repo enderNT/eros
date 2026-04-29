@@ -135,11 +135,7 @@ export interface ReplyTraceDataset {
 
 export interface RoutingPacket {
   user_message: string;
-  conversation_summary: string;
-  current_mode: string;
-  last_tool_result: string;
-  last_assistant_message: string;
-  memories: string[];
+  routing_context: string;
 }
 
 export interface StateRoutingDecisionDebug {

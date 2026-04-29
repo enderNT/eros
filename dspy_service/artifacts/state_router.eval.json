@@ -1,14 +1,14 @@
 {
   "task": "state_router",
   "dataset": "dspy_service/datasets/state_router.jsonl",
-  "dataset_fingerprint": "d9b9ad8277a2c7aef3b4651860afd7eda046600fbfa9448fb07a70bc9501df42",
+  "dataset_fingerprint": "4d69eb0d1ed985d54318c9cece0b536fdadb3dbbbd315719be970a894e27b0d4",
   "valid_examples": 7,
   "optimization_examples": 7,
   "review_examples": 7,
   "review_scope": "same dataset used for optimization; no holdout split",
-  "baseline_score": 0.42,
+  "baseline_score": 0.0972,
   "metric_profile": {
-    "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
+    "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), usando un contexto de ruteo compacto, determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
     "criteria": [
       {
         "name": "next_node_match",
@@ -25,11 +25,19 @@
         "weight": 0.1
       },
       {
+        "name": "needs_retrieval_type",
+        "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+        "field": "needs_retrieval",
+        "scorer": "type_match",
+        "expected_type": "boolean",
+        "weight": 0.06
+      },
+      {
         "name": "needs_retrieval_match",
         "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
         "field": "needs_retrieval",
         "scorer": "exact_field_match",
-        "weight": 0.16
+        "weight": 0.1
       },
       {
         "name": "confidence_alignment",
@@ -41,11 +49,19 @@
         "max_diff": 0.35
       },
       {
+        "name": "state_update_type",
+        "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+        "field": "state_update",
+        "scorer": "type_match",
+        "expected_type": "object",
+        "weight": 0.08
+      },
+      {
         "name": "state_update_coverage",
         "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
         "field": "state_update",
         "scorer": "dict_subset_match",
-        "weight": 0.26
+        "weight": 0.18
       },
       {
         "name": "reason_similarity",
@@ -56,53 +72,51 @@
       }
     ]
   },
-  "optimized_score": 0.42,
+  "optimized_score": 0.3181,
   "review_required": true,
   "examples": [
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "que dias puedo ir",
+        "routing_context": "Modo actual: information.\nResumen del hilo: El usuario viene consultando precios y servicios de la clínica; ya se compartieron costos orientativos y medios de pago, y ahora pregunta qué días puede asistir.\nUltimo mensaje del asistente: Se confirmaron precios de valoración psiquiátrica inicial y de estimulación magnética transcraneal, se mencionaron otros servicios de la clínica y se ofreció ampliar información sobre precios o paquetes.\nUltimo resultado de herramienta: Consulta RAG sobre precios de terapias con fragmentos recuperados de la base de conocimiento de la clínica.\nMemorias relevantes: \nRiesgo de factualidad: alto: depende de continuidad factual sobre información y disponibilidad ya encuadradas en el hilo."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "que dias puedo ir",
+        "routing_context": "Modo actual: information.\nResumen del hilo: El usuario viene consultando precios y servicios de la clínica; ya se compartieron costos orientativos y medios de pago, y ahora pregunta qué días puede asistir.\nUltimo mensaje del asistente: Se confirmaron precios de valoración psiquiátrica inicial y de estimulación magnética transcraneal, se mencionaron otros servicios de la clínica y se ofreció ampliar información sobre precios o paquetes.\nUltimo resultado de herramienta: Consulta RAG sobre precios de terapias con fragmentos recuperados de la base de conocimiento de la clínica.\nMemorias relevantes: \nRiesgo de factualidad: alto: depende de continuidad factual sobre información y disponibilidad ya encuadradas en el hilo."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "appointment",
+        "intent": "ask_availability_days",
+        "confidence": 0.88,
+        "needs_retrieval": false,
+        "state_update": {
+          "last_user_message": "que dias puedo ir",
+          "pending_action": "confirmar_tipo_de_cita_y_proveer_horarios_disponibles",
+          "conversation_summary": "Usuario pregunta por qué días puede acudir (consulta sobre disponibilidad de días para atenderse). Contexto previo: interés en precios y servicios de la clínica.",
+          "memories": [],
+          "stage": "obtener_detalles_segun_disponibilidad_de_calendario_de_atencion"
+        },
+        "reason": "El usuario solicita disponibilidad de días para asistir. Para dar una respuesta precisa, se va a compartir link de calendario para que revise los horarios y días disponibles (agenda). Por eso next_node=appointment y needs_retrieval=false; además si llega agendar no se requieren detalles adicionales, se resuelve todo a traves del link de calendario, desde datos basicos hasta descripcion de la razon de asisitir."
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "ask_availability_preferences",
+        "intent": "ask_clinic_availability",
+        "confidence": "0.86",
+        "needs_retrieval": "yes",
+        "state_update": "{\"last_user_question\":\"que dias puedo ir\",\"pending_action\":\"check_schedule_and_offer_slots\"}",
+        "reason": "User is asking about which days they can attend; need to check clinic schedule/availability to provide accurate options and possibly offer appointment slots. The routing should ask for user preferences (days/times) while retrieving the clinic's schedule."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "appointment",
+        "intent": "ask_availability_days",
+        "confidence": "0.86",
+        "needs_retrieval": "True",
+        "state_update": "{\"conversation_summary\":\"Usuario pregunta qué días puede asistir; contexto previo con precios y servicios de la clínica.\",\"last_user_message\":\"que dias puedo ir\",\"memories\":[],\"pending_action\":\"consultar calendario de la clínica para disponibilidad por servicio (valoración psiquiátrica, sesiones TMS/EMT) y traer franjas/horarios disponibles\",\"pending_question\":\"¿Qué servicio desea reservar (valoración psiquiátrica, sesión TMS/EMT u otro) y qué días/horarios prefiere en general?\",\"stage\":\"confirmar_servicio_y_recuperar_disponibilidad_calendar\"}",
+        "reason": "El usuario solicita disponibilidad de días; dado que la respuesta depende del calendario y del tipo de servicio, se debe ir al flujo de appointment y recuperar disponibilidad actualizada (needs_retrieval=True) tras confirmar qué servicio exacto requiere."
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.0625,
+      "optimized_score": 0.4581,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -123,13 +137,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -137,6 +160,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -145,9 +177,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -155,8 +187,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.018,
+          "weighted_score": 0.0025
         }
       ],
       "optimized_criteria": [
@@ -166,8 +198,8 @@
           "field": "next_node",
           "scorer": "exact_field_match",
           "weight": 0.28,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 1.0,
+          "weighted_score": 0.28
         },
         {
           "name": "intent_match",
@@ -175,6 +207,15 @@
           "field": "intent",
           "scorer": "exact_field_match",
           "weight": 0.1,
+          "score": 1.0,
+          "weighted_score": 0.1
+        },
+        {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -183,9 +224,9 @@
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -193,6 +234,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -201,9 +251,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -211,55 +261,60 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.1289,
+          "weighted_score": 0.0181
         }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: El usuario retoma una conversación sobre autismo y ahora pregunta si los electrochoques lo curan en el caso de un niño de 7 años; antes ya se explicó que el autismo no se considera una condición que se cure y se mencionaron apoyos e intervenciones basadas en evidencia.\nUltimo mensaje del asistente: Se aclaró que el autismo no se cura, se describió como una condición del neurodesarrollo y se recomendaron intervenciones tempranas y terapias basadas en evidencia.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes:\nRiesgo de factualidad: alto: es una pregunta médica sensible que además quedó marcada para retrieval y continuidad factual."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: El usuario retoma una conversación sobre autismo y ahora pregunta si los electrochoques lo curan en el caso de un niño de 7 años; antes ya se explicó que el autismo no se considera una condición que se cure y se mencionaron apoyos e intervenciones basadas en evidencia.\nUltimo mensaje del asistente: Se aclaró que el autismo no se cura, se describió como una condición del neurodesarrollo y se recomendaron intervenciones tempranas y terapias basadas en evidencia.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes:\nRiesgo de factualidad: alto: es una pregunta médica sensible que además quedó marcada para retrieval y continuidad factual."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "rag",
+        "intent": "answer_medical_question",
+        "confidence": 0.95,
+        "needs_retrieval": true,
+        "state_update": {
+          "active_goal": "informar_sobre_tratamientos_que dispone_la_clinica_para_autismo_y_seguridad",
+          "appointment_slots": {},
+          "conversation_summary": "Usuario pregunta si los electrochoques curan el autismo y menciona tener un niño de 7 años con autismo. Asistente ya explicó que el autismo no se 'cura' y recomendó intervenciones tempranas y terapias basadas en evidencia, como EMT.",
+          "last_assistant_message": "No, el autismo (trastorno del espectro autista) no se considera una enfermedad que se 'cura'. Es una condición neurológica y del desarrollo que afecta la forma en que una persona comunica, se relaciona y percibe el mundo.",
+          "last_tool_result": "",
+          "last_user_message": "los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad",
+          "memories": [
+            ""
+          ],
+          "pending_action": "buscar servicios de estimulacion magnetica transcraneal que ofrece la clinica, para intervencion con estimulacion magnetica trasncraneal",
+          "pending_question": "¿Quiere asistir a una cita de vealuacion para quer le ayudemos con esa condicion mencionada?",
+          "stage": "informar_sobre_tratamientos_que_disponemos_en_la_clinica"
+        },
+        "reason": "El usuario pregunta por un tratamiento específico (electrochoques) para el autismo y menciona un niño pequeño. Dado al desconocimineto de la persona, se consulta la informacion del tratamiento o tratamientos disponibles en la clinica Eros Neuronal para intervenir con esta condicion, finalmente ofrecer ayuda a traves de una primer cita."
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
+        "next_node": "provide_medical_guidance_brief",
+        "intent": "ask_if_electroconvulsive_therapy_cures_autism",
+        "confidence": "0.92",
         "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "state_update": "User has a 7-year-old child with autism and is asking whether electroconvulsive therapy (electroshocks) can cure it. Previously informed that autism is not considered curable and evidence-based early interventions were recommended.",
+        "reason": "The user asks a specific medical question about treatment efficacy for autism. This falls under providing brief, cautious medical information and directing to evidence-based care. No external retrieval needed because general consensus: ECT is not a cure for autism and is not indicated for treating autism itself; it may be used rarely for severe co-occurring psychiatric conditions. Recommend consulting child's pediatrician/child psychiatrist and evidence-based therapies. Keep language in Spanish as user wrote in Spanish."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "escalation_risk",
+        "intent": "risk_clinical_concern_child",
+        "confidence": "0.92",
+        "needs_retrieval": "False",
+        "state_update": "{\"conversation_summary\":\"El usuario pregunta si 'los electrochoques curan el autismo' y menciona tener un niño de 7 años con esa condición. Previamente se indicó que el autismo no se cura y se discutieron intervenciones basadas en evidencia.\",\"last_user_message\":\"los electrochoques curan el autismo? tengo un niño de 7 años con esa enfermedad\",\"memories\":[\"usuario tiene un niño de 7 años con autismo\"],\"pending_action\":\"derivar_a_equipo_clinico_para_respuesta_especializada_y_seguimiento; avisarEquipoClinico/derivar_inmediato\",\"pending_question\":\"¿Desea que un especialista de la clínica (psiquiatra/neuropediatra) lo contacte para evaluar opciones terapéuticas y aclarar riesgos? ¿Hay factores de riesgo inmediatos (ideación suicida, autolesiones) que debamos conocer?\",\"stage\":\"evaluacion_riesgo_y_derivacion_clinica\",\"risk_flags\":[\"menor_con_autismo\",\"pregunta_sobre_tratamiento_invasivo\"]}",
+        "reason": "La consulta menciona un menor (7 años) y pregunta por un tratamiento invasivo (electroconvulsoterapia); por seguridad clínica y responsabilidad, debe derivarse a equipo humano especializado para evaluación y aclaración de riesgos y contraindicaciones. Por eso se prioriza escalación y derivación inmediata."
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.0655,
+      "optimized_score": 0.0757,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -280,13 +335,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -294,6 +358,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -302,9 +375,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -312,8 +385,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.0394,
+          "weighted_score": 0.0055
         }
       ],
       "optimized_criteria": [
@@ -336,13 +409,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -350,6 +432,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -358,9 +449,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -368,55 +459,60 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.112,
+          "weighted_score": 0.0157
         }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "cura el autismo?",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: No hay historial útil; el usuario abre con una pregunta informativa sobre si el autismo tiene cura.\nUltimo mensaje del asistente: n/a.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: sin memorias relevantes.\nRiesgo de factualidad: bajo: Apunta a una respuesta informativa general sin depender de retrieval ni de resultados de herramienta previos."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "cura el autismo?",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: No hay historial útil; el usuario abre con una pregunta informativa sobre si el autismo tiene cura.\nUltimo mensaje del asistente: n/a.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: sin memorias relevantes.\nRiesgo de factualidad: bajo: Apunta a una respuesta informativa general sin depender de retrieval ni de resultados de herramienta previos."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "conversation",
+        "intent": "informational_question_autism",
+        "confidence": 0.94,
+        "needs_retrieval": false,
+        "state_update": {
+          "active_goal": "proveer_informacion_precisa_sobre_autismo_y_ofrecer_opciones_de_apoyo",
+          "appointment_slots": {},
+          "conversation_summary": "Usuario pregunta si 'cura el autismo?'. No hay historial adicional.",
+          "last_assistant_message": "",
+          "last_tool_result": "",
+          "last_user_message": "cura el autismo?",
+          "memories": [
+            ""
+          ],
+          "pending_action": "explicar_naturaleza_del_trastorno_del_espectro_autista, aclarar que no es una enfermedad curable en sentido tradicional, describir intervenciones, ofrecer derivacion la clinica Eros Neuronal, donde intervenimos con casos como ese, a traves de tratamientos como la estimulacion magnetico transcraneal",
+          "pending_question": "¿Deseas conocer el proceso que tenemos para intervenir en casos como este, o agendar una cita para ello?",
+          "stage": "respuesta_informativa_y_propuesta_intervencion"
+        },
+        "reason": "La pregunta es una consulta informativa sobre una condición de salud. No se requiere recuperación externa inmediata; procede responder aclarando que el autismo no se 'cura' en el sentido clásico, describir intervenciones. Ofrecer la intervencion que podemos realizar en la clinica Eros Neuronal para casos como este."
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
+        "next_node": "answer_autism_cure",
+        "intent": "ask_medical_information",
+        "confidence": "0.92",
         "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "state_update": "{\"last_user_question\":\"cura el autismo?\",\"language\":\"es\",\"topic\":\"autismo\",\"user_needs\":\"informational\"}",
+        "reason": "El usuario pregunta si el autismo tiene cura — una consulta médica/informativa común que puede ser respondida con información general basada en conocimiento médico. No se requiere recuperación de información externa; se puede responder en términos generales sobre la naturaleza del trastorno del espectro autista, tratamientos y enfoques de apoyo. Mantener en español y ofrecer recursos o recomendar consultar a profesionales para casos individuales."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "conversation",
+        "intent": "informational_question_autism",
+        "confidence": "0.94",
+        "needs_retrieval": "False",
+        "state_update": "{\"active_goal\":\"proveer_respuesta_informativa_sobre_autismo\",\"conversation_summary\":\"Usuario pregunta si el autismo tiene cura. No hay historial adicional.\",\"last_user_message\":\"cura el autismo?\",\"memories\":[],\"pending_action\":\"explicar que el autismo (trastorno del espectro autista) no se 'cura' en el sentido tradicional, describir intervenciones terapéuticas y apoyos que mejoran la calidad de vida y ofrecer opciones de evaluación y tratamiento en la clínica si el usuario desea más información o derivación\",\"pending_question\":\"¿Quieres que te explique qué intervenciones y apoyos existen, o prefieres información sobre cómo abordamos estos casos en la clínica Eros Neuronal?\",\"stage\":\"respuesta_informativa_y_oferta_de_apoyo\"}",
+        "reason": "La consulta es una pregunta informativa sobre una condición de salud sin señales de riesgo; procede una respuesta educativa y oferta de derivación/explicación adicional. [[ ## completed ## ]]"
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.0735,
+      "optimized_score": 0.4974,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -437,13 +533,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -451,6 +556,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -459,9 +573,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -469,8 +583,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.0966,
+          "weighted_score": 0.0135
         }
       ],
       "optimized_criteria": [
@@ -480,8 +594,8 @@
           "field": "next_node",
           "scorer": "exact_field_match",
           "weight": 0.28,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 1.0,
+          "weighted_score": 0.28
         },
         {
           "name": "intent_match",
@@ -489,6 +603,15 @@
           "field": "intent",
           "scorer": "exact_field_match",
           "weight": 0.1,
+          "score": 1.0,
+          "weighted_score": 0.1
+        },
+        {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -497,9 +620,9 @@
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -507,6 +630,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -515,9 +647,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -525,55 +657,61 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.4103,
+          "weighted_score": 0.0574
         }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "quiero 20 sesiones",
+        "routing_context": "Modo actual: information.\nResumen del hilo: El usuario viene hablando de estimulación/TMS; ya recibió precios orientativos y opciones para confirmar disponibilidad o duración típica del tratamiento, y ahora quiere avanzar directo a 20 sesiones.\nUltimo mensaje del asistente: Se compartieron precios orientativos para TMS/EMT de alta y baja intensidad y se ofreció confirmar disponibilidad o el número típico de sesiones tras una primera consulta.\nUltimo resultado de herramienta: Consulta RAG sobre el costo de la estimulación, con contexto previo sobre dudas del usuario y precios de TMS.\nMemorias relevantes: \nRiesgo de factualidad: alto: depende de continuidad factual sobre precios, tratamiento y siguiente paso adecuado de agenda."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "quiero 20 sesiones",
+        "routing_context": "Modo actual: information.\nResumen del hilo: El usuario viene hablando de estimulación/TMS; ya recibió precios orientativos y opciones para confirmar disponibilidad o duración típica del tratamiento, y ahora quiere avanzar directo a 20 sesiones.\nUltimo mensaje del asistente: Se compartieron precios orientativos para TMS/EMT de alta y baja intensidad y se ofreció confirmar disponibilidad o el número típico de sesiones tras una primera consulta.\nUltimo resultado de herramienta: Consulta RAG sobre el costo de la estimulación, con contexto previo sobre dudas del usuario y precios de TMS.\nMemorias relevantes: \nRiesgo de factualidad: alto: depende de continuidad factual sobre precios, tratamiento y siguiente paso adecuado de agenda."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "appointment",
+        "intent": "book a first session (evaluation).",
+        "confidence": 0.9,
+        "needs_retrieval": false,
+        "state_update": {
+          "active_goal": "book_appointments_for_first_time",
+          "appointment_slots": {
+            "treatment": "TMS/estimulación (por confirmar)"
+          },
+          "conversation_summary": "Usuario solicita 20 sesiones. Contexto previo sugiere interés en estimulación (TMS) y precios orientativos ya proporcionados.",
+          "last_user_message": "quiero 20 sesiones",
+          "last_assistant_message": "Proporcionó precios orientativos para sesiones de TMS y ofreció confirmar disponibilidad y duración típica del tratamiento.",
+          "memories": [
+            ""
+          ],
+          "pending_action": "Compartir link para que usuario genere la cita. Que usuario agende la cita",
+          "pending_question": "Usario agende y confirme la fecha y hora elegidos",
+          "stage": "booking_initiated"
+        },
+        "reason": "El usuario solicita directamente un número de sesiones (20), que implica avanzar hacia la reserva. No se debe mencionar nada sobre numero de sesiones ya que esas se confirman, despues de la primera sesion. No se necesitan búsquedas adicionales ahora; el siguiente paso es confirmar compartir link para que agende la cita, no se le pide detalles de NINGUN Tipo, ni los mas basicos, ya que con el link formulario-calendario, se llenan esos datos, el elige y confirma fecha y hora, se queda a la espera de que confirme fecha y el horario elegido segun calendario."
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "confirm_schedule",
+        "intent": "request_book_20_sessions",
+        "confidence": "0.86",
+        "needs_retrieval": "yes",
+        "state_update": "{\"requested_sessions\":20, \"treatment_type\":\"TMS/EMT (user did not specify intensity)\", \"user_action\":\"wants to proceed to schedule\", \"previous_offers\":\"provided prices and options to confirm availability/duration\", \"awaiting\":\"availability and scheduling details, confirmation of intensity and evaluation requirement\"}",
+        "reason": "User explicitly requested \"quiero 20 sesiones\" indicating intent to schedule/confirm booking for 20 sessions. Routing to a scheduling/confirmation node is appropriate. Retrieval of availability, required preliminary evaluation, exact modality/intensity, pricing, and scheduling constraints is needed before finalizing."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "appointment",
+        "intent": "request_20_sessions_TMS",
+        "confidence": "0.90",
+        "needs_retrieval": "True",
+        "state_update": "{\"conversation_summary\":\"El usuario solicita reservar 20 sesiones de estimulación (TMS/EMT). Ya recibió precios orientativos y discutió protocolos de alta/baja intensidad.\",\"last_user_message\":\"quiero 20 sesiones\",\"memories\":[\"Interés previo en TMS/EMT; se compartieron precios orientativos\"],\"pending_action\":\"verificar disponibilidad de calendario para 20 sesiones, confirmar protocolo exacto (TMS alta o baja intensidad o tipo de EMT), calcular costo total actualizado y opciones de pago, confirmar si requiere evaluación psiquiátrica previa y agendar primera sesión/valoración\",\"pending_question\":\"¿Confirma que quiere 20 sesiones del protocolo que discutimos (indicar alta o baja intensidad o especificar el protocolo), y cuál es su disponibilidad habitual para las sesiones (días de semana, fines de semana, mañanas/tardes)? ¿Desea que calculemos el presupuesto total y las opciones de pago ahora?\",\"stage\":\"agendar_o_confirmar_paquete\"}",
+        "reason": "El usuario expresa intención clara de contratación de 20 sesiones; según las reglas esto debe pasar a flujo de agendamiento y requiere recuperar disponibilidad y tarifas actuales para confirmar costo y coordinar la primera evaluación. Por eso next_node=appointment y needs_retrieval=True."
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.0638,
+      "optimized_score": 0.3466,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -594,13 +732,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -608,6 +755,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -616,9 +772,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -626,8 +782,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.0273,
+          "weighted_score": 0.0038
         }
       ],
       "optimized_criteria": [
@@ -637,8 +793,8 @@
           "field": "next_node",
           "scorer": "exact_field_match",
           "weight": 0.28,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 1.0,
+          "weighted_score": 0.28
         },
         {
           "name": "intent_match",
@@ -650,13 +806,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -664,6 +829,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -672,9 +846,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -682,55 +856,57 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.0472,
+          "weighted_score": 0.0066
         }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "que tal",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: Es un intercambio de saludo. El asistente ya saludó, presentó la clínica y ofreció ayuda con inquietudes relacionadas con salud mental.\nUltimo mensaje del asistente: Se dio la bienvenida al usuario, se presentó la clínica Eros Neuronal y se ofreció ayuda con dudas o temas de salud mental.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: \nRiesgo de factualidad: bajo: basta con continuar la conversación sin retrieval ni datos externos."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "que tal",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: Es un intercambio de saludo. El asistente ya saludó, presentó la clínica y ofreció ayuda con inquietudes relacionadas con salud mental.\nUltimo mensaje del asistente: Se dio la bienvenida al usuario, se presentó la clínica Eros Neuronal y se ofreció ayuda con dudas o temas de salud mental.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: \nRiesgo de factualidad: bajo: basta con continuar la conversación sin retrieval ni datos externos."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "conversation",
+        "intent": "to continue the conversation",
+        "confidence": 0.95,
+        "needs_retrieval": false,
+        "state_update": {
+          "last_user_message": "que tal",
+          "last_assistant_message": "¡Hola! ¿Cómo puedo ayudarte hoy?. Recuerda que en La clinica Eros neuronal, estamos para ayudarte a atender tus problemas y temas de salud mental con profesionales certificados, siguiendo protocolos, dime, ¿Tienes alguna inquietud con respecto a ello?",
+          "conversation_summary": "Usuario saluda con 'que tal'. Asistente envió saludo y ofrecimiento de ayuda.",
+          "pending_action": null,
+          "pending_question": null,
+          "stage": "open",
+          "memories": [
+            ""
+          ]
+        },
+        "reason": "El usuario envió un saludo breve. No se requiere recuperación de información externa ni acciones inmediatas; continuar la conversación y esperar lo que necesita, con respecto a la clinica de salud mental Eros Neuronal."
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
+        "next_node": "saludo_respuesta",
+        "intent": "saludo_informal",
+        "confidence": "0.96",
         "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "state_update": "{\"last_user_message\":\"que tal\",\"conversation_mode\":\"conversation\",\"user_sentiment\":\"neutral\",\"topic\":\"saludo\",\"assistant_last_action\":\"welcomed_and_offered_help\"}",
+        "reason": "El usuario envió un saludo informal (\"que tal\"). Debe respondérsele con un saludo amistoso y ofrecer asistencia continua relacionada con salud mental, sin necesidad de recuperación de información externa."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "conversation",
+        "intent": "greeting_followup",
+        "confidence": "0.97",
+        "needs_retrieval": "False",
+        "state_update": "{\"conversation_summary\":\"Intercambio de saludo breve ('que tal'). Clínica presentada previamente; usuario continúa la conversación sin solicitud concreta.\",\"last_user_message\":\"que tal\",\"memories\":[],\"pending_action\":\"\",\"pending_question\":\"¿En qué puedo ayudarte hoy con respecto a la clínica o tu salud mental?\",\"stage\":\"open_greeting_followup\"}",
+        "reason": "El mensaje es un saludo informal sin una petición específica; se mantiene en el flujo conversacional y se prepara una pregunta abierta para invitar al usuario a expresar su consulta."
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.0792,
+      "optimized_score": 0.3946,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -751,13 +927,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -765,6 +950,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -773,9 +967,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -783,8 +977,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.1374,
+          "weighted_score": 0.0192
         }
       ],
       "optimized_criteria": [
@@ -794,8 +988,8 @@
           "field": "next_node",
           "scorer": "exact_field_match",
           "weight": 0.28,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 1.0,
+          "weighted_score": 0.28
         },
         {
           "name": "intent_match",
@@ -807,13 +1001,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -821,6 +1024,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -829,9 +1041,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -839,55 +1051,56 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.39,
+          "weighted_score": 0.0546
         }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "Buen dia",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: El hilo sigue en saludos iniciales; el usuario ha saludado varias veces y todavía no hace una solicitud concreta.\nUltimo mensaje del asistente: El asistente respondió con un saludo cordial y preguntó en qué podía ayudar.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: Hubo saludos previos en español como \"Hola\" y \"que tal\".\nRiesgo de factualidad: bajo: solo hace falta sostener la apertura conversacional."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "Buen dia",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: El hilo sigue en saludos iniciales; el usuario ha saludado varias veces y todavía no hace una solicitud concreta.\nUltimo mensaje del asistente: El asistente respondió con un saludo cordial y preguntó en qué podía ayudar.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: Hubo saludos previos en español como \"Hola\" y \"que tal\".\nRiesgo de factualidad: bajo: solo hace falta sostener la apertura conversacional."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "conversation",
+        "intent": "start the conversation",
+        "confidence": 0.95,
+        "needs_retrieval": false,
+        "state_update": {
+          "last_user_message": "Buen dia",
+          "conversation_summary": "Usuario saluda con 'Buen dia'. No hay solicitud adicional.",
+          "pending_action": "",
+          "pending_question": "",
+          "stage": "open_greeting",
+          "memories": [
+            ""
+          ]
+        },
+        "reason": "El mensaje es un saludo breve sin petición explícita. Mantener la conversación general en node 'conversation'. Como aun no se le ha mencionado los servicios de \"Eros neuronal\", se necesita conocer, ¿Que le podemos ayudar en la clinica de salud mental eros neuronal?"
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
+        "next_node": "saludo_respuesta",
+        "intent": "saludo",
+        "confidence": "0.95",
         "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "state_update": "Usuario saludó con \"Buen dia\". Mantener conversación abierta y disponible para asistencias futuras.",
+        "reason": "El mensaje es un saludo en español sin petición explícita; debe responderse con un saludo cordial y ofrecer ayuda. No se necesita recuperación de información externa."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "conversation",
+        "intent": "greeting_general",
+        "confidence": "0.95",
+        "needs_retrieval": "False",
+        "state_update": "{\"conversation_summary\":\"Usuario saluda 'Buen dia' sin petición adicional.\",\"last_user_message\":\"Buen dia\",\"memories\":[],\"pending_action\":\"\",\"pending_question\":\"¿En qué podemos ayudarle hoy?\",\"stage\":\"open_greeting\"}",
+        "reason": "Saludo breve y sin demanda concreta; mantener flujo conversacional y ofrecer ayuda general."
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.123,
+      "optimized_score": 0.3809,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -908,13 +1121,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -922,6 +1144,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -930,9 +1161,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -940,8 +1171,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.4501,
+          "weighted_score": 0.063
         }
       ],
       "optimized_criteria": [
@@ -951,8 +1182,8 @@
           "field": "next_node",
           "scorer": "exact_field_match",
           "weight": 0.28,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 1.0,
+          "weighted_score": 0.28
         },
         {
           "name": "intent_match",
@@ -964,13 +1195,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -978,6 +1218,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -986,9 +1235,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -996,55 +1245,56 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.2921,
+          "weighted_score": 0.0409
         }
       ]
     },
     {
       "trace_id": "",
       "input_payload": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": []
+        "user_message": "Cuanto cuesta?",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: No hay contexto útil previo; el usuario pregunta por el precio pero no especifica de qué servicio.\nUltimo mensaje del asistente: n/a.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: sin memorias relevantes.\nRiesgo de factualidad: alto: una respuesta correcta depende de clarificar el servicio y probablemente recuperar precios actualizados."
       },
       "serialized_input": {
-        "user_message": "",
-        "conversation_summary": "",
-        "current_mode": "conversation",
-        "last_tool_result": "",
-        "last_assistant_message": "",
-        "memories": "[]"
+        "user_message": "Cuanto cuesta?",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: No hay contexto útil previo; el usuario pregunta por el precio pero no especifica de qué servicio.\nUltimo mensaje del asistente: n/a.\nUltimo resultado de herramienta: n/a.\nMemorias relevantes: sin memorias relevantes.\nRiesgo de factualidad: alto: una respuesta correcta depende de clarificar el servicio y probablemente recuperar precios actualizados."
       },
       "target_payload": {
-        "next_node": "",
-        "intent": "",
-        "confidence": "",
-        "needs_retrieval": "",
-        "state_update": "",
-        "reason": ""
+        "next_node": "rag",
+        "intent": "ask_price",
+        "confidence": 0.95,
+        "needs_retrieval": true,
+        "state_update": {
+          "last_user_message": "Cuanto cuesta?",
+          "pending_action": "proveer_informacion_sobre_precios_sobre_terapias_ofrecidas_por_eros_neuronal",
+          "pending_question": "¿Sobre qué servicio desea saber el precio? (consulta inicial, terapia regular, evaluación psiquiátrica, estimulacion magnetica trasncraneal, etc.)",
+          "conversation_summary": "Usuario pregunta por el precio sin contexto adicional.",
+          "stage": "proveer precios de servicios ofrecidos",
+          "memories": [
+            ""
+          ]
+        },
+        "reason": "El usuario pregunta por el costo pero no especifica qué servicio. Necesitamos clarificar el servicio para dar una respuesta precisa; además precios pueden requerir recuperar datos actualizados (tarifario), por eso needs_retrieval=True y next_node orientado a proporcionar información de precios."
       },
       "baseline_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "clarify_item",
+        "intent": "ask_price",
+        "confidence": "0.90",
+        "needs_retrieval": "yes",
+        "state_update": "{\"last_user_message\":\"Cuanto cuesta?\",\"language\":\"es\",\"clarify_needed\":true,\"requested_item\":null}",
+        "reason": "User asked \"Cuanto cuesta?\" without specifying the product/servicio. To answer accurately we need clarification of which item/service they mean and may need to retrieve current pricing information."
       },
       "optimized_output": {
-        "next_node": "clarify_request",
-        "intent": "clarify",
-        "confidence": "0.85",
-        "needs_retrieval": "no",
-        "state_update": "no_change",
-        "reason": "The user provided an empty message and no conversation context. Next step is to ask a clarifying question to prompt the user to provide their request or more details."
+        "next_node": "clarify_service",
+        "intent": "price_inquiry_clarification",
+        "confidence": "0.92",
+        "needs_retrieval": "True",
+        "state_update": "{\"conversation_summary\":\"Usuario pregunta 'Cuanto cuesta?' sin especificar servicio.\",\"last_user_message\":\"Cuanto cuesta?\",\"memories\":[],\"pending_action\":\"solicitar_al_usuario_que_especifique_el_servicio_o_paquete_de_interes (valoracion psiquiatrica, sesiones TMS alta/baja intensidad, paquete de 20 sesiones, otras terapias) y luego recuperar tarifas_actuales y disponibilidad\",\"pending_question\":\"¿Qué servicio o paquete le interesa conocer el precio? (p. ej. valoración psiquiátrica, sesión individual de TMS alta intensidad, paquete de 20 sesiones de TMS, terapia psicológica, etc.)\",\"stage\":\"clarificar_servicio_para_precio\"}",
+        "reason": "La pregunta es una consulta de precio sin especificar servicio; según reglas se debe pedir aclaración antes de recuperar tarifas actuales, por lo que next_node=clarify_service y needs_retrieval=True para después obtener precios actualizados."
       },
-      "baseline_score": 0.42,
-      "optimized_score": 0.42,
+      "baseline_score": 0.2129,
+      "optimized_score": 0.0736,
       "baseline_criteria": [
         {
           "name": "next_node_match",
@@ -1061,6 +1311,15 @@
           "field": "intent",
           "scorer": "exact_field_match",
           "weight": 0.1,
+          "score": 1.0,
+          "weighted_score": 0.1
+        },
+        {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -1069,9 +1328,9 @@
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -1079,6 +1338,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -1087,9 +1355,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -1097,8 +1365,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.378,
+          "weighted_score": 0.0529
         }
       ],
       "optimized_criteria": [
@@ -1121,13 +1389,22 @@
           "weighted_score": 0.0
         },
         {
+          "name": "needs_retrieval_type",
+          "description": "needs_retrieval debe emitirse como booleano real, no como texto, numero ni valor serializado.",
+          "field": "needs_retrieval",
+          "scorer": "type_match",
+          "weight": 0.06,
+          "score": 0.0,
+          "weighted_score": 0.0
+        },
+        {
           "name": "needs_retrieval_match",
           "description": "La decision sobre usar retrieval coincide con si el caso requiere consultar informacion factual, actualizable o especifica antes de responder.",
           "field": "needs_retrieval",
           "scorer": "exact_field_match",
-          "weight": 0.16,
-          "score": 1.0,
-          "weighted_score": 0.16
+          "weight": 0.1,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "confidence_alignment",
@@ -1135,6 +1412,15 @@
           "field": "confidence",
           "scorer": "float_tolerance",
           "weight": 0.06,
+          "score": 1.0,
+          "weighted_score": 0.06
+        },
+        {
+          "name": "state_update_type",
+          "description": "state_update debe emitirse como objeto JSON real, no como string, etiqueta libre ni lista.",
+          "field": "state_update",
+          "scorer": "type_match",
+          "weight": 0.08,
           "score": 0.0,
           "weighted_score": 0.0
         },
@@ -1143,9 +1429,9 @@
           "description": "El state_update conserva los campos operativos esperados para dar continuidad al siguiente paso de la conversacion, aunque agregue contexto adicional.",
           "field": "state_update",
           "scorer": "dict_subset_match",
-          "weight": 0.26,
-          "score": 1.0,
-          "weighted_score": 0.26
+          "weight": 0.18,
+          "score": 0.0,
+          "weighted_score": 0.0
         },
         {
           "name": "reason_similarity",
@@ -1153,8 +1439,8 @@
           "field": "reason",
           "scorer": "text_similarity",
           "weight": 0.14,
-          "score": 0.0,
-          "weighted_score": 0.0
+          "score": 0.097,
+          "weighted_score": 0.0136
         }
       ]
     }

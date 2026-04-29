@@ -30,6 +30,31 @@ function normalizeRouteDestination(value: string): ClinicGraphNode {
     : "conversation";
 }
 
+function buildRoutingContext(input: {
+  conversation_summary: string;
+  current_mode: string;
+  last_tool_result: string;
+  last_assistant_message: string;
+  memories: string[];
+}): string {
+  const memoryText = input.memories.length > 0
+    ? input.memories.map((memory) => compact(memory, 140)).join(" | ")
+    : "sin memorias relevantes";
+
+  const factualRisk = input.current_mode === "information" || Boolean(input.last_tool_result.trim())
+    ? "alto: puede requerir retrieval o continuidad factual"
+    : "bajo: probablemente puede resolverse sin retrieval";
+
+  return [
+    `Modo actual: ${input.current_mode || "conversation"}.`,
+    `Resumen del hilo: ${input.conversation_summary.trim() || "sin resumen relevante."}`,
+    `Ultimo mensaje del asistente: ${input.last_assistant_message.trim() || "n/a"}`,
+    `Ultimo resultado de herramienta: ${input.last_tool_result.trim() || "n/a"}`,
+    `Memorias relevantes: ${memoryText}.`,
+    `Riesgo de factualidad: ${factualRisk}.`,
+  ].join("\n");
+}
+
 export class ClinicRoutingService {
   constructor(
     private readonly settings: AppSettings,
@@ -49,7 +74,7 @@ export class ClinicRoutingService {
     const rawInput = {
       user_message: input.user_message,
       conversation_summary: input.conversation_summary,
-      current_mode: input.current_mode,
+      current_mode: this.normalizeMode(input.current_mode),
       last_tool_result: input.last_tool_result,
       last_assistant_message: input.last_assistant_message,
       memories: input.memories,
@@ -58,11 +83,13 @@ export class ClinicRoutingService {
 
     const routingPacket: RoutingPacket = {
       user_message: compact(input.user_message, 400),
-      conversation_summary: input.conversation_summary,
-      current_mode: compact(this.normalizeMode(input.current_mode), 40),
-      last_tool_result: compact(input.last_tool_result, 280),
-      last_assistant_message: compact(input.last_assistant_message, 280),
-      memories: input.memories.slice(0, 3).map((memory) => compact(memory, 160))
+      routing_context: buildRoutingContext({
+        conversation_summary: input.conversation_summary,
+        current_mode: compact(this.normalizeMode(input.current_mode), 40),
+        last_tool_result: compact(input.last_tool_result, 280),
+        last_assistant_message: compact(input.last_assistant_message, 280),
+        memories: input.memories.slice(0, 3).map((memory) => compact(memory, 160))
+      })
     };
     const signaturePayload = {
       ...routingPacket,
@@ -74,7 +101,7 @@ export class ClinicRoutingService {
       await this.traceSink?.append(traceId, "clinic.route.input", signaturePayload);
     }
 
-    const guard = this.deterministicGuard(routingPacket);
+    const guard = this.deterministicGuard(rawInput);
     if (guard) {
       const guardedDecision = {
         ...guard,
@@ -142,17 +169,22 @@ export class ClinicRoutingService {
     return memories.slice(0, 3).map((memory) => compact(memory, 140)).filter(Boolean);
   }
 
-  private deterministicGuard(routingPacket: RoutingPacket): StateRoutingDecision | null {
-    const userMessage = routingPacket.user_message.toLowerCase().trim();
+  private deterministicGuard(input: {
+    user_message: string;
+    current_mode: string;
+    last_assistant_message: string;
+    last_tool_result: string;
+  }): StateRoutingDecision | null {
+    const userMessage = input.user_message.toLowerCase().trim();
     if (!userMessage) {
       return this.buildGuardDecision("conversation", 0.3, false, "empty-message");
     }
 
-    if (this.isAppointmentInformationRequest(routingPacket, userMessage)) {
+    if (this.isAppointmentInformationRequest(input, userMessage)) {
       return this.buildGuardDecision("rag", 0.94, true, "appointment-to-information");
     }
 
-    if (this.isAppointmentFollowUp(routingPacket, userMessage)) {
+    if (this.isAppointmentFollowUp(input, userMessage)) {
       return this.buildGuardDecision("appointment", 0.95, false, "appointment-follow-up");
     }
 
@@ -160,7 +192,7 @@ export class ClinicRoutingService {
       return this.buildGuardDecision("appointment", 0.92, false, "appointment-request");
     }
 
-    if (this.isInformationFollowUp(routingPacket, userMessage)) {
+    if (this.isInformationFollowUp(input, userMessage)) {
       return this.buildGuardDecision("rag", 0.89, true, "information-follow-up");
     }
 
@@ -175,11 +207,11 @@ export class ClinicRoutingService {
     return null;
   }
 
-  private isAppointmentFollowUp(routingPacket: RoutingPacket, userMessage: string): boolean {
-    if (routingPacket.current_mode !== "appointment") {
+  private isAppointmentFollowUp(input: { current_mode: string; last_assistant_message: string }, userMessage: string): boolean {
+    if (input.current_mode !== "appointment") {
       return false;
     }
-    if (this.lastAssistantAskedQuestion(routingPacket.last_assistant_message)) {
+    if (this.lastAssistantAskedQuestion(input.last_assistant_message)) {
       return true;
     }
     if (userMessage.length <= 40 && this.looksLikeSlotAnswer(userMessage)) {
@@ -188,8 +220,8 @@ export class ClinicRoutingService {
     return /\b(si|sí|no|claro|mañana|manana|hoy|tarde|noche|am|pm|\d{1,2}:\d{2}|\d{1,2}\s?am|\d{1,2}\s?pm)\b/i.test(userMessage);
   }
 
-  private isAppointmentInformationRequest(routingPacket: RoutingPacket, userMessage: string): boolean {
-    if (routingPacket.current_mode !== "appointment" || !this.isExplicitRagRequest(userMessage) || this.looksLikeSlotAnswer(userMessage)) {
+  private isAppointmentInformationRequest(input: { current_mode: string }, userMessage: string): boolean {
+    if (input.current_mode !== "appointment" || !this.isExplicitRagRequest(userMessage) || this.looksLikeSlotAnswer(userMessage)) {
       return false;
     }
     return true;
@@ -229,8 +261,8 @@ export class ClinicRoutingService {
     ].some((keyword) => userMessage.includes(keyword));
   }
 
-  private isInformationFollowUp(routingPacket: RoutingPacket, userMessage: string): boolean {
-    const hasContext = routingPacket.current_mode === "information" || Boolean(routingPacket.last_tool_result.trim());
+  private isInformationFollowUp(input: { current_mode: string; last_tool_result: string }, userMessage: string): boolean {
+    const hasContext = input.current_mode === "information" || Boolean(input.last_tool_result.trim());
     if (!hasContext || this.isExplicitAppointmentRequest(userMessage)) {
       return false;
     }

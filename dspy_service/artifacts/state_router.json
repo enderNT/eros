@@ -2,33 +2,59 @@
   "_predictor": {
     "traces": [],
     "train": [],
-    "demos": [],
+    "demos": [
+      {
+        "augmented": true,
+        "user_message": "quiero 20 sesiones",
+        "routing_context": "Modo actual: information.\nResumen del hilo: El usuario viene hablando de estimulación\/TMS; ya recibió precios orientativos y opciones para confirmar disponibilidad o duración típica del tratamiento, y ahora quiere avanzar directo a 20 sesiones.\nUltimo mensaje del asistente: Se compartieron precios orientativos para TMS\/EMT de alta y baja intensidad y se ofreció confirmar disponibilidad o el número típico de sesiones tras una primera consulta.\nUltimo resultado de herramienta: Consulta RAG sobre el costo de la estimulación, con contexto previo sobre dudas del usuario y precios de TMS.\nMemorias relevantes: \nRiesgo de factualidad: alto: depende de continuidad factual sobre precios, tratamiento y siguiente paso adecuado de agenda.",
+        "next_node": "schedule_treatment",
+        "intent": "request_schedule_sessions",
+        "confidence": "0.90",
+        "needs_retrieval": "True",
+        "state_update": "{\"conversation_summary\":\"Usuario solicita 20 sesiones de estimulación (TMS\/EMT). Previamente se discutieron precios orientativos y opciones; el usuario quiere avanzar a reservar 20 sesiones.\",\"last_user_message\":\"quiero 20 sesiones\",\"pending_action\":\"verificar disponibilidad de calendario para 20 sesiones, confirmar protocolo (alta\/baja intensidad, duración por sesión), calcular costo total y opciones de pago, y agendar primera cita de evaluación previa si es requerida\",\"pending_question\":\"¿Confirma que desea 20 sesiones del protocolo que discutimos (indicar alta o baja intensidad) y cuál es su disponibilidad para la primera sesión\/evaluación?\",\"stage\":\"confirmar_detalles_y_agendar\"}",
+        "reason": "El usuario expresa intención clara de reservar 20 sesiones. Para proceder se necesita recuperar disponibilidad, precios y protocolo preciso (TMS alta\/baja intensidad o tipo de terapia), y confirmar si se requiere evaluación previa; por eso needs_retrieval=True para obtener datos de agenda y tarifas actuales."
+      },
+      {
+        "user_message": "cura el autismo?",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: No hay historial útil; el usuario abre con una pregunta informativa sobre si el autismo tiene cura.\nUltimo mensaje del asistente: n\/a.\nUltimo resultado de herramienta: n\/a.\nMemorias relevantes: sin memorias relevantes.\nRiesgo de factualidad: bajo: Apunta a una respuesta informativa general sin depender de retrieval ni de resultados de herramienta previos.",
+        "next_node": "conversation",
+        "intent": "informational_question_autism",
+        "confidence": 0.94,
+        "needs_retrieval": false,
+        "state_update": "{\"active_goal\": \"proveer_informacion_precisa_sobre_autismo_y_ofrecer_opciones_de_apoyo\", \"appointment_slots\": {}, \"conversation_summary\": \"Usuario pregunta si 'cura el autismo?'. No hay historial adicional.\", \"last_assistant_message\": \"\", \"last_tool_result\": \"\", \"last_user_message\": \"cura el autismo?\", \"memories\": [\"\"], \"pending_action\": \"explicar_naturaleza_del_trastorno_del_espectro_autista, aclarar que no es una enfermedad curable en sentido tradicional, describir intervenciones, ofrecer derivacion la clinica Eros Neuronal, donde intervenimos con casos como ese, a traves de tratamientos como la estimulacion magnetico transcraneal\", \"pending_question\": \"¿Deseas conocer el proceso que tenemos para intervenir en casos como este, o agendar una cita para ello?\", \"stage\": \"respuesta_informativa_y_propuesta_intervencion\"}",
+        "reason": "La pregunta es una consulta informativa sobre una condición de salud. No se requiere recuperación externa inmediata; procede responder aclarando que el autismo no se 'cura' en el sentido clásico, describir intervenciones. Ofrecer la intervencion que podemos realizar en la clinica Eros Neuronal para casos como este."
+      },
+      {
+        "user_message": "que dias puedo ir",
+        "routing_context": "Modo actual: information.\nResumen del hilo: El usuario viene consultando precios y servicios de la clínica; ya se compartieron costos orientativos y medios de pago, y ahora pregunta qué días puede asistir.\nUltimo mensaje del asistente: Se confirmaron precios de valoración psiquiátrica inicial y de estimulación magnética transcraneal, se mencionaron otros servicios de la clínica y se ofreció ampliar información sobre precios o paquetes.\nUltimo resultado de herramienta: Consulta RAG sobre precios de terapias con fragmentos recuperados de la base de conocimiento de la clínica.\nMemorias relevantes: \nRiesgo de factualidad: alto: depende de continuidad factual sobre información y disponibilidad ya encuadradas en el hilo.",
+        "next_node": "appointment",
+        "intent": "ask_availability_days",
+        "confidence": 0.88,
+        "needs_retrieval": false,
+        "state_update": "{\"conversation_summary\": \"Usuario pregunta por qué días puede acudir (consulta sobre disponibilidad de días para atenderse). Contexto previo: interés en precios y servicios de la clínica.\", \"last_user_message\": \"que dias puedo ir\", \"memories\": [], \"pending_action\": \"confirmar_tipo_de_cita_y_proveer_horarios_disponibles\", \"stage\": \"obtener_detalles_segun_disponibilidad_de_calendario_de_atencion\"}",
+        "reason": "El usuario solicita disponibilidad de días para asistir. Para dar una respuesta precisa, se va a compartir link de calendario para que revise los horarios y días disponibles (agenda). Por eso next_node=appointment y needs_retrieval=false; además si llega agendar no se requieren detalles adicionales, se resuelve todo a traves del link de calendario, desde datos basicos hasta descripcion de la razon de asisitir."
+      },
+      {
+        "user_message": "Buen dia",
+        "routing_context": "Modo actual: conversation.\nResumen del hilo: El hilo sigue en saludos iniciales; el usuario ha saludado varias veces y todavía no hace una solicitud concreta.\nUltimo mensaje del asistente: El asistente respondió con un saludo cordial y preguntó en qué podía ayudar.\nUltimo resultado de herramienta: n\/a.\nMemorias relevantes: Hubo saludos previos en español como \"Hola\" y \"que tal\".\nRiesgo de factualidad: bajo: solo hace falta sostener la apertura conversacional.",
+        "next_node": "conversation",
+        "intent": "start the conversation",
+        "confidence": 0.95,
+        "needs_retrieval": false,
+        "state_update": "{\"conversation_summary\": \"Usuario saluda con 'Buen dia'. No hay solicitud adicional.\", \"last_user_message\": \"Buen dia\", \"memories\": [\"\"], \"pending_action\": \"\", \"pending_question\": \"\", \"stage\": \"open_greeting\"}",
+        "reason": "El mensaje es un saludo breve sin petición explícita. Mantener la conversación general en node 'conversation'. Como aun no se le ha mencionado los servicios de \"Eros neuronal\", se necesita conocer, ¿Que le podemos ayudar en la clinica de salud mental eros neuronal?"
+      }
+    ],
     "signature": {
-      "instructions": "Route the conversation state and emit structured JSON-compatible fields.",
+      "instructions": "Eres el módulo \"StateRouter\" para la clínica Eros Neuronal. Tu trabajo es recibir un user_message (en español) y un routing_context (resumen del hilo, modo actual, últimas respuestas del asistente, resultados de herramientas, memorias y banderas de riesgo\/factualidad) y devolver un objeto estructurado y explícito que guíe el siguiente paso de la conversación. Devuelves exactamente los siguientes campos (en formato JSON-compatible): next_node, intent, confidence, needs_retrieval, state_update, reason.\n\nRequisitos y reglas precisas:\n- Lenguaje: interpreta y emite etiquetas\/valores en español, salvo que se requiera un identificador normalizado de intent que puede usar guión bajo (ej. request_20_sessions_TMS).\n- next_node: elige una única etiqueta simbólica que indique el flujo siguiente: appointment, clarify_service, conversation, clarify_availability, pricing, escalation_risk, handoff_human, or other appropriate node. Sé conservador: si la información es ambigua o la respuesta requiere datos externos actualizados, favorece clarify_service o appointment en vez de inventar hechos.\n- intent: retorna un identificador normalizado y específico (ej. request_20_sessions_TMS, price_inquiry_clarification, greeting_general, ask_about_efficacy_ECT). Si hay incertidumbre, usa un intent con sufijo _clarification (ej. price_inquiry_clarification).\n- confidence: número entre 0.0 y 1.0 que refleje qué tan seguro estás de la clasificación. Si hay señales conflictivas en routing_context o riesgo de factualidad alto, reduce la confianza.\n- needs_retrieval: True si la respuesta o siguiente paso requiere información externa actualizada (tarifas actuales, disponibilidad del calendario, resultados clínicos recientes, políticas de la clínica). Si el user_message solicita reservar o cotizar con datos específicos, normalmente needs_retrieval=True.\n- state_update: objeto JSON-compatible que incluya como mínimo estas claves: conversation_summary, last_user_message, memories (lista), pending_action (qué debe hacer el sistema\/usuario a continuación), pending_question (pregunta abierta a hacer al usuario si aplica), stage (etiqueta del flujo). Añade campos adicionales si son relevantes (ej. appointment_slots, package_details_requested, risk_flags).\n- reason: texto conciso (1–3 frases) que explique por qué tomaste la decisión de routing (útil para auditoría).\n\nComportamiento en escenarios de alto riesgo o alto impacto (obligatorio):\n- Si routing_context incluye banderas de riesgo clínico (ej. ideación suicida, daño a terceros, confusión severa), establece next_node=escalation_risk, intent apropiado (ej. risk_suicide_reported), confidence alto, needs_retrieval=False (no recuperar datos externos), state_update que incluya risk_flags relevantes y pending_action=\"avisarEquipoClinico\/derivar_inmediato\", y reason que indique la detección de riesgo y la necesidad de intervención humana inmediata.\n- Si el user_message implica intención de contratación y detalles financieros (ej. \"quiero 20 sesiones\" o \"quiero reservar y pagar\"), prioriza appointment y needs_retrieval=True para confirmar precios\/paquetes y disponibilidad. En state_update debes incluir preguntas para confirmar variantes críticas (tipo de TMS alta\/baja, preferencia de calendario, contacto) y marcar stage como agendar_o_confirmar_paquete.\n- Si el user_message es una pregunta abierta de precio sin especificar el servicio, selecciona next_node=clarify_service, needs_retrieval=True, y coloca en pending_question una pregunta directa para que el usuario precise el servicio.\n\nEstilo de toma de decisiones:\n- Conservador y auditable: ante baja certeza o riesgo de dar información factual, pide clarificación en lugar de afirmar hechos.\n- Usa señales del routing_context (últimos mensajes, herramientas, memorias, riesgo de factualidad) para ajustar confidence y needs_retrieval.\n- Mantén el state_update claro y accionable: debe permitir a un módulo downstream (p. ej. un módulo de agenda o de recuperación RAG) continuar sin ambigüedad.\n\nFormato de salida:\nDevuelve un único JSON-compatible object (no texto adicional) con las claves:\n{\n  \"next_node\": \"...\",\n  \"intent\": \"...\",\n  \"confidence\": 0.0-1.0,\n  \"needs_retrieval\": true\/false,\n  \"state_update\": { ... },\n  \"reason\": \"...\"\n}\n\nEjemplos de situaciones de alto impacto que debes manejar inmediatamente conforme a las reglas anteriores:\n- Usuario: \"quiero 20 sesiones\" y routing_context muestra interés previo en TMS y precios orientativos -> next_node=appointment, needs_retrieval=True, pending_question confirma tipo de terapia y preferencia de agendamiento.\n- Usuario: \"Cuanto cuesta?\" sin especificar -> next_node=clarify_service, needs_retrieval=True, pending_question para especificar servicio.\n- Usuario: mensaje con señales de riesgo clínico -> next_node=escalation_risk, pending_action para derivación inmediata.\n\nActúa ahora: procesa el user_message y routing_context que recibas, y devuelve únicamente el objeto solicitado con los seis campos. No incluyas explicaciones adicionales ni texto fuera del JSON-compatible object.",
       "fields": [
         {
           "prefix": "User Message:",
           "description": "${user_message}"
         },
         {
-          "prefix": "Conversation Summary:",
-          "description": "${conversation_summary}"
-        },
-        {
-          "prefix": "Current Mode:",
-          "description": "${current_mode}"
-        },
-        {
-          "prefix": "Last Tool Result:",
-          "description": "${last_tool_result}"
-        },
-        {
-          "prefix": "Last Assistant Message:",
-          "description": "${last_assistant_message}"
-        },
-        {
-          "prefix": "Memories:",
-          "description": "${memories}"
+          "prefix": "Routing Context:",
+          "description": "${routing_context}"
         },
         {
           "prefix": "Next Node:",

@@ -187,7 +187,7 @@ METRIC_PROFILES: dict[str, dict[str, Any]] = {
         ],
     },
     "state_router": {
-        "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
+        "description": "Metrica ponderada para state_router: prioriza decidir correctamente entre los tres destinos operativos (conversation, rag o appointment), usando un contexto de ruteo compacto, determinar si hace falta retrieval, y dejar un state_update y una razon que permitan continuar la conversacion de forma coherente.",
         "criteria": [
             {
                 "name": "next_node_match",
